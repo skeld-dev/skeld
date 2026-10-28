@@ -1,7 +1,10 @@
+import type { IncomingMessage } from 'node:http';
+import type { RouteInfo } from '../contract/types.ts';
 import type {
   CompletedContext,
   ErrorContext,
   OnResponseHook,
+  RawHeaders,
   RawReply,
   RequestContext,
   ResponseContext,
@@ -41,75 +44,67 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
   exchange.state = 'sent-by-hook';
 }
 
-export function requestContext(exchange: Exchange): RequestContext {
-  const { req, res } = exchange;
-  return {
-    route: exchange.route.info,
-    method: exchange.method,
-    path: exchange.path,
-    headers: req.headers,
-    get signal() {
-      return req.signal;
-    },
-    setHeader(name, value) {
+export class ErrorContextRecord implements ErrorContext {
+  readonly route: RouteInfo;
+  readonly method: string;
+  readonly path: string;
+  readonly headers: RawHeaders;
+  readonly #req: IncomingMessage;
+
+  constructor(exchange: Exchange) {
+    this.route = exchange.route.info;
+    this.method = exchange.method;
+    this.path = exchange.path;
+    this.headers = exchange.req.headers;
+    this.#req = exchange.req;
+  }
+
+  get signal(): AbortSignal {
+    return this.#req.signal;
+  }
+}
+
+export class RequestContextRecord extends ErrorContextRecord implements RequestContext {
+  readonly setHeader: RequestContext['setHeader'];
+  readonly send: RequestContext['send'];
+
+  constructor(exchange: Exchange) {
+    super(exchange);
+    const { res } = exchange;
+    this.setHeader = (name, value) => {
       res.setHeader(name, value);
-    },
-    send(reply) {
+    };
+    this.send = (reply) => {
       sendReply(exchange, reply);
-    },
-  };
+    };
+  }
 }
 
-export function validatedContext(exchange: Exchange, params: unknown, query: unknown, body: unknown): ValidatedContext {
-  const { req, res } = exchange;
-  return {
-    route: exchange.route.info,
-    method: exchange.method,
-    path: exchange.path,
-    headers: req.headers,
-    get signal() {
-      return req.signal;
-    },
-    params,
-    query,
-    body,
-    setHeader(name, value) {
+export class ValidatedContextRecord extends RequestContextRecord implements ValidatedContext {
+  readonly params: unknown;
+  readonly query: unknown;
+  readonly body: unknown;
+
+  constructor(exchange: Exchange, params: unknown, query: unknown, body: unknown) {
+    super(exchange);
+    this.params = params;
+    this.query = query;
+    this.body = body;
+  }
+}
+
+export class ResponseContextRecord extends ErrorContextRecord implements ResponseContext {
+  readonly status: number;
+  readonly setHeader: ResponseContext['setHeader'];
+
+  constructor(exchange: Exchange, status: number) {
+    super(exchange);
+    const { res } = exchange;
+    this.status = status;
+    this.setHeader = (name, value) => {
       res.setHeader(name, value);
-    },
-    send(reply) {
-      sendReply(exchange, reply);
-    },
-  };
-}
-
-export function responseContext(exchange: Exchange, status: number): ResponseContext {
-  const { req, res } = exchange;
-  return {
-    route: exchange.route.info,
-    method: exchange.method,
-    path: exchange.path,
-    headers: req.headers,
-    get signal() {
-      return req.signal;
-    },
-    status,
-    setHeader(name, value) {
-      res.setHeader(name, value);
-    },
-  };
-}
-
-export function errorContext(exchange: Exchange): ErrorContext {
-  const { req } = exchange;
-  return {
-    route: exchange.route.info,
-    method: exchange.method,
-    path: exchange.path,
-    headers: req.headers,
-    get signal() {
-      return req.signal;
-    },
-  };
+    };
+  }
 }
 
 export function runStage<H>(

@@ -11,7 +11,7 @@ import type {
   PreHandlerHook,
 } from '../server/types.ts';
 
-interface RuntimeRequest {
+export interface RuntimeRequest {
   readonly route: RouteInfo;
   readonly params: unknown;
   readonly query: unknown;

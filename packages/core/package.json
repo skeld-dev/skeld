@@ -2,7 +2,11 @@
   "name": "@darkstart/core",
   "version": "0.0.1",
   "license": "MIT",
-  "repository": "github:ul0gic/darkstart",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ul0gic/darkstart.git",
+    "directory": "packages/core"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -10,6 +14,7 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.d.ts.map",
     "LICENSE",
     "README.md"
   ],

@@ -2,7 +2,7 @@ import { HttpError } from '../contract/http-error.ts';
 import type { ErrorBody } from '../contract/types.ts';
 import type { ErrorContext } from '../server/types.ts';
 import type { Exchange } from './exchange.ts';
-import { errorContext, runObservers } from './hooks.ts';
+import { ErrorContextRecord, runObservers } from './hooks.ts';
 import { describeThrown, writeStderrLine } from './stderr.ts';
 import { writeErrorBody } from './wire.ts';
 
@@ -82,7 +82,7 @@ function enterErrorPath(exchange: Exchange, error: unknown, thrown: boolean): vo
     }
     return;
   }
-  const context = errorContext(exchange);
+  const context = new ErrorContextRecord(exchange);
   const hookFailures: string[] = [];
   runObservers(
     exchange.route.hooks.onError,

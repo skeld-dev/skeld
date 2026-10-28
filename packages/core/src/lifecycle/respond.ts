@@ -1,6 +1,6 @@
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
-import { responseContext, runStage } from './hooks.ts';
+import { ResponseContextRecord, runStage } from './hooks.ts';
 import type { RuntimeReply } from './types.ts';
 import { writeJson } from './wire.ts';
 
@@ -42,7 +42,7 @@ function sendThrough(exchange: Exchange, status: number, payload: string): void 
     writePayload(exchange, status, payload);
     return;
   }
-  const context = responseContext(exchange, status);
+  const context = new ResponseContextRecord(exchange, status);
   let current: string | Uint8Array = payload;
   runStage(
     exchange,

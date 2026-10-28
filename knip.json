@@ -1,10 +1,6 @@
 {
   "$schema": "./node_modules/knip/schema.json",
   "workspaces": {
-    ".": {
-      "entry": ["tools/*.ts"],
-      "project": ["tools/**/*.ts"]
-    },
     "packages/*": {
       "project": ["src/**/*.ts"]
     },
@@ -14,6 +10,9 @@
     },
     "tests": {
       "entry": ["acceptance/*.ts", "type-cost/*.ts"]
+    },
+    "tools": {
+      "entry": ["*.ts"]
     }
   }
 }

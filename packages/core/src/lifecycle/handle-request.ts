@@ -1,13 +1,37 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HttpError } from '../contract/http-error.ts';
+import type { RouteInfo } from '../contract/types.ts';
 import { type BodyOutcome, readRouteBody } from './body.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
-import { requestContext, runStage, validatedContext, watchCompletion } from './hooks.ts';
+import { RequestContextRecord, runStage, ValidatedContextRecord, watchCompletion } from './hooks.ts';
 import { preRoute } from './pre-route.ts';
 import { respond } from './respond.ts';
-import type { EngineRuntime, RuntimeReply } from './types.ts';
+import type { EngineRuntime, RuntimeReply, RuntimeRequest } from './types.ts';
 import { type ValidatedParts, validateRequest } from './validate.ts';
+
+// A prototype getter keeps req.signal lazy; a getter in a per-request object literal costs a closure and the literal fast path.
+class HandlerRequest implements RuntimeRequest {
+  readonly route: RouteInfo;
+  readonly params: unknown;
+  readonly query: unknown;
+  readonly headers: unknown;
+  readonly body: unknown;
+  readonly #req: IncomingMessage;
+
+  constructor(route: RouteInfo, parts: ValidatedParts, req: IncomingMessage) {
+    this.route = route;
+    this.params = parts.params;
+    this.query = parts.query;
+    this.headers = parts.headers;
+    this.body = parts.body;
+    this.#req = req;
+  }
+
+  get signal(): AbortSignal {
+    return this.#req.signal;
+  }
+}
 
 function runHandler(exchange: Exchange, parts: ValidatedParts): void {
   if (exchange.state !== 'running') {
@@ -16,16 +40,7 @@ function runHandler(exchange: Exchange, parts: ValidatedParts): void {
   const { route, req } = exchange;
   let reply: RuntimeReply | Promise<RuntimeReply>;
   try {
-    reply = route.handler({
-      route: route.info,
-      params: parts.params,
-      query: parts.query,
-      headers: parts.headers,
-      body: parts.body,
-      get signal() {
-        return req.signal;
-      },
-    });
+    reply = route.handler(new HandlerRequest(route.info, parts, req));
   } catch (error) {
     fail(exchange, error, true);
     return;
@@ -51,7 +66,7 @@ function validateStage(exchange: Exchange, body: unknown): void {
     runHandler(exchange, parts);
     return;
   }
-  const context = validatedContext(exchange, parts.params, parts.query, parts.body);
+  const context = new ValidatedContextRecord(exchange, parts.params, parts.query, parts.body);
   runStage(
     exchange,
     hooks,
@@ -113,7 +128,7 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
     readStage(exchange);
     return;
   }
-  const context = requestContext(exchange);
+  const context = new RequestContextRecord(exchange);
   runStage(
     exchange,
     hooks.onRequest,
