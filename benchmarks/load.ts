@@ -1,0 +1,56 @@
+import { createRequire } from 'node:module';
+import { echoRequestHeaders } from './preflight.ts';
+import type { RouteId, RunOptions } from './types.ts';
+import { connections, expectedBody, host, workers } from './values.ts';
+
+interface AutocannonOptions {
+  readonly url: string;
+  readonly connections: number;
+  readonly pipelining: number;
+  readonly duration: number;
+  readonly workers: number;
+  readonly method?: 'POST';
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
+}
+
+export interface AutocannonResult {
+  readonly requests: { readonly average: number; readonly total: number };
+  readonly latency: { readonly p99: number };
+  readonly throughput: { readonly total: number };
+  readonly errors: number;
+  readonly timeouts: number;
+  readonly non2xx: number;
+  readonly statusCodeStats: Readonly<Record<string, { readonly count: number }>>;
+}
+
+interface AutocannonRun extends PromiseLike<AutocannonResult> {
+  stop(): void;
+}
+
+export type Autocannon = (options: AutocannonOptions) => AutocannonRun;
+
+export function loadAutocannon(): Autocannon {
+  const autocannon: Autocannon = createRequire(import.meta.url)('autocannon');
+  return autocannon;
+}
+
+export function startLoad(autocannon: Autocannon, port: number, route: RouteId, options: RunOptions): AutocannonRun {
+  const base = {
+    url: `http://${host}:${port}/`,
+    connections,
+    pipelining: options.pipelining,
+    duration: options.durationSeconds,
+    workers,
+  };
+  return autocannon(
+    route === 'hello' ? base : { ...base, method: 'POST', headers: echoRequestHeaders, body: expectedBody },
+  );
+}
+
+export function routeCommandLine(route: RouteId, flags: string): string {
+  const target = `http://${host}:<port>/`;
+  return route === 'hello'
+    ? `autocannon ${flags} ${target}`
+    : `autocannon ${flags} -m POST -H content-type=application/json -b '${expectedBody}' ${target}`;
+}

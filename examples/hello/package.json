@@ -1,0 +1,17 @@
+{
+  "name": "@darkstart/example-hello",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26.12.0"
+  },
+  "scripts": {
+    "start": "node --conditions=darkstart-source hello.ts",
+    "call": "node --conditions=darkstart-source client.ts"
+  },
+  "dependencies": {
+    "@darkstart/core": "0.0.1",
+    "typebox": "1.4.3"
+  }
+}

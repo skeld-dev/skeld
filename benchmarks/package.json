@@ -1,0 +1,12 @@
+{
+  "name": "@darkstart/benchmarks",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@darkstart/core": "0.0.1",
+    "autocannon": "8.0.0",
+    "fastify": "5.12.7",
+    "typebox": "1.4.3"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "name": "@darkstart/core",
+  "version": "0.0.1",
+  "license": "MIT",
+  "repository": "github:ul0gic/darkstart",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=26.12.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    "./contract": {
+      "darkstart-source": "./src/contract/contract.ts",
+      "types": "./dist/contract/contract.d.ts",
+      "default": "./dist/contract/contract.js"
+    },
+    "./http-error": {
+      "darkstart-source": "./src/contract/http-error.ts",
+      "types": "./dist/contract/http-error.d.ts",
+      "default": "./dist/contract/http-error.js"
+    },
+    "./server": {
+      "darkstart-source": "./src/server/server.ts",
+      "types": "./dist/server/server.d.ts",
+      "default": "./dist/server/server.js"
+    },
+    "./boot-error": {
+      "darkstart-source": "./src/server/boot-error.ts",
+      "types": "./dist/server/boot-error.d.ts",
+      "default": "./dist/server/boot-error.js"
+    },
+    "./client": {
+      "darkstart-source": "./src/client/client.ts",
+      "types": "./dist/client/client.d.ts",
+      "default": "./dist/client/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "fast-json-stringify": "7.2.0"
+  },
+  "peerDependencies": {
+    "typebox": "1.4.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
