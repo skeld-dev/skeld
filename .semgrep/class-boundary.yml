@@ -1,0 +1,33 @@
+rules:
+  - id: class-outside-error-types-and-lifecycle-records
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      A class is allowed only for an error type that extends Error, or for a per-request record in
+      packages/core/src/lifecycle/ (ADR-013); services, servers, scopes, plugins, dispatchers,
+      routers and modules are factories returning plain objects.
+    paths:
+      exclude:
+        - "/packages/core/src/lifecycle/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: class $C { ... }
+          - pattern: class { ... }
+      - pattern-not: class $C extends Error { ... }
+  - id: lifecycle-record-class-method
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      A lifecycle record class carries readonly fields, a constructor and getters only (ADR-013);
+      a method or setter is outside the exception.
+    paths:
+      include:
+        - "/packages/core/src/lifecycle/"
+    patterns:
+      - pattern-either:
+          - pattern: class $C { ... $M(...) { ... } ... }
+          - pattern: class { ... $M(...) { ... } ... }
+      - focus-metavariable: $M
+      - pattern-regex: (?m)(?:^|[{;])[ \t]*(?:static[ \t]+|async[ \t]+|set[ \t]+|\*[ \t]*)*(?!(?:get|constructor)\b)#?\w+[ \t]*[(<]
