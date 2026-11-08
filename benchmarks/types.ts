@@ -1,4 +1,4 @@
-export type ServerId = 'darkstart' | 'fastify' | 'node-http';
+export type ServerId = 'darkstart' | 'fastify' | 'node-http' | 'hono' | 'express';
 export type RouteId = 'hello' | 'echo';
 type RunStatus = 'complete' | 'invalid' | 'interrupted';
 export type Bound = 'server' | 'generator' | 'neither' | 'unknown';
@@ -49,6 +49,9 @@ export interface BenchSoftware {
   readonly autocannon: string;
   readonly typebox: string;
   readonly fastJsonStringify: string;
+  readonly hono: string;
+  readonly honoNodeServer: string;
+  readonly express: string;
 }
 
 export interface BenchSample {

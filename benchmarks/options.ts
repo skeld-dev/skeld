@@ -19,7 +19,8 @@ Options:
   --pipelining <n>   requests in flight per connection, 1 to 100 (default 10)
   --duration <s>     seconds per round, 1 to 600 (default 10)
   --rounds <n>       measured rounds per server and route, 1 to 50 (default 5)
-  --servers <list>   darkstart,fastify,node-http (default all three)
+  --servers <list>   darkstart,fastify,node-http,hono,express
+                     (default darkstart,fastify,node-http)
   --routes <list>    hello,echo (default both)
   --out <dir>        folder for the run's report (default benchmarks/results)
   --check            start each server, check its answers, measure nothing
@@ -28,7 +29,8 @@ Options:
 Only a run with every default is the acceptance protocol and gets a verdict.
 `;
 
-export const serverIds: readonly ServerId[] = ['darkstart', 'fastify', 'node-http'];
+export const defaultServerIds: readonly ServerId[] = ['darkstart', 'fastify', 'node-http'];
+export const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express'];
 export const routeIds: readonly RouteId[] = ['hello', 'echo'];
 
 const valueOptions = ['--pipelining', '--duration', '--rounds', '--servers', '--routes', '--out'] as const;
@@ -117,7 +119,7 @@ export function parseOptions(argv: readonly string[]): RunOptions {
     durationSeconds:
       duration === undefined ? defaultDurationSeconds : parseInteger('--duration', duration, durationRange),
     rounds: rounds === undefined ? defaultRounds : parseInteger('--rounds', rounds, roundsRange),
-    servers: servers === undefined ? serverIds : parseList('--servers', servers, serverIds, 'server'),
+    servers: servers === undefined ? defaultServerIds : parseList('--servers', servers, serverIds, 'server'),
     routes: routes === undefined ? routeIds : parseList('--routes', routes, routeIds, 'route'),
     out: values.get('--out') ?? defaultOut,
     check,

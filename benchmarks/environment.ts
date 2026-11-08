@@ -16,6 +16,9 @@ export interface Packages {
   readonly autocannon: string;
   readonly typebox: string;
   readonly fastJsonStringify: string;
+  readonly hono: string;
+  readonly honoNodeServer: string;
+  readonly express: string;
 }
 
 const repositoryRoot = join(import.meta.dirname, '..');
@@ -89,6 +92,9 @@ export function resolvePackages(): Packages {
   const fastifyFile = resolveFile('fastify', () => import.meta.resolve('fastify'));
   const autocannonFile = resolveFile('autocannon', () => import.meta.resolve('autocannon'));
   const typeboxFile = resolveFile('typebox', () => import.meta.resolve('typebox'));
+  const honoFile = resolveFile('hono', () => import.meta.resolve('hono'));
+  const honoNodeServerFile = resolveFile('@hono/node-server', () => import.meta.resolve('@hono/node-server'));
+  const expressFile = resolveFile('express', () => import.meta.resolve('express'));
   const fastJsonStringifyFile = resolveFile('fast-json-stringify', () =>
     createRequire(serverFile).resolve('fast-json-stringify'),
   );
@@ -99,6 +105,9 @@ export function resolvePackages(): Packages {
     autocannon: versionOf('autocannon', autocannonFile),
     typebox: versionOf('typebox', typeboxFile),
     fastJsonStringify: versionOf('fast-json-stringify', fastJsonStringifyFile),
+    hono: versionOf('hono', honoFile),
+    honoNodeServer: versionOf('@hono/node-server', honoNodeServerFile),
+    express: versionOf('express', expressFile),
   };
 }
 
@@ -171,5 +180,8 @@ export function captureSoftware(packages: Packages): BenchSoftware {
     autocannon: packages.autocannon,
     typebox: packages.typebox,
     fastJsonStringify: packages.fastJsonStringify,
+    hono: packages.hono,
+    honoNodeServer: packages.honoNodeServer,
+    express: packages.express,
   };
 }

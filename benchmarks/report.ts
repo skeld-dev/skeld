@@ -110,8 +110,8 @@ const methodLines = (options: BenchOptions): readonly string[] => {
     "- Statistic: autocannon's mean requests per second for each round; median, minimum and maximum over the rounds. p99 latency likewise.",
     `- The load generator runs on the same machine as the servers and competes with them for CPU; every server carries the same handicap. A round is generator-bound when the runner process (${workers} workers and the main thread) used ${generatorCeilingPercent} % or more of one core, ${saturationPercent} % of the workers' ${workers} cores, whatever the server used. No process is pinned to a core.`,
     '- Loggers off. No TLS. No compression.',
-    '- Routes: hello returns { hello: "world" } through a response schema; echo parses a JSON body and returns it. DarkStart and Fastify validate the echo body against { hello: string }, closed to other keys; node:http parses and serializes with JSON.parse and JSON.stringify and validates nothing. fastify/benchmarks\' POST route does not validate; this one does, so both frameworks do the same work.',
-    '- Server options: darkstart, engine defaults; fastify, { logger: false }; node-http, http.createServer with no options.',
+    '- Routes: hello returns { hello: "world" } through a response schema; echo parses a JSON body and returns it. DarkStart and Fastify validate the echo body against { hello: string }, closed to other keys; node:http parses and serializes with JSON.parse and JSON.stringify and validates nothing. fastify/benchmarks\' POST route does not validate; this one does, so both frameworks do the same work. Hono and Express, when run, parse the echo body and validate nothing, like node:http.',
+    '- Server options: darkstart, engine defaults; fastify, { logger: false }; node-http, http.createServer with no options; hono, @hono/node-server serve() with no options; express, express() with express.json() on the echo route.',
   ];
 };
 
@@ -181,6 +181,8 @@ function renderReport(run: BenchRun): string {
       ['autocannon', software.autocannon],
       ['typebox', software.typebox],
       ['fast-json-stringify', software.fastJsonStringify],
+      ['Hono', `hono ${software.hono}, @hono/node-server ${software.honoNodeServer}`],
+      ['Express', software.express],
     ]),
     '',
     '## Method',
