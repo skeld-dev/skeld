@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { availableParallelism, cpus, loadavg, release, totalmem, type } from 'node:os';
+import { cpus, loadavg, release, totalmem, type } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BenchError, errorCode } from './bench-error.ts';
+import type { Pinning } from './pinning.ts';
 import { serversFolder } from './server-process.ts';
 import { displayPath } from './terminal.ts';
 import type { BenchMachine, BenchSoftware } from './types.ts';
@@ -19,6 +20,7 @@ export interface Packages {
   readonly hono: string;
   readonly honoNodeServer: string;
   readonly express: string;
+  readonly light: string;
 }
 
 const repositoryRoot = join(import.meta.dirname, '..');
@@ -95,6 +97,7 @@ export function resolvePackages(): Packages {
   const honoFile = resolveFile('hono', () => import.meta.resolve('hono'));
   const honoNodeServerFile = resolveFile('@hono/node-server', () => import.meta.resolve('@hono/node-server'));
   const expressFile = resolveFile('express', () => import.meta.resolve('express'));
+  const lightFile = resolveFile('@lightstart/server', () => import.meta.resolve('@lightstart/server'));
   const fastJsonStringifyFile = resolveFile('fast-json-stringify', () =>
     createRequire(serverFile).resolve('fast-json-stringify'),
   );
@@ -108,6 +111,7 @@ export function resolvePackages(): Packages {
     hono: versionOf('hono', honoFile),
     honoNodeServer: versionOf('@hono/node-server', honoNodeServerFile),
     express: versionOf('express', expressFile),
+    light: versionOf('@lightstart/server', lightFile),
   };
 }
 
@@ -135,14 +139,16 @@ export function loadAverage(): number {
   return oneMinute;
 }
 
-export function captureMachine(loadAverageStart: number): Omit<BenchMachine, 'loadAverageEnd'> {
+export function captureMachine(loadAverageStart: number, pinning: Pinning): Omit<BenchMachine, 'loadAverageEnd'> {
   return {
     cpuModel: cpus()[0]?.model ?? null,
-    cores: availableParallelism(),
+    cores: cpus().length,
     memoryBytes: totalmem(),
     osName: prettyName(),
     kernel: `${type()} ${release()}`,
     virtualMachine: hypervisor(),
+    runnerCores: pinning.runnerCores,
+    unpinnedReason: pinning.deviation,
     loadAverageStart,
   };
 }
@@ -158,7 +164,7 @@ const git = (args: readonly string[]): string | null => {
   }
 };
 
-export function captureSoftware(packages: Packages): BenchSoftware {
+export function captureSoftware(packages: Packages, pinning: Pinning): BenchSoftware {
   const revision = git(['rev-parse', '--short', 'HEAD'])?.trim() ?? null;
   const porcelain = revision === null ? null : git(['status', '--porcelain']);
   return {
@@ -169,7 +175,7 @@ export function captureSoftware(packages: Packages): BenchSoftware {
       displayPath(process.argv[1] ?? ''),
       ...process.argv.slice(2),
     ],
-    serverCommandLine: [process.execPath, displayPath(join(serversFolder, '<server>.ts')), '--port', '0'],
+    serverCommandLine: [...pinning.serverCommand, displayPath(join(serversFolder, '<server>.ts')), '--port', '0'],
     serverEnvironment: { NODE_ENV: 'production' },
     nodeOptions: nodeOptions(),
     darkstart: packages.darkstart,
@@ -183,5 +189,6 @@ export function captureSoftware(packages: Packages): BenchSoftware {
     hono: packages.hono,
     honoNodeServer: packages.honoNodeServer,
     express: packages.express,
+    light: packages.light,
   };
 }

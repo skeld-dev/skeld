@@ -1,18 +1,21 @@
-import { routeIds, serverIds } from './options.ts';
+import { defaultServerIds, routeIds } from './options.ts';
 import type { BenchSample, BenchSummary, BenchVerdict, RouteId, RunOptions } from './types.ts';
 import {
   defaultDurationSeconds,
   defaultPipelining,
   defaultRounds,
+  defaultWarmUpSeconds,
   keepLinePercent,
   protocolFastify,
   protocolNode,
+  serverCores,
 } from './values.ts';
 
 interface Installed {
   readonly node: string;
   readonly fastify: string;
   readonly nodeOptions: string | null;
+  readonly pinning: string | null;
 }
 
 export type RunEnding =
@@ -27,13 +30,17 @@ export function deviations(options: RunOptions, installed: Installed): readonly 
   if (options.pipelining !== defaultPipelining) {
     found.push(`-p ${options.pipelining}, not -p ${defaultPipelining}`);
   }
+  if (options.warmUpSeconds !== defaultWarmUpSeconds) {
+    found.push(`warm-up ${options.warmUpSeconds} s, not ${defaultWarmUpSeconds} s`);
+  }
   if (options.durationSeconds !== defaultDurationSeconds) {
     found.push(`-d ${options.durationSeconds}, not -d ${defaultDurationSeconds}`);
   }
   if (options.rounds !== defaultRounds) {
     found.push(`${roundsText(options.rounds)}, not ${defaultRounds}`);
   }
-  if (options.servers.length !== serverIds.length) {
+  const missing = defaultServerIds.filter((server) => !options.servers.includes(server));
+  if (missing.length > 0) {
     found.push(`servers ${options.servers.join(',')} only`);
   }
   if (options.routes.length !== routeIds.length) {
@@ -48,11 +55,14 @@ export function deviations(options: RunOptions, installed: Installed): readonly 
   if (installed.nodeOptions !== null) {
     found.push(`NODE_OPTIONS=${JSON.stringify(installed.nodeOptions)}`);
   }
+  if (installed.pinning !== null) {
+    found.push(installed.pinning);
+  }
   return found;
 }
 
 const darkstartPercent = (summary: readonly BenchSummary[], route: RouteId): number | null =>
-  summary.find((group) => group.server === 'darkstart' && group.route === route)?.percentOfFastify ?? null;
+  summary.find((group) => group.server === 'darkstart' && group.route === route)?.cpuPercentOfFastify ?? null;
 
 export function generatorBottleneckText(generatorBound: number, measured: number): string {
   return `the load generator was the bottleneck in ${generatorBound} of ${measured} measured rounds`;
@@ -73,6 +83,10 @@ const notAssessedReason = (
     return `This run differs from the acceptance protocol: ${found.join('; ')}.`;
   }
   const measured = samples.filter((sample) => sample.kind === 'measured');
+  const strayCores = measured.find((sample) => sample.serverCores !== serverCores);
+  if (strayCores !== undefined) {
+    return `The run was not pinned: ${strayCores.server} in round ${strayCores.round} was allowed cores ${strayCores.serverCores ?? 'unknown'}, not ${serverCores}.`;
+  }
   if (measured.some((sample) => sample.bound === 'generator' && sample.server !== 'node-http')) {
     const generatorBound = measured.filter((sample) => sample.bound === 'generator').length;
     const text = generatorBottleneckText(generatorBound, measured.length);
@@ -89,16 +103,15 @@ export function decideVerdict(
 ): BenchVerdict {
   const hello = darkstartPercent(summary, 'hello');
   const echo = darkstartPercent(summary, 'echo');
-  const reason = notAssessedReason(ending, found, samples);
+  const reason =
+    notAssessedReason(ending, found, samples) ??
+    (echo === null ? 'The server CPU per request could not be read on this system.' : null);
   const generatorBoundRounds = samples.filter(
     (sample) => sample.kind === 'measured' && sample.bound === 'generator',
   ).length;
-  if (reason !== null) {
+  if (reason !== null || echo === null) {
     return { kind: 'not-assessed', linePercent: keepLinePercent, hello, echo, reason, generatorBoundRounds };
   }
-  if (hello === null || echo === null) {
-    throw new Error('a complete, conforming run has no DarkStart ratio for hello or echo');
-  }
-  const kind = hello >= keepLinePercent && echo >= keepLinePercent ? 'keep' : 'below';
+  const kind = echo >= keepLinePercent ? 'keep' : 'below';
   return { kind, linePercent: keepLinePercent, hello, echo, reason: null, generatorBoundRounds };
 }

@@ -12,6 +12,9 @@ export function scheduleVisits(options: RunOptions): readonly Visit[] {
 }
 
 export function estimatedMinutes(options: RunOptions): number {
-  const seconds = options.rounds * options.servers.length * (options.routes.length * 2 * options.durationSeconds + 1);
+  const seconds =
+    options.rounds *
+    options.servers.length *
+    (options.routes.length * (options.warmUpSeconds + options.durationSeconds) + 1);
   return Math.ceil(seconds / 60);
 }

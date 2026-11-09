@@ -5,6 +5,7 @@ import {
   defaultOut,
   defaultPipelining,
   defaultRounds,
+  defaultWarmUpSeconds,
   durationRange,
   pipeliningRange,
   roundsRange,
@@ -13,27 +14,33 @@ import {
 export const helpText = `Usage: node benchmarks/run.ts [options]
 
 Measures DarkStart, Fastify and node:http on the same two routes with
-autocannon on this machine, and writes a report.
+autocannon on this machine, and writes a report. Each server runs on core 7
+and the runner (autocannon's 3 workers) on cores 3-6, pinned with taskset.
+The judged figure is the server's CPU time per request over the measured
+window, with requests per second and p99 latency beside it.
 
 Options:
-  --pipelining <n>   requests in flight per connection, 1 to 100 (default 10)
-  --duration <s>     seconds per round, 1 to 600 (default 10)
-  --rounds <n>       measured rounds per server and route, 1 to 50 (default 5)
-  --servers <list>   darkstart,fastify,node-http,hono,express
+  --pipelining <n>   requests in flight per connection, 1 to 100 (default 1;
+                     10 gives the fastify.dev profile, which gets no verdict)
+  --warm-up <s>      discarded warm-up seconds per route, 1 to 600 (default 3)
+  --duration <s>     measured seconds per route, 1 to 600 (default 5)
+  --rounds <n>       measured rounds per server and route, 1 to 50 (default 3)
+  --servers <list>   darkstart,fastify,node-http,hono,express,light
                      (default darkstart,fastify,node-http)
   --routes <list>    hello,echo (default both)
   --out <dir>        folder for the run's report (default benchmarks/results)
   --check            start each server, check its answers, measure nothing
   --help             show this help
 
-Only a run with every default is the acceptance protocol and gets a verdict.
+Only a run with every default, pinned on a host with 8 or more vCPUs, is the
+acceptance protocol and gets a verdict.
 `;
 
 export const defaultServerIds: readonly ServerId[] = ['darkstart', 'fastify', 'node-http'];
-export const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express'];
+export const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express', 'light'];
 export const routeIds: readonly RouteId[] = ['hello', 'echo'];
 
-const valueOptions = ['--pipelining', '--duration', '--rounds', '--servers', '--routes', '--out'] as const;
+const valueOptions = ['--pipelining', '--warm-up', '--duration', '--rounds', '--servers', '--routes', '--out'] as const;
 type ValueOption = (typeof valueOptions)[number];
 const flagOptions = ['--check', '--help'] as const;
 
@@ -109,6 +116,7 @@ export function wantsHelp(argv: readonly string[]): boolean {
 export function parseOptions(argv: readonly string[]): RunOptions {
   const { values, check } = readValues(argv);
   const pipelining = values.get('--pipelining');
+  const warmUp = values.get('--warm-up');
   const duration = values.get('--duration');
   const rounds = values.get('--rounds');
   const servers = values.get('--servers');
@@ -116,6 +124,7 @@ export function parseOptions(argv: readonly string[]): RunOptions {
   return {
     pipelining:
       pipelining === undefined ? defaultPipelining : parseInteger('--pipelining', pipelining, pipeliningRange),
+    warmUpSeconds: warmUp === undefined ? defaultWarmUpSeconds : parseInteger('--warm-up', warmUp, durationRange),
     durationSeconds:
       duration === undefined ? defaultDurationSeconds : parseInteger('--duration', duration, durationRange),
     rounds: rounds === undefined ? defaultRounds : parseInteger('--rounds', rounds, roundsRange),

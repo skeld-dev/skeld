@@ -2,6 +2,7 @@ import { BenchError } from './bench-error.ts';
 import { preflightRoutes } from './check.ts';
 import { classifyBound, startCpuSample } from './cpu.ts';
 import { type Autocannon, type AutocannonResult, startLoad } from './load.ts';
+import { allowedCores, type Command } from './pinning.ts';
 import { preflightFailure } from './preflight.ts';
 import { scheduleVisits } from './schedule.ts';
 import { describeExit, type ExitStatus, indentTail, type ServerProcess, startServer } from './server-process.ts';
@@ -19,6 +20,7 @@ import type { BenchSample, RouteId, RunOptions, Visit } from './types.ts';
 interface ScheduleContext {
   readonly options: RunOptions;
   readonly autocannon: Autocannon;
+  readonly serverCommand: Command;
   readonly samples: BenchSample[];
   readonly interruption: Promise<void>;
   readonly interrupted: () => boolean;
@@ -79,16 +81,18 @@ const measureRoute = async (
   context: ScheduleContext,
   visit: Visit,
   server: ServerProcess,
+  serverCores: string | null,
   route: RouteId,
   kind: BenchSample['kind'],
 ): Promise<BenchSample | null> => {
   const { options } = context;
   const label = `round ${visit.round} ${visit.server} ${route}`;
   if (kind === 'warm-up') {
-    context.progress(warmUpLine(visit.round, options.rounds, visit.server, route, options.durationSeconds));
+    context.progress(warmUpLine(visit.round, options.rounds, visit.server, route, options.warmUpSeconds));
   }
   const sampleCpu = kind === 'measured' ? startCpuSample(server.pid) : null;
-  const run = startLoad(context.autocannon, server.port, route, options);
+  const seconds = kind === 'measured' ? options.durationSeconds : options.warmUpSeconds;
+  const run = startLoad(context.autocannon, server.port, route, options.pipelining, seconds);
   const outcome = await awaitLoad(context, server, run);
   const reading = sampleCpu?.() ?? null;
   if (outcome.kind === 'interrupted') {
@@ -108,6 +112,7 @@ const measureRoute = async (
     throw new BenchError(4, `autocannon failed in ${label}: ${message}.`);
   }
   const { result } = outcome;
+  const serverCpuMicroseconds = reading?.serverCpuMicroseconds ?? null;
   const sample: BenchSample = {
     round: visit.round,
     position: visit.position,
@@ -123,6 +128,11 @@ const measureRoute = async (
     bytesPerResponse: result.requests.total === 0 ? 0 : Math.round(result.throughput.total / result.requests.total),
     generatorCpuPercent: reading?.generatorCpuPercent ?? null,
     serverCpuPercent: reading?.serverCpuPercent ?? null,
+    serverCpuMicrosecondsPerRequest:
+      serverCpuMicroseconds === null || result.requests.total === 0
+        ? null
+        : serverCpuMicroseconds / result.requests.total,
+    serverCores,
     bound: reading === null ? null : classifyBound(reading),
     autocannon: result,
   };
@@ -152,10 +162,11 @@ const measureRoute = async (
 };
 
 const measureRoutes = async (context: ScheduleContext, visit: Visit, server: ServerProcess): Promise<boolean> => {
+  const serverCores = allowedCores(server.pid);
   for (const route of context.options.routes) {
     for (const kind of ['warm-up', 'measured'] as const) {
       // biome-ignore lint/performance/noAwaitInLoops: rounds run one after another; concurrent load would measure itself.
-      if ((await measureRoute(context, visit, server, route, kind)) === null) {
+      if ((await measureRoute(context, visit, server, serverCores, route, kind)) === null) {
         return false;
       }
     }
@@ -163,9 +174,9 @@ const measureRoutes = async (context: ScheduleContext, visit: Visit, server: Ser
   return true;
 };
 
-const startVisit = async (visit: Visit): Promise<ServerProcess> => {
+const startVisit = async (visit: Visit, command: Command): Promise<ServerProcess> => {
   try {
-    return await startServer(visit.server);
+    return await startServer(visit.server, command);
   } catch (error) {
     if (error instanceof BenchError) {
       throw inRound(error, visit.round);
@@ -177,7 +188,7 @@ const startVisit = async (visit: Visit): Promise<ServerProcess> => {
 const runVisit = async (context: ScheduleContext, visit: Visit): Promise<boolean> => {
   const { options } = context;
   context.enterRound(visit.round);
-  const server = await startVisit(visit);
+  const server = await startVisit(visit, context.serverCommand);
   context.track(server);
   context.progress(startedLine(visit.round, options.rounds, visit.server, server.port, server.startMs));
   let completed = false;

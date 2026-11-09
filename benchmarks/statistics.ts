@@ -20,12 +20,26 @@ interface Group {
   readonly server: ServerId;
   readonly route: RouteId;
   readonly rounds: number;
+  readonly serverCpuMicrosecondsPerRequest: BenchSpread | null;
   readonly requestsPerSecond: BenchSpread;
   readonly latencyP99Ms: BenchSpread;
 }
 
 const percentOf = (value: number, reference: Group | undefined): number | null =>
   reference === undefined ? null : (value / reference.requestsPerSecond.median) * 100;
+
+const cpuPercentOf = (group: Group, reference: Group | undefined): number | null => {
+  const own = group.serverCpuMicrosecondsPerRequest;
+  const other = reference?.serverCpuMicrosecondsPerRequest ?? null;
+  return own === null || other === null ? null : (other.median / own.median) * 100;
+};
+
+const cpuSpread = (samples: readonly BenchSample[]): BenchSpread | null => {
+  const values = samples.flatMap((sample) =>
+    sample.serverCpuMicrosecondsPerRequest === null ? [] : [sample.serverCpuMicrosecondsPerRequest],
+  );
+  return values.length === samples.length ? spread(values) : null;
+};
 
 export function summarize(
   samples: readonly BenchSample[],
@@ -45,6 +59,7 @@ export function summarize(
           server,
           route,
           rounds: measured.length,
+          serverCpuMicrosecondsPerRequest: cpuSpread(measured),
           requestsPerSecond: spread(measured.map((sample) => sample.requestsPerSecond)),
           latencyP99Ms: spread(measured.map((sample) => sample.latencyP99Ms)),
         },
@@ -56,6 +71,7 @@ export function summarize(
       groups.find((other) => other.route === group.route && other.server === server);
     return {
       ...group,
+      cpuPercentOfFastify: cpuPercentOf(group, sameRoute('fastify')),
       percentOfFastify: percentOf(group.requestsPerSecond.median, sameRoute('fastify')),
       percentOfNodeHttp: percentOf(group.requestsPerSecond.median, sameRoute('node-http')),
     };

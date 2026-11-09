@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { BenchError } from './bench-error.ts';
+import type { Command } from './pinning.ts';
 import type { ServerId } from './types.ts';
 import { readyTimeoutMs, stderrTailLines, stopGraceMs } from './values.ts';
 
@@ -58,9 +59,10 @@ const parseReady = (server: ServerId, line: string): ReadyOutcome => {
   return { kind: 'ready', port };
 };
 
-export async function startServer(server: ServerId): Promise<ServerProcess> {
+export async function startServer(server: ServerId, command: Command): Promise<ServerProcess> {
   const startedAt = performance.now();
-  const child = spawn(process.execPath, serverArguments(server), {
+  const [program, ...prefix] = command;
+  const child = spawn(program, [...prefix, ...serverArguments(server)], {
     env: { ...process.env, NODE_ENV: 'production' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

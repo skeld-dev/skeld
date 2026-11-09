@@ -7,6 +7,7 @@ import { generatorCeilingPercent, saturationPercent } from './values.ts';
 interface CpuReading {
   readonly generatorCpuPercent: number;
   readonly serverCpuPercent: number | null;
+  readonly serverCpuMicroseconds: number | null;
 }
 
 const readClockTicks = (): number | null => {
@@ -48,11 +49,15 @@ export function startCpuSample(serverPid: number): () => CpuReading {
     const wallMicroseconds = (performance.now() - wallBefore) * 1000;
     const usage = process.cpuUsage(usageBefore);
     const ticksAfter = serverTicks(serverPid);
-    const serverCpuPercent =
+    const serverCpuMicroseconds =
       ticksBefore === null || ticksAfter === null || clockTicksPerSecond === null
         ? null
-        : (((ticksAfter - ticksBefore) / clockTicksPerSecond) * 1_000_000 * 100) / wallMicroseconds;
-    return { generatorCpuPercent: ((usage.user + usage.system) / wallMicroseconds) * 100, serverCpuPercent };
+        : ((ticksAfter - ticksBefore) / clockTicksPerSecond) * 1_000_000;
+    return {
+      generatorCpuPercent: ((usage.user + usage.system) / wallMicroseconds) * 100,
+      serverCpuPercent: serverCpuMicroseconds === null ? null : (serverCpuMicroseconds * 100) / wallMicroseconds,
+      serverCpuMicroseconds,
+    };
   };
 }
 

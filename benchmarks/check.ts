@@ -1,6 +1,7 @@
 import { BenchError } from './bench-error.ts';
 import { preflight, preflightFailure } from './preflight.ts';
 import { type ServerProcess, startServer } from './server-process.ts';
+import type { Command } from './pinning.ts';
 import { killedWarning } from './terminal.ts';
 import type { CheckRow, RouteId, ServerId } from './types.ts';
 
@@ -30,11 +31,12 @@ const notStarted = (server: ServerId, routes: readonly RouteId[]): readonly Chec
 const checkOne = async (
   server: ServerId,
   routes: readonly RouteId[],
+  command: Command,
   hooks: CheckHooks,
 ): Promise<readonly CheckRow[]> => {
   let running: ServerProcess;
   try {
-    running = await startServer(server);
+    running = await startServer(server, command);
   } catch (error) {
     if (error instanceof BenchError) {
       hooks.fail(error);
@@ -58,6 +60,7 @@ const checkOne = async (
 export async function checkServers(
   servers: readonly ServerId[],
   routes: readonly RouteId[],
+  command: Command,
   hooks: CheckHooks,
 ): Promise<readonly CheckRow[]> {
   const rows: CheckRow[] = [];
@@ -66,7 +69,7 @@ export async function checkServers(
       break;
     }
     // biome-ignore lint/performance/noAwaitInLoops: servers are checked one at a time so two never compete for the CPU.
-    rows.push(...(await checkOne(server, routes, hooks)));
+    rows.push(...(await checkOne(server, routes, command, hooks)));
   }
   return rows;
 }

@@ -1,4 +1,4 @@
-export type ServerId = 'darkstart' | 'fastify' | 'node-http' | 'hono' | 'express';
+export type ServerId = 'darkstart' | 'fastify' | 'node-http' | 'hono' | 'express' | 'light';
 export type RouteId = 'hello' | 'echo';
 type RunStatus = 'complete' | 'invalid' | 'interrupted';
 export type Bound = 'server' | 'generator' | 'neither' | 'unknown';
@@ -6,6 +6,7 @@ type VerdictKind = 'keep' | 'below' | 'not-assessed';
 
 export interface RunOptions {
   readonly pipelining: number;
+  readonly warmUpSeconds: number;
   readonly durationSeconds: number;
   readonly rounds: number;
   readonly servers: readonly ServerId[];
@@ -18,6 +19,7 @@ export interface BenchOptions {
   readonly connections: 100;
   readonly workers: 3;
   readonly pipelining: number;
+  readonly warmUpSeconds: number;
   readonly durationSeconds: number;
   readonly rounds: number;
   readonly servers: readonly ServerId[];
@@ -31,6 +33,8 @@ export interface BenchMachine {
   readonly osName: string | null;
   readonly kernel: string;
   readonly virtualMachine: boolean | null;
+  readonly runnerCores: string | null;
+  readonly unpinnedReason: string | null;
   readonly loadAverageStart: number;
   readonly loadAverageEnd: number;
 }
@@ -52,6 +56,7 @@ export interface BenchSoftware {
   readonly hono: string;
   readonly honoNodeServer: string;
   readonly express: string;
+  readonly light: string;
 }
 
 export interface BenchSample {
@@ -69,6 +74,8 @@ export interface BenchSample {
   readonly bytesPerResponse: number;
   readonly generatorCpuPercent: number | null;
   readonly serverCpuPercent: number | null;
+  readonly serverCpuMicrosecondsPerRequest: number | null;
+  readonly serverCores: string | null;
   readonly bound: Bound | null;
   readonly autocannon: unknown;
 }
@@ -83,6 +90,8 @@ export interface BenchSummary {
   readonly server: ServerId;
   readonly route: RouteId;
   readonly rounds: number;
+  readonly serverCpuMicrosecondsPerRequest: BenchSpread | null;
+  readonly cpuPercentOfFastify: number | null;
   readonly requestsPerSecond: BenchSpread;
   readonly latencyP99Ms: BenchSpread;
   readonly percentOfFastify: number | null;
@@ -91,7 +100,7 @@ export interface BenchSummary {
 
 export interface BenchVerdict {
   readonly kind: VerdictKind;
-  readonly linePercent: 90;
+  readonly linePercent: 100;
   readonly hello: number | null;
   readonly echo: number | null;
   readonly reason: string | null;

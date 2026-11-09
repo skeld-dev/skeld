@@ -7,6 +7,8 @@ import {
   generatorCeilingPercent,
   host,
   keepLinePercent,
+  runnerCores,
+  serverCores,
   stopGraceMs,
   workers,
 } from './values.ts';
@@ -34,6 +36,7 @@ export const formatRate = (value: number): string => value.toFixed(1);
 export const formatMs = (value: number): string => value.toFixed(2);
 export const formatPercent = (value: number | null): string => (value === null ? '-' : `${value.toFixed(1)} %`);
 export const formatCpu = (value: number | null): string => (value === null ? '-' : `${Math.round(value)} %`);
+export const formatMicroseconds = (value: number | null): string => (value === null ? '-' : value.toFixed(1));
 
 function renderTable(columns: readonly Column[], rows: readonly (readonly string[])[]): readonly string[] {
   const widths = columns.map((column, index) =>
@@ -55,9 +58,19 @@ export function autocannonFlags(options: Pick<RunOptions, 'durationSeconds' | 'p
   return `-c ${connections} -d ${options.durationSeconds} -p ${options.pipelining} -w ${workers}`;
 }
 
-export function startLines(options: RunOptions, runDirectory: string, minutes: number): readonly string[] {
+export function coresText(unpinnedReason: string | null): string {
+  return unpinnedReason ?? `each server on core ${serverCores}, the runner on cores ${runnerCores}`;
+}
+
+export function startLines(
+  options: RunOptions,
+  runDirectory: string,
+  minutes: number,
+  unpinnedReason: string | null,
+): readonly string[] {
   return [
-    `DarkStart benchmark: ${plural(options.servers.length, 'server', 'servers')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)}, about ${minutes} min`,
+    `DarkStart benchmark: ${plural(options.servers.length, 'server', 'servers')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
+    `Cores: ${coresText(unpinnedReason)}`,
     `Results: ${displayPath(runDirectory)}/`,
   ];
 }
@@ -82,7 +95,7 @@ export function measuredLine(rounds: number, sample: BenchSample): string {
     sample.round,
     rounds,
     sample.server,
-    `${sample.route.padEnd(5)}  ${formatRate(sample.requestsPerSecond)} req/s  p99 ${formatMs(sample.latencyP99Ms)} ms`,
+    `${sample.route.padEnd(5)}  ${formatMicroseconds(sample.serverCpuMicrosecondsPerRequest)} CPU µs/req  ${formatRate(sample.requestsPerSecond)} req/s  p99 ${formatMs(sample.latencyP99Ms)} ms`,
   );
 }
 
@@ -136,16 +149,17 @@ const summaryColumns: readonly Column[] = [
   { header: 'Route', align: 'left' },
   { header: 'Server', align: 'left' },
   { header: 'Rounds', align: 'right' },
+  { header: 'CPU µs/req', align: 'right' },
+  { header: 'Min', align: 'right' },
+  { header: 'Max', align: 'right' },
+  { header: 'CPU vs Fastify', align: 'right' },
   { header: 'Median req/s', align: 'right' },
-  { header: 'Min req/s', align: 'right' },
-  { header: 'Max req/s', align: 'right' },
+  { header: 'req/s vs Fastify', align: 'right' },
   { header: 'Median p99 ms', align: 'right' },
-  { header: 'vs Fastify', align: 'right' },
-  { header: 'vs node:http', align: 'right' },
 ];
 
 export function verdictLine(verdict: BenchVerdict): string {
-  const ratios = `DarkStart serves ${formatPercent(verdict.hello)} of Fastify on hello and ${formatPercent(verdict.echo)} on echo; the line is ${keepLinePercent} %.`;
+  const ratios = `Fastify's server CPU per request is ${formatPercent(verdict.echo)} of DarkStart's on echo (judged) and ${formatPercent(verdict.hello)} on hello (recorded); the line is ${keepLinePercent} % on echo.`;
   if (verdict.kind === 'keep') {
     return `Verdict: keep. ${ratios}`;
   }
@@ -178,12 +192,13 @@ export function summaryLines(
               group.route,
               group.server,
               String(group.rounds),
+              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.median ?? null),
+              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.min ?? null),
+              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.max ?? null),
+              formatPercent(group.cpuPercentOfFastify),
               formatRate(group.requestsPerSecond.median),
-              formatRate(group.requestsPerSecond.min),
-              formatRate(group.requestsPerSecond.max),
-              formatMs(group.latencyP99Ms.median),
               formatPercent(group.percentOfFastify),
-              formatPercent(group.percentOfNodeHttp),
+              formatMs(group.latencyP99Ms.median),
             ]),
           ),
           '',

@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { echoRequestHeaders } from './preflight.ts';
-import type { RouteId, RunOptions } from './types.ts';
+import type { RouteId } from './types.ts';
 import { connections, expectedBody, host, workers } from './values.ts';
 
 interface AutocannonOptions {
@@ -35,12 +35,18 @@ export function loadAutocannon(): Autocannon {
   return autocannon;
 }
 
-export function startLoad(autocannon: Autocannon, port: number, route: RouteId, options: RunOptions): AutocannonRun {
+export function startLoad(
+  autocannon: Autocannon,
+  port: number,
+  route: RouteId,
+  pipelining: number,
+  durationSeconds: number,
+): AutocannonRun {
   const base = {
     url: `http://${host}:${port}/`,
     connections,
-    pipelining: options.pipelining,
-    duration: options.durationSeconds,
+    pipelining,
+    duration: durationSeconds,
     workers,
   };
   return autocannon(

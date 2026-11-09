@@ -13,6 +13,7 @@ import {
 import { loadAutocannon } from './load.ts';
 import { type Lock, takeLock } from './lock.ts';
 import { helpText, parseOptions, wantsHelp } from './options.ts';
+import { pinRunner } from './pinning.ts';
 import { reportFile, writeRunFiles } from './report.ts';
 import { runSchedule } from './rounds.ts';
 import { estimatedMinutes } from './schedule.ts';
@@ -91,6 +92,7 @@ process.on('exit', () => {
 if (lock.replacedPid !== null) {
   warn(staleLockWarning(lock.replacedPid));
 }
+const pinning = pinRunner();
 
 let interruptions = 0;
 const interruption = Promise.withResolvers<void>();
@@ -125,7 +127,7 @@ const hooks: CheckHooks = {
 };
 
 const runCheckMode = async (): Promise<never> => {
-  const rows = await checkServers(options.servers, options.routes, hooks);
+  const rows = await checkServers(options.servers, options.routes, pinning.serverCommand, hooks);
   if (interrupted()) {
     process.exit(130);
   }
@@ -165,10 +167,15 @@ const runMeasure = async (packages: Packages): Promise<never> => {
   createRunDirectory(outFolder, runDirectory);
   const reportPath = displayPath(reportFile(runDirectory));
   const loadAverageStart = loadAverage();
-  const machine = captureMachine(loadAverageStart);
-  const software = captureSoftware(packages);
-  const found = deviations(options, { node: process.version, fastify: packages.fastify, nodeOptions: nodeOptions() });
-  for (const line of startLines(options, runDirectory, estimatedMinutes(options))) {
+  const machine = captureMachine(loadAverageStart, pinning);
+  const software = captureSoftware(packages, pinning);
+  const found = deviations(options, {
+    node: process.version,
+    fastify: packages.fastify,
+    nodeOptions: nodeOptions(),
+    pinning: pinning.deviation,
+  });
+  for (const line of startLines(options, runDirectory, estimatedMinutes(options), pinning.deviation)) {
     err(line);
   }
   if (found.length > 0) {
@@ -193,6 +200,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
           connections,
           workers,
           pipelining: options.pipelining,
+          warmUpSeconds: options.warmUpSeconds,
           durationSeconds: options.durationSeconds,
           rounds: options.rounds,
           servers: options.servers,
@@ -222,7 +230,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
     return { verdict, written };
   };
 
-  const rows = await checkServers(options.servers, options.routes, hooks);
+  const rows = await checkServers(options.servers, options.routes, pinning.serverCommand, hooks);
   if (interrupted()) {
     finish({ status: 'interrupted', round: 1 });
     err(`Interrupted in round 1. Servers stopped; the partial report is in ${reportPath}.`);
@@ -241,6 +249,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
     const result = await runSchedule({
       options,
       autocannon: loadAutocannon(),
+      serverCommand: pinning.serverCommand,
       samples,
       interruption: interruption.promise,
       interrupted,

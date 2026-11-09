@@ -1,9 +1,27 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { routeCommandLine } from './load.ts';
-import { autocannonFlags, formatCpu, formatMs, formatPercent, formatRate, plural, verdictLine } from './terminal.ts';
+import {
+  autocannonFlags,
+  coresText,
+  formatCpu,
+  formatMicroseconds,
+  formatMs,
+  formatPercent,
+  formatRate,
+  plural,
+  verdictLine,
+} from './terminal.ts';
 import type { BenchOptions, BenchRun, BenchSample, BenchSummary, RouteId } from './types.ts';
-import { connections, generatorCeilingPercent, saturationPercent, workers } from './values.ts';
+import {
+  connections,
+  generatorCeilingPercent,
+  keepLinePercent,
+  runnerCores,
+  saturationPercent,
+  serverCores,
+  workers,
+} from './values.ts';
 
 const gibibyte = 1024 ** 3;
 
@@ -18,14 +36,18 @@ const markdownTable = (headers: readonly string[], rows: readonly (readonly stri
 const resultRow = (group: BenchSummary): readonly string[] => [
   group.server,
   String(group.rounds),
+  formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.median ?? null),
+  formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.min ?? null),
+  formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.max ?? null),
+  formatPercent(group.cpuPercentOfFastify),
   formatRate(group.requestsPerSecond.median),
   formatRate(group.requestsPerSecond.min),
   formatRate(group.requestsPerSecond.max),
+  formatPercent(group.percentOfFastify),
+  formatPercent(group.percentOfNodeHttp),
   formatMs(group.latencyP99Ms.median),
   formatMs(group.latencyP99Ms.min),
   formatMs(group.latencyP99Ms.max),
-  formatPercent(group.percentOfFastify),
-  formatPercent(group.percentOfNodeHttp),
 ];
 
 const resultsSection = (run: BenchRun): readonly string[] =>
@@ -41,14 +63,18 @@ const resultsSection = (run: BenchRun): readonly string[] =>
         [
           'Server',
           'Rounds',
+          'Median CPU µs/req',
+          'Min CPU µs/req',
+          'Max CPU µs/req',
+          'CPU vs Fastify',
           'Median req/s',
           'Min req/s',
           'Max req/s',
+          'req/s vs Fastify',
+          'req/s vs node:http',
           'Median p99 ms',
           'Min p99 ms',
           'Max p99 ms',
-          'vs Fastify',
-          'vs node:http',
         ],
         groups.map(resultRow),
       ),
@@ -71,6 +97,8 @@ const roundRow = (sample: BenchSample): readonly string[] => [
   String(sample.bytesPerResponse),
   formatCpu(sample.generatorCpuPercent),
   formatCpu(sample.serverCpuPercent),
+  formatMicroseconds(sample.serverCpuMicrosecondsPerRequest),
+  sample.serverCores ?? '-',
   sample.bound ?? '-',
 ];
 
@@ -100,18 +128,20 @@ const keyValueTable = (rows: readonly (readonly [string, string])[]): readonly s
   ...rows.map(([key, value]) => `| ${key} | ${value} |`),
 ];
 
-const methodLines = (options: BenchOptions): readonly string[] => {
+const methodLines = (options: BenchOptions, unpinnedReason: string | null): readonly string[] => {
   const flags = autocannonFlags(options);
   const perWorker = Math.floor(connections / workers);
   return [
+    `- Cores: ${coresText(unpinnedReason)}. Each server process starts under \`taskset --cpu-list ${serverCores}\`; the runner pins every one of its threads to cores ${runnerCores} with \`taskset --all-tasks\` at start, and the autocannon workers it creates later inherit that set. The cores each process was allowed, read from Cpus_allowed_list in /proc/<pid>/status, are in › Rounds and › Machine (ADR-015).`,
     `- autocannon \`${flags}\`, run through its API in the runner's process on ${workers} worker threads; autocannon divides the ${connections} connections ${perWorker} per worker (${perWorker * workers} in all) and applies -p per connection in each worker (ADR-010).`,
     ...options.routes.map((route) => `- ${route}: \`${routeCommandLine(route, flags)}\``),
-    `- ${plural(options.rounds, 'measured round', 'measured rounds')} per server and route. Each round starts every server in a fresh process, warms each route up for ${options.durationSeconds} s (discarded), measures it for ${options.durationSeconds} s, and stops the server. The server order rotates each round.`,
-    "- Statistic: autocannon's mean requests per second for each round; median, minimum and maximum over the rounds. p99 latency likewise.",
-    `- The load generator runs on the same machine as the servers and competes with them for CPU; every server carries the same handicap. A round is generator-bound when the runner process (${workers} workers and the main thread) used ${generatorCeilingPercent} % or more of one core, ${saturationPercent} % of the workers' ${workers} cores, whatever the server used. No process is pinned to a core.`,
+    `- ${plural(options.rounds, 'measured round', 'measured rounds')} per server and route. Each round starts every server in a fresh process, warms each route up for ${options.warmUpSeconds} s (discarded), measures it for ${options.durationSeconds} s, and stops the server. The server order rotates each round.`,
+    `- Judged statistic: the server's CPU time per request in each measured round, its utime plus stime from /proc/<pid>/stat over the measured window only (the warm-up excluded) divided by the requests autocannon completed in that window; median, minimum and maximum over the rounds. CPU vs Fastify is Fastify's median divided by the server's, so 100 % or more means the server spends no more CPU per request than Fastify. The verdict is keep when DarkStart's echo ratio is ${keepLinePercent} % or more; hello is recorded and not judged (ADR-015).`,
+    "- Beside it: autocannon's mean requests per second for each round and its p99 latency, each with median, minimum and maximum over the rounds.",
+    `- The load generator runs on the same machine as the servers and competes with them for CPU; every server carries the same handicap. A round is generator-bound when the runner process (${workers} workers and the main thread) used ${generatorCeilingPercent} % or more of one core, ${saturationPercent} % of the workers' ${workers} cores, whatever the server used; such a round of any server but node-http voids the verdict (ADR-009).`,
     '- Loggers off. No TLS. No compression.',
-    '- Routes: hello returns { hello: "world" } through a response schema; echo parses a JSON body and returns it. DarkStart and Fastify validate the echo body against { hello: string }, closed to other keys; node:http parses and serializes with JSON.parse and JSON.stringify and validates nothing. fastify/benchmarks\' POST route does not validate; this one does, so both frameworks do the same work. Hono and Express, when run, parse the echo body and validate nothing, like node:http.',
-    '- Server options: darkstart, engine defaults; fastify, { logger: false }; node-http, http.createServer with no options; hono, @hono/node-server serve() with no options; express, express() with express.json() on the echo route.',
+    '- Routes: hello returns { hello: "world" } through a response schema; echo parses a JSON body and returns it. DarkStart and Fastify validate the echo body against { hello: string }, closed to other keys; node:http parses and serializes with JSON.parse and JSON.stringify and validates nothing. fastify/benchmarks\' POST route does not validate; this one does, so both frameworks do the same work. Hono and Express, when run, parse the echo body and validate nothing, like node:http; light checks the body by hand (hello is a string), as its own hello benchmark does.',
+    '- Server options: darkstart, engine defaults; fastify, { logger: false }; node-http, http.createServer with no options; hono, @hono/node-server serve() with no options; express, express() with express.json() on the echo route; light, @lightstart/server/node serve() with no options.',
   ];
 };
 
@@ -145,6 +175,8 @@ function renderReport(run: BenchRun): string {
         'Bytes per response',
         'Generator CPU',
         'Server CPU',
+        'Server CPU µs/req',
+        'Server cores',
         'Bound',
       ],
       run.samples.map(roundRow),
@@ -159,6 +191,7 @@ function renderReport(run: BenchRun): string {
       ['OS', unknownIfNull(machine.osName)],
       ['Kernel', machine.kernel],
       ['Virtual machine', yesNo(machine.virtualMachine)],
+      ['Runner cores allowed', unknownIfNull(machine.runnerCores)],
       ['Load average at start', machine.loadAverageStart.toFixed(2)],
       ['Load average at end', machine.loadAverageEnd.toFixed(2)],
     ]),
@@ -183,11 +216,15 @@ function renderReport(run: BenchRun): string {
       ['fast-json-stringify', software.fastJsonStringify],
       ['Hono', `hono ${software.hono}, @hono/node-server ${software.honoNodeServer}`],
       ['Express', software.express],
+      [
+        'light',
+        `@lightstart/server ${software.light} (alantriesagain/lightstart 0b4cc663, packed by its scripts/pack.js)`,
+      ],
     ]),
     '',
     '## Method',
     '',
-    ...methodLines(run.options),
+    ...methodLines(run.options, machine.unpinnedReason),
     '',
     '## Warnings',
     '',
