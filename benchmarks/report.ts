@@ -4,6 +4,7 @@ import { routeCommandLine } from './load.ts';
 import {
   autocannonFlags,
   coresText,
+  entrantLabel,
   formatCpu,
   formatMicroseconds,
   formatMs,
@@ -27,14 +28,14 @@ const gibibyte = 1024 ** 3;
 
 const routeTitles: Readonly<Record<RouteId, string>> = { hello: 'GET /', echo: 'POST /' };
 
-const markdownTable = (headers: readonly string[], rows: readonly (readonly string[])[]): readonly string[] => [
+export const markdownTable = (headers: readonly string[], rows: readonly (readonly string[])[]): readonly string[] => [
   `| ${headers.join(' | ')} |`,
   `|${headers.map(() => '---').join('|')}|`,
   ...rows.map((row) => `| ${row.join(' | ')} |`),
 ];
 
 const resultRow = (group: BenchSummary): readonly string[] => [
-  group.server,
+  entrantLabel(group),
   String(group.rounds),
   formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.median ?? null),
   formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.min ?? null),
@@ -85,7 +86,7 @@ const resultsSection = (run: BenchRun): readonly string[] =>
 const roundRow = (sample: BenchSample): readonly string[] => [
   String(sample.round),
   String(sample.position),
-  sample.server,
+  entrantLabel(sample),
   sample.route,
   sample.kind,
   formatRate(sample.requestsPerSecond),
@@ -122,7 +123,7 @@ const revisionText = (run: BenchRun): string => {
   return `revision ${revision} (${uncommittedChanges ? 'uncommitted changes' : 'clean'})`;
 };
 
-const keyValueTable = (rows: readonly (readonly [string, string])[]): readonly string[] => [
+export const keyValueTable = (rows: readonly (readonly [string, string])[]): readonly string[] => [
   '| | |',
   '|---|---|',
   ...rows.map(([key, value]) => `| ${key} | ${value} |`),
@@ -144,6 +145,16 @@ const methodLines = (options: BenchOptions, unpinnedReason: string | null): read
     '- Server options: darkstart, engine defaults; fastify, { logger: false }; node-http, http.createServer with no options; hono, @hono/node-server serve() with no options; express, express() with express.json() on the echo route; light, @lightstart/server/node serve() with no options.',
   ];
 };
+
+const diagCommandRow = (commandLine: readonly string[] | null): readonly (readonly [string, string])[] =>
+  commandLine === null
+    ? []
+    : [
+        [
+          'Diag server command line',
+          `${commandLine.join(' ')}, NODE_ENV=production, DARKSTART_DIAG_DIR, DARKSTART_DIAG_STEP_N and DARKSTART_DIAG_CPU_N set per process`,
+        ],
+      ];
 
 function renderReport(run: BenchRun): string {
   const { machine, software } = run;
@@ -205,6 +216,7 @@ function renderReport(run: BenchRun): string {
         'Server command line',
         `${software.serverCommandLine.join(' ')}, NODE_ENV=${software.serverEnvironment.NODE_ENV}`,
       ],
+      ...diagCommandRow(software.diagServerCommandLine),
       ['NODE_OPTIONS', software.nodeOptions === null ? 'unset' : JSON.stringify(software.nodeOptions)],
       [
         'DarkStart',

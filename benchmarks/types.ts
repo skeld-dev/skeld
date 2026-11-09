@@ -1,5 +1,6 @@
 export type ServerId = 'darkstart' | 'fastify' | 'node-http' | 'hono' | 'express' | 'light';
 export type RouteId = 'hello' | 'echo';
+export type BuildId = 'darkstart' | 'darkstart-diag';
 type RunStatus = 'complete' | 'invalid' | 'interrupted';
 export type Bound = 'server' | 'generator' | 'neither' | 'unknown';
 type VerdictKind = 'keep' | 'below' | 'not-assessed';
@@ -13,6 +14,9 @@ export interface RunOptions {
   readonly routes: readonly RouteId[];
   readonly out: string;
   readonly check: boolean;
+  readonly diag: boolean;
+  readonly stepN: number;
+  readonly cpuN: number;
 }
 
 export interface BenchOptions {
@@ -24,6 +28,7 @@ export interface BenchOptions {
   readonly rounds: number;
   readonly servers: readonly ServerId[];
   readonly routes: readonly RouteId[];
+  readonly diag: boolean;
 }
 
 export interface BenchMachine {
@@ -43,6 +48,7 @@ export interface BenchSoftware {
   readonly node: string;
   readonly runnerCommandLine: readonly string[];
   readonly serverCommandLine: readonly string[];
+  readonly diagServerCommandLine: readonly string[] | null;
   readonly serverEnvironment: { readonly NODE_ENV: 'production' };
   readonly nodeOptions: string | null;
   readonly darkstart: string;
@@ -63,8 +69,11 @@ export interface BenchSample {
   readonly round: number;
   readonly position: number;
   readonly server: ServerId;
+  readonly build: BuildId;
   readonly route: RouteId;
   readonly kind: 'warm-up' | 'measured';
+  readonly windowStartMs: number;
+  readonly windowEndMs: number;
   readonly requestsPerSecond: number;
   readonly latencyP99Ms: number;
   readonly requests: number;
@@ -88,6 +97,7 @@ export interface BenchSpread {
 
 export interface BenchSummary {
   readonly server: ServerId;
+  readonly build: BuildId;
   readonly route: RouteId;
   readonly rounds: number;
   readonly serverCpuMicrosecondsPerRequest: BenchSpread | null;
@@ -127,10 +137,11 @@ export interface Visit {
   readonly round: number;
   readonly position: number;
   readonly server: ServerId;
+  readonly build: BuildId;
 }
 
 export interface CheckRow {
-  readonly server: ServerId;
+  readonly server: string;
   readonly route: RouteId;
   readonly started: boolean;
   readonly status: number | null;

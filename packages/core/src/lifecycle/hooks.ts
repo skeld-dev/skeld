@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import { contain, end, event, header, leave, resume, type Slot, track, wrote } from '#diag';
 import type { RouteInfo } from '../contract/types.ts';
 import type {
   CompletedContext,
@@ -18,13 +19,16 @@ const ALREADY_SENT = 'Response already sent';
 function sendReply(exchange: Exchange, reply: RawReply): void {
   const { res, method } = exchange;
   if (exchange.state !== 'running') {
+    event('err.already_sent');
     const error = new Error(ALREADY_SENT);
     exchange.lateSendError = error;
     writeStderrLine(method, exchange.path, res.statusCode, exchange.route.info.name, ALREADY_SENT);
     throw error;
   }
+  end(exchange.stage);
   if (reply.headers !== undefined) {
     for (const [name, value] of Object.entries(reply.headers)) {
+      header(name, value);
       res.setHeader(name, value);
     }
   }
@@ -38,8 +42,10 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
   res.writeHead(reply.status);
   if (payload === undefined || method === 'HEAD') {
     res.end();
+    wrote(reply.status, null, null);
   } else {
     res.end(payload);
+    wrote(reply.status, null, payload);
   }
   exchange.state = 'sent-by-hook';
 }
@@ -72,6 +78,7 @@ export class RequestContextRecord extends ErrorContextRecord implements RequestC
     super(exchange);
     const { res } = exchange;
     this.setHeader = (name, value) => {
+      header(name, value);
       res.setHeader(name, value);
     };
     this.send = (reply) => {
@@ -102,6 +109,7 @@ export class ResponseContextRecord extends ErrorContextRecord implements Respons
     const { res } = exchange;
     this.status = status;
     this.setHeader = (name, value) => {
+      header(name, value);
       res.setHeader(name, value);
     };
   }
@@ -131,7 +139,18 @@ export function runStage<H>(
       return;
     }
     if (result instanceof Promise) {
-      result.then(() => step(index + 1), fault);
+      result.then(
+        () => {
+          resume(exchange.diag);
+          step(index + 1);
+          leave(exchange.diag);
+        },
+        (error: unknown) => {
+          resume(exchange.diag);
+          fault(error);
+          leave(exchange.diag);
+        },
+      );
     } else {
       step(index + 1);
     }
@@ -140,17 +159,16 @@ export function runStage<H>(
 }
 
 export function runObservers<H>(
+  slot: Slot,
   hooks: readonly H[],
   call: (hook: H) => void | Promise<void>,
   report: (error: unknown) => void,
-  done: (() => void) | null,
+  done: () => void,
 ): void {
   const step = (index: number): void => {
     const hook = hooks[index];
     if (hook === undefined) {
-      if (done !== null) {
-        done();
-      }
+      done();
       return;
     }
     let result: void | Promise<void>;
@@ -163,10 +181,16 @@ export function runObservers<H>(
     }
     if (result instanceof Promise) {
       result.then(
-        () => step(index + 1),
+        () => {
+          resume(slot);
+          step(index + 1);
+          leave(slot);
+        },
         (error: unknown) => {
+          resume(slot);
           report(error);
           step(index + 1);
+          leave(slot);
         },
       );
     } else {
@@ -180,10 +204,14 @@ export function watchCompletion(exchange: Exchange, hooks: readonly OnResponseHo
   const { res } = exchange;
   let finished = false;
   res.once('finish', () => {
+    resume(exchange.diag);
     finished = true;
+    leave(exchange.diag);
   });
   res.once('close', () => {
+    resume(exchange.diag);
     if (exchange.state === 'sent-by-hook') {
+      leave(exchange.diag);
       return;
     }
     const context: CompletedContext = {
@@ -193,7 +221,10 @@ export function watchCompletion(exchange: Exchange, hooks: readonly OnResponseHo
       status: res.statusCode,
       completed: finished,
     };
+    contain('completed', context);
+    const span = track('req.hook.on_response');
     runObservers(
+      exchange.diag,
       hooks,
       (hook) => hook(context),
       (error) =>
@@ -204,7 +235,10 @@ export function watchCompletion(exchange: Exchange, hooks: readonly OnResponseHo
           exchange.route.info.name,
           `onResponse hook threw: ${describeThrown(error)}`,
         ),
-      null,
+      () => {
+        end(span);
+      },
     );
+    leave(exchange.diag);
   });
 }

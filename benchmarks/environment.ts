@@ -120,6 +120,40 @@ export function nodeOptions(): string | null {
   return value === undefined || value === '' ? null : value;
 }
 
+const conditionsIn = (options: string): string | null => {
+  const tokens = options.split(/\s+/);
+  for (const [index, token] of tokens.entries()) {
+    if (token.startsWith('--conditions=')) {
+      return token.slice('--conditions='.length);
+    }
+    if (token === '--conditions' || token === '-C') {
+      return tokens[index + 1] ?? '';
+    }
+  }
+  return null;
+};
+
+export function refuseConditions(): void {
+  const options = nodeOptions();
+  const value = options === null ? null : conditionsIn(options);
+  if (value !== null) {
+    throw new BenchError(
+      3,
+      `NODE_OPTIONS sets --conditions=${value}. The benchmark sets each child's conditions itself; remove it from NODE_OPTIONS.`,
+    );
+  }
+}
+
+const diagVariablePrefix = 'DARKSTART_DIAG_';
+
+export function inheritedDiagVariables(): readonly string[] {
+  return Object.keys(process.env).filter((name) => name.startsWith(diagVariablePrefix));
+}
+
+export function childEnvironment(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith(diagVariablePrefix)));
+}
+
 const prettyName = (): string | null => {
   const text = readText('/etc/os-release');
   const line = text?.split('\n').find((candidate) => candidate.startsWith('PRETTY_NAME='));
@@ -164,7 +198,11 @@ const git = (args: readonly string[]): string | null => {
   }
 };
 
-export function captureSoftware(packages: Packages, pinning: Pinning): BenchSoftware {
+export function captureSoftware(
+  packages: Packages,
+  pinning: Pinning,
+  diagServerCommandLine: readonly string[] | null,
+): BenchSoftware {
   const revision = git(['rev-parse', '--short', 'HEAD'])?.trim() ?? null;
   const porcelain = revision === null ? null : git(['status', '--porcelain']);
   return {
@@ -176,6 +214,7 @@ export function captureSoftware(packages: Packages, pinning: Pinning): BenchSoft
       ...process.argv.slice(2),
     ],
     serverCommandLine: [...pinning.serverCommand, displayPath(join(serversFolder, '<server>.ts')), '--port', '0'],
+    diagServerCommandLine,
     serverEnvironment: { NODE_ENV: 'production' },
     nodeOptions: nodeOptions(),
     darkstart: packages.darkstart,

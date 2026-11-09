@@ -1,3 +1,4 @@
+import { end, limit, start } from '#diag';
 import type { TObject, TSchema } from 'typebox';
 import { Compile, type Validator } from 'typebox/compile';
 import type { TLocalizedValidationError } from 'typebox/error';
@@ -98,6 +99,10 @@ function closeObjects(node: TSchema, inGroup: boolean, schemaPath: string, group
     recordGroupKeys(node, schemaPath, groups);
   }
   return copy;
+}
+
+export function closeSchema(schema: TSchema): TSchema {
+  return closeObjects(schema, false, '#', new Map());
 }
 
 type LeafConverter = (text: string) => number | boolean | null;
@@ -212,12 +217,16 @@ const bodies = createCompileCache((schema: TSchema): CompiledBody => {
 
 // TypeBox's `maxErrors` is process-wide; it is restored so the application's own TypeBox calls keep their limit.
 function collectErrors(validator: Validator, value: unknown): TLocalizedValidationError[] {
+  const span = start('req.validate.errors');
   const previous = Settings.Get().maxErrors;
   Settings.Set({ maxErrors: MAX_DETAILS });
   try {
-    return validator.Errors(value);
+    const errors = validator.Errors(value);
+    limit('limit.raw_errors', errors.length, MAX_DETAILS);
+    return errors;
   } finally {
     Settings.Set({ maxErrors: previous });
+    end(span);
   }
 }
 

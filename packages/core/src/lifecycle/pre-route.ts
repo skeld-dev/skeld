@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { count, destroyed, end, event, next, type Slot, start } from '#diag';
 import type { EngineErrorCode } from '../contract/types.ts';
 import { checkFraming } from '../request/framing.ts';
 import { splitTarget } from '../request/target.ts';
@@ -24,17 +25,32 @@ function refuse(
   return null;
 }
 
-export function preRoute(runtime: EngineRuntime, req: IncomingMessage, res: ServerResponse): Exchange | null {
+export function preRoute(
+  runtime: EngineRuntime,
+  req: IncomingMessage,
+  res: ServerResponse,
+  diag: Slot,
+): Exchange | null {
+  let stage = start('req.preroute');
   const { method, url } = req;
   if (method === undefined || url === undefined) {
+    end(stage);
     res.destroy();
+    destroyed();
     return null;
   }
+  const framing = start('req.preroute.framing');
   const fault = checkFraming(req.rawHeaders);
+  end(framing);
   if (fault !== null) {
+    event('refuse.framing', fault);
+    end(stage);
     return refuse(runtime, res, method, 400, 'BAD_REQUEST', FRAMING_MESSAGES[fault], true);
   }
+  const target = start('req.preroute.target');
   const { path, query } = splitTarget(url);
+  end(target);
+  stage = next(stage, 'req.route.find');
   const found = runtime.router.find(method === 'HEAD' ? 'GET' : method, path, runtime.maxParamLength);
   switch (found.kind) {
     case 'found':
@@ -47,15 +63,23 @@ export function preRoute(runtime: EngineRuntime, req: IncomingMessage, res: Serv
         path,
         query,
         params: found.params,
+        diag,
+        stage,
         state: 'running',
         closeConnection: false,
         lateSendError: null,
       };
     case 'not-found':
+      count('refuse.not_found', method);
+      end(stage);
       return refuse(runtime, res, method, 404, 'NOT_FOUND', `Route ${method} ${path} not found`, false);
     case 'malformed-path':
+      event('refuse.path');
+      end(stage);
       return refuse(runtime, res, method, 400, 'BAD_REQUEST', 'Malformed percent-encoding in request path', false);
     case 'param-too-long':
+      event('refuse.param_too_long');
+      end(stage);
       return refuse(
         runtime,
         res,

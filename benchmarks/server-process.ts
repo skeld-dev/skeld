@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { BenchError } from './bench-error.ts';
 import type { Command } from './pinning.ts';
-import type { ServerId } from './types.ts';
 import { readyTimeoutMs, stderrTailLines, stopGraceMs } from './values.ts';
 
 export interface ExitStatus {
@@ -12,8 +11,15 @@ export interface ExitStatus {
   readonly signal: NodeJS.Signals | null;
 }
 
+export interface Launch {
+  readonly name: string;
+  readonly readyLabel: string;
+  readonly args: readonly string[];
+  readonly env: NodeJS.ProcessEnv;
+}
+
 export interface ServerProcess {
-  readonly server: ServerId;
+  readonly name: string;
   readonly pid: number;
   readonly port: number;
   readonly startMs: number;
@@ -30,12 +36,6 @@ const maxPort = 65_535;
 
 export const serversFolder = join(import.meta.dirname, 'servers');
 
-const serverScript = (server: ServerId): string => join(serversFolder, `${server}.ts`);
-
-function serverArguments(server: ServerId): readonly string[] {
-  return [serverScript(server), '--port', '0'];
-}
-
 export function describeExit(status: ExitStatus): string {
   return status.signal === null ? `code ${status.code ?? 'unknown'}` : `signal ${status.signal}`;
 }
@@ -50,20 +50,21 @@ type ReadyOutcome =
   | { readonly kind: 'exited'; readonly status: ExitStatus }
   | { readonly kind: 'timeout' };
 
-const parseReady = (server: ServerId, line: string): ReadyOutcome => {
+const parseReady = (label: string, line: string): ReadyOutcome => {
   const match = readyLinePattern.exec(line);
   const port = Number(match?.[2]);
-  if (match?.[1] !== server || !Number.isSafeInteger(port) || port < 1 || port > maxPort) {
+  if (match?.[1] !== label || !Number.isSafeInteger(port) || port < 1 || port > maxPort) {
     return { kind: 'wrong', line };
   }
   return { kind: 'ready', port };
 };
 
-export async function startServer(server: ServerId, command: Command): Promise<ServerProcess> {
+export async function startServer(launch: Launch, command: Command): Promise<ServerProcess> {
+  const { name: server, readyLabel } = launch;
   const startedAt = performance.now();
   const [program, ...prefix] = command;
-  const child = spawn(program, [...prefix, ...serverArguments(server)], {
-    env: { ...process.env, NODE_ENV: 'production' },
+  const child = spawn(program, [...prefix, ...launch.args], {
+    env: launch.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const tail: string[] = [];
@@ -87,7 +88,7 @@ export async function startServer(server: ServerId, command: Command): Promise<S
 
   const firstLine = new Promise<ReadyOutcome>((resolve) => {
     createInterface({ input: child.stdout }).once('line', (line) => {
-      resolve(parseReady(server, line));
+      resolve(parseReady(readyLabel, line));
     });
   });
   let timer: NodeJS.Timeout | undefined;
@@ -130,7 +131,7 @@ export async function startServer(server: ServerId, command: Command): Promise<S
     }
     throw new BenchError(
       3,
-      `${server} printed ${JSON.stringify(outcome.line.slice(0, readyLinePreview))} instead of its ready line {"server":"${server}","port":<n>}.`,
+      `${server} printed ${JSON.stringify(outcome.line.slice(0, readyLinePreview))} instead of its ready line {"server":"${readyLabel}","port":<n>}.`,
     );
   }
 
@@ -146,7 +147,7 @@ export async function startServer(server: ServerId, command: Command): Promise<S
     });
 
   return {
-    server,
+    name: server,
     pid,
     port: outcome.port,
     startMs: readyMs,

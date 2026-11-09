@@ -1,12 +1,14 @@
 import { BenchError } from './bench-error.ts';
 import { preflightRoutes } from './check.ts';
 import { classifyBound, startCpuSample } from './cpu.ts';
+import { startTarget, type Target } from './diag/builds.ts';
 import { type Autocannon, type AutocannonResult, startLoad } from './load.ts';
 import { allowedCores, type Command } from './pinning.ts';
 import { preflightFailure } from './preflight.ts';
 import { scheduleVisits } from './schedule.ts';
-import { describeExit, type ExitStatus, indentTail, type ServerProcess, startServer } from './server-process.ts';
+import { describeExit, type ExitStatus, indentTail, type ServerProcess } from './server-process.ts';
 import {
+  entrantLabel,
   generatorWarning,
   killedWarning,
   measuredLine,
@@ -21,6 +23,7 @@ interface ScheduleContext {
   readonly options: RunOptions;
   readonly autocannon: Autocannon;
   readonly serverCommand: Command;
+  readonly target: (visit: Visit) => Target;
   readonly samples: BenchSample[];
   readonly interruption: Promise<void>;
   readonly interrupted: () => boolean;
@@ -86,14 +89,17 @@ const measureRoute = async (
   kind: BenchSample['kind'],
 ): Promise<BenchSample | null> => {
   const { options } = context;
-  const label = `round ${visit.round} ${visit.server} ${route}`;
+  const name = entrantLabel(visit);
+  const label = `round ${visit.round} ${name} ${route}`;
   if (kind === 'warm-up') {
-    context.progress(warmUpLine(visit.round, options.rounds, visit.server, route, options.warmUpSeconds));
+    context.progress(warmUpLine(visit.round, options.rounds, name, route, options.warmUpSeconds));
   }
   const sampleCpu = kind === 'measured' ? startCpuSample(server.pid) : null;
   const seconds = kind === 'measured' ? options.durationSeconds : options.warmUpSeconds;
+  const windowStartMs = Date.now();
   const run = startLoad(context.autocannon, server.port, route, options.pipelining, seconds);
   const outcome = await awaitLoad(context, server, run);
+  const windowEndMs = Date.now();
   const reading = sampleCpu?.() ?? null;
   if (outcome.kind === 'interrupted') {
     run.stop();
@@ -103,7 +109,7 @@ const measureRoute = async (
     run.stop();
     throw new BenchError(
       4,
-      `${visit.server} exited with ${describeExit(outcome.status)} during round ${visit.round} ${route}. Its last output:`,
+      `${name} exited with ${describeExit(outcome.status)} during round ${visit.round} ${route}. Its last output:`,
       indentTail(server.stderrTail()),
     );
   }
@@ -117,8 +123,11 @@ const measureRoute = async (
     round: visit.round,
     position: visit.position,
     server: visit.server,
+    build: visit.build,
     route,
     kind,
+    windowStartMs,
+    windowEndMs,
     requestsPerSecond: result.requests.average,
     latencyP99Ms: result.latency.p99,
     requests: result.requests.total,
@@ -174,9 +183,9 @@ const measureRoutes = async (context: ScheduleContext, visit: Visit, server: Ser
   return true;
 };
 
-const startVisit = async (visit: Visit, command: Command): Promise<ServerProcess> => {
+const startVisit = async (context: ScheduleContext, visit: Visit): Promise<ServerProcess> => {
   try {
-    return await startServer(visit.server, command);
+    return await startTarget(context.target(visit), context.serverCommand, 4);
   } catch (error) {
     if (error instanceof BenchError) {
       throw inRound(error, visit.round);
@@ -188,9 +197,10 @@ const startVisit = async (visit: Visit, command: Command): Promise<ServerProcess
 const runVisit = async (context: ScheduleContext, visit: Visit): Promise<boolean> => {
   const { options } = context;
   context.enterRound(visit.round);
-  const server = await startVisit(visit, context.serverCommand);
+  const name = entrantLabel(visit);
+  const server = await startVisit(context, visit);
   context.track(server);
-  context.progress(startedLine(visit.round, options.rounds, visit.server, server.port, server.startMs));
+  context.progress(startedLine(visit.round, options.rounds, name, server.port, server.startMs));
   let completed = false;
   try {
     if (context.interrupted()) {
@@ -205,11 +215,11 @@ const runVisit = async (context: ScheduleContext, visit: Visit): Promise<boolean
     return completed;
   } finally {
     if (await server.stop()) {
-      context.warn(killedWarning(visit.server));
+      context.warn(killedWarning(name));
     }
     context.track(null);
     if (completed) {
-      context.progress(stoppedLine(visit.round, options.rounds, visit.server));
+      context.progress(stoppedLine(visit.round, options.rounds, name));
     }
   }
 };

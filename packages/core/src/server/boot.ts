@@ -1,9 +1,11 @@
+import { end, start } from '#diag';
 import { BootError } from './boot-error.ts';
 import { causeMessage } from './cause-message.ts';
 import { type ChildScope, createScope, type ScopeState } from './scope.ts';
 
 async function runPlugin(child: ChildScope, timeoutMs: number): Promise<void> {
   const { name } = child.state;
+  const span = start('boot.plugin', name);
   const expiry = Promise.withResolvers<'timed-out'>();
   const timer = setTimeout(() => expiry.resolve('timed-out'), timeoutMs);
   let outcome: 'settled' | 'timed-out';
@@ -15,6 +17,7 @@ async function runPlugin(child: ChildScope, timeoutMs: number): Promise<void> {
   } finally {
     clearTimeout(timer);
     child.state.sealed = true;
+    end(span);
   }
   if (outcome === 'timed-out') {
     throw new BootError('PLUGIN_TIMEOUT', `Plugin ${name} did not settle within ${timeoutMs} ms`, null, name);

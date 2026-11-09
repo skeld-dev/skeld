@@ -1,14 +1,17 @@
 import { BenchError } from './bench-error.ts';
 import type { RouteId, RunOptions, ServerId } from './types.ts';
 import {
+  defaultCpuN,
   defaultDurationSeconds,
   defaultOut,
   defaultPipelining,
   defaultRounds,
+  defaultStepN,
   defaultWarmUpSeconds,
   durationRange,
   pipeliningRange,
   roundsRange,
+  stepRange,
 } from './values.ts';
 
 export const helpText = `Usage: node benchmarks/run.ts [options]
@@ -30,26 +33,45 @@ Options:
   --routes <list>    hello,echo (default both)
   --out <dir>        folder for the run's report (default benchmarks/results)
   --check            start each server, check its answers, measure nothing
+  --diag             measure DarkStart's normal and diag builds side by side,
+                     then run the security scenario; darkstart only; with
+                     --check, the start checks and the scenario only
+  --step-n <n>       diag build: time the steps of 1 in n requests, 1 to 1024
+                     (default 8; needs --diag)
+  --cpu-n <n>        diag build: read CPU on 1 in n requests, 1 to 1024
+                     (default 32; needs --diag)
   --help             show this help
 
 Only a run with every default, pinned on a host with 8 or more vCPUs, is the
-acceptance protocol and gets a verdict.
+acceptance protocol and gets a verdict. In diag mode the same rule decides
+whether the overhead ratio is assessed.
 `;
 
 export const defaultServerIds: readonly ServerId[] = ['darkstart', 'fastify', 'node-http'];
-export const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express', 'light'];
+const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express', 'light'];
 export const routeIds: readonly RouteId[] = ['hello', 'echo'];
 
-const valueOptions = ['--pipelining', '--warm-up', '--duration', '--rounds', '--servers', '--routes', '--out'] as const;
+const valueOptions = [
+  '--pipelining',
+  '--warm-up',
+  '--duration',
+  '--rounds',
+  '--servers',
+  '--routes',
+  '--out',
+  '--step-n',
+  '--cpu-n',
+] as const;
 type ValueOption = (typeof valueOptions)[number];
-const flagOptions = ['--check', '--help'] as const;
+const flagOptions = ['--check', '--diag', '--help'] as const;
+type FlagOption = (typeof flagOptions)[number];
 
 const wholeNumber = /^\d+$/;
 
 const usage = (message: string): BenchError => new BenchError(2, message);
 
 const isValueOption = (name: string): name is ValueOption => valueOptions.some((option) => option === name);
-const isFlagOption = (name: string): boolean => flagOptions.some((option) => option === name);
+const isFlagOption = (name: string): name is FlagOption => flagOptions.some((option) => option === name);
 
 const parseInteger = (name: string, text: string, range: { readonly min: number; readonly max: number }): number => {
   const value = Number(text);
@@ -77,15 +99,15 @@ const parseList = <T extends string>(name: string, text: string, allowed: readon
   return chosen;
 };
 
-const readValues = (argv: readonly string[]): { values: Map<ValueOption, string>; check: boolean } => {
+const readValues = (argv: readonly string[]): { values: Map<ValueOption, string>; flags: Set<FlagOption> } => {
   const values = new Map<ValueOption, string>();
-  let check = false;
+  const flags = new Set<FlagOption>();
   for (let index = 0; index < argv.length; index++) {
     const token = argv[index] ?? '';
     const equals = token.indexOf('=');
     const name = token.startsWith('--') && equals > 0 ? token.slice(0, equals) : token;
     if (name === token && isFlagOption(name)) {
-      check ||= name === '--check';
+      flags.add(name);
       continue;
     }
     if (!isValueOption(name)) {
@@ -106,7 +128,36 @@ const readValues = (argv: readonly string[]): { values: Map<ValueOption, string>
     }
     values.set(name, value);
   }
-  return { values, check };
+  return { values, flags };
+};
+
+const parseSampling = (
+  name: '--step-n' | '--cpu-n',
+  text: string | undefined,
+  diag: boolean,
+  fallback: number,
+): number => {
+  if (text === undefined) {
+    return fallback;
+  }
+  if (!diag) {
+    throw usage(`${name} needs --diag.`);
+  }
+  return parseInteger(name, text, stepRange);
+};
+
+const parseServers = (text: string | undefined, diag: boolean): readonly ServerId[] => {
+  if (text === undefined) {
+    return diag ? ['darkstart'] : defaultServerIds;
+  }
+  const servers = parseList('--servers', text, serverIds, 'server');
+  const other = diag ? servers.find((server) => server !== 'darkstart') : undefined;
+  if (other !== undefined) {
+    throw usage(
+      `diag mode measures only darkstart; got "${other}" in --servers. Remove --servers or set it to darkstart.`,
+    );
+  }
+  return servers;
 };
 
 export function wantsHelp(argv: readonly string[]): boolean {
@@ -114,12 +165,12 @@ export function wantsHelp(argv: readonly string[]): boolean {
 }
 
 export function parseOptions(argv: readonly string[]): RunOptions {
-  const { values, check } = readValues(argv);
+  const { values, flags } = readValues(argv);
+  const diag = flags.has('--diag');
   const pipelining = values.get('--pipelining');
   const warmUp = values.get('--warm-up');
   const duration = values.get('--duration');
   const rounds = values.get('--rounds');
-  const servers = values.get('--servers');
   const routes = values.get('--routes');
   return {
     pipelining:
@@ -128,9 +179,12 @@ export function parseOptions(argv: readonly string[]): RunOptions {
     durationSeconds:
       duration === undefined ? defaultDurationSeconds : parseInteger('--duration', duration, durationRange),
     rounds: rounds === undefined ? defaultRounds : parseInteger('--rounds', rounds, roundsRange),
-    servers: servers === undefined ? defaultServerIds : parseList('--servers', servers, serverIds, 'server'),
+    servers: parseServers(values.get('--servers'), diag),
     routes: routes === undefined ? routeIds : parseList('--routes', routes, routeIds, 'route'),
     out: values.get('--out') ?? defaultOut,
-    check,
+    check: flags.has('--check'),
+    diag,
+    stepN: parseSampling('--step-n', values.get('--step-n'), diag, defaultStepN),
+    cpuN: parseSampling('--cpu-n', values.get('--cpu-n'), diag, defaultCpuN),
   };
 }

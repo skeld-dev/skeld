@@ -1,12 +1,16 @@
 {
   "$schema": "./node_modules/knip/schema.json",
+  "ignoreExportsUsedInFile": {
+    "interface": true,
+    "type": true
+  },
   "workspaces": {
     "packages/*": {
       "project": ["src/**/*.ts"]
     },
     "examples/*": {},
     "benchmarks": {
-      "entry": ["servers/*.ts"]
+      "entry": ["servers/*.ts", "diag/scenario-server.ts"]
     },
     "tests": {
       "entry": ["acceptance/*.ts", "type-cost/*.ts"]

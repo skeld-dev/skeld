@@ -1,3 +1,4 @@
+import { end, track } from '#diag';
 import { parsePath } from '../contract/path.ts';
 import type { PathSegment } from '../contract/types.ts';
 
@@ -45,11 +46,16 @@ export function createUrlBuilder(
 ): (params: CallValues | undefined, query: CallValues | undefined) => URL {
   const segments = parsePath(path);
   return (params, query) => {
-    const encoded = `/${segments.map((segment) => encodeSegment(segment, params, routeName)).join('/')}`;
-    const search = new URLSearchParams();
-    for (const [key, value] of Object.entries(query ?? {})) {
-      appendQuery(search, key, value);
+    const span = track('client.url');
+    try {
+      const encoded = `/${segments.map((segment) => encodeSegment(segment, params, routeName)).join('/')}`;
+      const search = new URLSearchParams();
+      for (const [key, value] of Object.entries(query ?? {})) {
+        appendQuery(search, key, value);
+      }
+      return new URL(search.size === 0 ? `${base}${encoded}` : `${base}${encoded}?${search}`);
+    } finally {
+      end(span);
     }
-    return new URL(search.size === 0 ? `${base}${encoded}` : `${base}${encoded}?${search}`);
   };
 }

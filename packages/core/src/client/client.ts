@@ -1,3 +1,4 @@
+import { end, event, track } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { ContractRoutes, RouteDefinition } from '../contract/types.ts';
 import { readResponseBody } from './response.ts';
@@ -47,16 +48,21 @@ function failureText(error: unknown): string {
 }
 
 function buildHeaders(route: RouteDefinition, input: CallValues | undefined): Headers {
-  const headers = new Headers();
-  for (const [name, value] of Object.entries(input ?? {})) {
-    if (value !== undefined) {
-      headers.set(name, String(value));
+  const span = track('client.headers');
+  try {
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(input ?? {})) {
+      if (value !== undefined) {
+        headers.set(name, String(value));
+      }
     }
+    if (route.body !== undefined) {
+      headers.set('content-type', 'application/json');
+    }
+    return headers;
+  } finally {
+    end(span);
   }
-  if (route.body !== undefined) {
-    headers.set('content-type', 'application/json');
-  }
-  return headers;
 }
 
 function createCall(
@@ -67,32 +73,43 @@ function createCall(
 ): (input?: CallParts) => Promise<ReceivedResult> {
   const buildUrl = createUrlBuilder(base, name, route.path);
   return async (input) => {
-    const url = buildUrl(input?.params, input?.query);
-    const target = `${route.method} ${url.origin}${url.pathname}`;
-    const headers = buildHeaders(route, input?.headers);
-    const init: RequestInit =
-      route.body === undefined
-        ? { method: route.method, headers }
-        : { method: route.method, headers, body: JSON.stringify(input?.body) };
-    let response: Response;
+    const call = track('client.call', name);
     try {
-      response = await fetch(url, init);
-    } catch (cause) {
-      throw new HttpError(null, 'NETWORK', `${target} failed: ${failureText(cause)}`, { cause });
+      const url = buildUrl(input?.params, input?.query);
+      const target = `${route.method} ${url.origin}${url.pathname}`;
+      const headers = buildHeaders(route, input?.headers);
+      const init: RequestInit =
+        route.body === undefined
+          ? { method: route.method, headers }
+          : { method: route.method, headers, body: JSON.stringify(input?.body) };
+      let response: Response;
+      const wait = track('client.fetch');
+      try {
+        response = await fetch(url, init);
+      } catch (cause) {
+        end(wait);
+        event('client.error', 'NETWORK');
+        throw new HttpError(null, 'NETWORK', `${target} failed: ${failureText(cause)}`, { cause });
+      }
+      end(wait);
+      const read = await readResponseBody(response);
+      if (read.kind === 'read-failed') {
+        event('client.error', 'NETWORK');
+        throw new HttpError(null, 'NETWORK', `${target} failed: ${failureText(read.cause)}`, { cause: read.cause });
+      }
+      if (read.kind === 'invalid-json') {
+        event('client.error', 'INVALID_RESPONSE');
+        throw new HttpError(
+          null,
+          'INVALID_RESPONSE',
+          `${target} answered ${response.status} with a body that is not valid JSON`,
+          { cause: read.cause },
+        );
+      }
+      return { status: response.status, headers: response.headers, body: read.body };
+    } finally {
+      end(call);
     }
-    const read = await readResponseBody(response);
-    if (read.kind === 'read-failed') {
-      throw new HttpError(null, 'NETWORK', `${target} failed: ${failureText(read.cause)}`, { cause: read.cause });
-    }
-    if (read.kind === 'invalid-json') {
-      throw new HttpError(
-        null,
-        'INVALID_RESPONSE',
-        `${target} answered ${response.status} with a body that is not valid JSON`,
-        { cause: read.cause },
-      );
-    }
-    return { status: response.status, headers: response.headers, body: read.body };
   };
 }
 

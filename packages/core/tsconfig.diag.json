@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "customConditions": ["darkstart-source", "darkstart-diag"],
+    "noEmit": true,
+    "composite": false,
+    "declaration": false
+  }
+}

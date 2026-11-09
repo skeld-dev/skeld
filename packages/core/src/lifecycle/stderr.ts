@@ -1,3 +1,5 @@
+import { end, start, stderr } from '#diag';
+
 const NEWLINE = 0x0a;
 const CARRIAGE_RETURN = 0x0d;
 const TAB = 0x09;
@@ -19,15 +21,15 @@ function escapeControl(code: number): string {
 
 function escapeLine(text: string): string {
   let escaped = '';
-  let start = 0;
+  let sliceFrom = 0;
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index);
     if (code < FIRST_PRINTABLE || code === DELETE) {
-      escaped += text.slice(start, index) + escapeControl(code);
-      start = index + 1;
+      escaped += text.slice(sliceFrom, index) + escapeControl(code);
+      sliceFrom = index + 1;
     }
   }
-  return start === 0 ? text : escaped + text.slice(start);
+  return sliceFrom === 0 ? text : escaped + text.slice(sliceFrom);
 }
 
 export function describeThrown(value: unknown): string {
@@ -41,7 +43,9 @@ export function writeStderrLine(
   routeName: string,
   message: string,
 ): void {
-  process.stderr.write(
-    `darkstart: ${escapeLine(method)} ${escapeLine(path)} ${status} ${routeName}: ${escapeLine(message)}\n`,
-  );
+  const span = start('err.stderr_write');
+  const line = `darkstart: ${escapeLine(method)} ${escapeLine(path)} ${status} ${routeName}: ${escapeLine(message)}\n`;
+  stderr(line);
+  process.stderr.write(line);
+  end(span);
 }

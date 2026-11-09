@@ -14,10 +14,21 @@
   },
   "files": [
     "dist",
+    "!dist/diag/recorder",
     "!dist/**/*.d.ts.map",
     "LICENSE",
     "README.md"
   ],
+  "imports": {
+    "#diag": {
+      "darkstart-diag": {
+        "darkstart-source": "./src/diag/recorder/recorder.ts",
+        "default": "./dist/diag/recorder/recorder.js"
+      },
+      "darkstart-source": "./src/diag/empty.ts",
+      "default": "./dist/diag/empty.js"
+    }
+  },
   "exports": {
     "./contract": {
       "darkstart-source": "./src/contract/contract.ts",

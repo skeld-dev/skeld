@@ -1,9 +1,10 @@
 import { BenchError } from './bench-error.ts';
-import { preflight, preflightFailure } from './preflight.ts';
-import { type ServerProcess, startServer } from './server-process.ts';
+import { startTarget, type Target } from './diag/builds.ts';
 import type { Command } from './pinning.ts';
+import { preflight, preflightFailure } from './preflight.ts';
+import type { ServerProcess } from './server-process.ts';
 import { killedWarning } from './terminal.ts';
-import type { CheckRow, RouteId, ServerId } from './types.ts';
+import type { CheckRow, RouteId } from './types.ts';
 
 export interface CheckHooks {
   readonly interrupted: () => boolean;
@@ -13,12 +14,12 @@ export interface CheckHooks {
 }
 
 export function preflightRoutes(server: ServerProcess, routes: readonly RouteId[]): Promise<readonly CheckRow[]> {
-  return Promise.all(routes.map((route) => preflight(server.server, server.port, route)));
+  return Promise.all(routes.map((route) => preflight(server.name, server.port, route)));
 }
 
-const notStarted = (server: ServerId, routes: readonly RouteId[]): readonly CheckRow[] =>
+const notStarted = (name: string, routes: readonly RouteId[]): readonly CheckRow[] =>
   routes.map((route) => ({
-    server,
+    server: name,
     route,
     started: false,
     status: null,
@@ -29,14 +30,15 @@ const notStarted = (server: ServerId, routes: readonly RouteId[]): readonly Chec
   }));
 
 const checkOne = async (
-  server: ServerId,
+  target: Target,
   routes: readonly RouteId[],
   command: Command,
   hooks: CheckHooks,
 ): Promise<readonly CheckRow[]> => {
+  const server = target.launch.name;
   let running: ServerProcess;
   try {
-    running = await startServer(server, command);
+    running = await startTarget(target, command, 3);
   } catch (error) {
     if (error instanceof BenchError) {
       hooks.fail(error);
@@ -58,18 +60,18 @@ const checkOne = async (
 };
 
 export async function checkServers(
-  servers: readonly ServerId[],
+  targets: readonly Target[],
   routes: readonly RouteId[],
   command: Command,
   hooks: CheckHooks,
 ): Promise<readonly CheckRow[]> {
   const rows: CheckRow[] = [];
-  for (const server of servers) {
+  for (const target of targets) {
     if (hooks.interrupted()) {
       break;
     }
     // biome-ignore lint/performance/noAwaitInLoops: servers are checked one at a time so two never compete for the CPU.
-    rows.push(...(await checkOne(server, routes, command, hooks)));
+    rows.push(...(await checkOne(target, routes, command, hooks)));
   }
   return rows;
 }

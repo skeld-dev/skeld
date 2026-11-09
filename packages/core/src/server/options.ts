@@ -1,3 +1,4 @@
+import { end, start } from '#diag';
 import { BootError } from './boot-error.ts';
 import type { ListenOptions, ResolvedServerOptions, ServerOptions } from './types.ts';
 
@@ -35,22 +36,27 @@ function positiveInteger(name: keyof ServerOptions, value: number | undefined): 
 }
 
 export function resolveServerOptions(options: ServerOptions): ResolvedServerOptions {
-  const resolved: ResolvedServerOptions = {
-    bodyLimit: positiveInteger('bodyLimit', options.bodyLimit),
-    maxParamLength: positiveInteger('maxParamLength', options.maxParamLength),
-    pluginTimeoutMs: positiveInteger('pluginTimeoutMs', options.pluginTimeoutMs),
-    closeTimeoutMs: positiveInteger('closeTimeoutMs', options.closeTimeoutMs),
-    keepAliveTimeout: positiveInteger('keepAliveTimeout', options.keepAliveTimeout),
-    requestTimeout: positiveInteger('requestTimeout', options.requestTimeout),
-    headersTimeout: positiveInteger('headersTimeout', options.headersTimeout),
-    maxHeaderSize: positiveInteger('maxHeaderSize', options.maxHeaderSize),
-  };
-  if (resolved.headersTimeout > resolved.requestTimeout) {
-    throw invalidOption(
-      `Invalid server option headersTimeout: must not exceed requestTimeout (${resolved.headersTimeout} > ${resolved.requestTimeout})`,
-    );
+  const span = start('boot.options');
+  try {
+    const resolved: ResolvedServerOptions = {
+      bodyLimit: positiveInteger('bodyLimit', options.bodyLimit),
+      maxParamLength: positiveInteger('maxParamLength', options.maxParamLength),
+      pluginTimeoutMs: positiveInteger('pluginTimeoutMs', options.pluginTimeoutMs),
+      closeTimeoutMs: positiveInteger('closeTimeoutMs', options.closeTimeoutMs),
+      keepAliveTimeout: positiveInteger('keepAliveTimeout', options.keepAliveTimeout),
+      requestTimeout: positiveInteger('requestTimeout', options.requestTimeout),
+      headersTimeout: positiveInteger('headersTimeout', options.headersTimeout),
+      maxHeaderSize: positiveInteger('maxHeaderSize', options.maxHeaderSize),
+    };
+    if (resolved.headersTimeout > resolved.requestTimeout) {
+      throw invalidOption(
+        `Invalid server option headersTimeout: must not exceed requestTimeout (${resolved.headersTimeout} > ${resolved.requestTimeout})`,
+      );
+    }
+    return resolved;
+  } finally {
+    end(span);
   }
-  return resolved;
 }
 
 export function resolveListenOptions(options: ListenOptions): ListenTarget {

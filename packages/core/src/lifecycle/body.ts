@@ -1,3 +1,4 @@
+import { current, event, leave, resume } from '#diag';
 import type { IncomingMessage } from 'node:http';
 import { HttpError } from '../contract/http-error.ts';
 import { readBody } from '../request/body.ts';
@@ -39,8 +40,10 @@ function decode(result: BodyReadResult, type: string, limit: number): BodyOutcom
     case 'ok':
       return { kind: 'value', value: parsed.value };
     case 'invalid-json':
+      event('refuse.body_json');
       return refused(400, 'BAD_REQUEST', 'Request body is not valid JSON');
     case 'forbidden-key':
+      event('refuse.forbidden_key', parsed.key);
       return refused(400, 'BAD_REQUEST', `Request body contains a forbidden key: ${parsed.key}`);
   }
 }
@@ -54,19 +57,28 @@ export function readRouteBody(req: IncomingMessage, limit: number): BodyOutcome 
   const media = parseMediaType(req.headers['content-type']);
   switch (media.kind) {
     case 'missing':
+      event('refuse.media_type');
       return refused(415, 'UNSUPPORTED_MEDIA_TYPE', 'Request has a body but no Content-Type');
     case 'invalid':
+      event('refuse.media_type');
       return refused(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type is not a valid media type');
     case 'ok':
       break;
   }
   const { type } = media;
   if (type !== JSON_TYPE && type !== TEXT_TYPE) {
+    event('refuse.media_type');
     return refused(
       415,
       'UNSUPPORTED_MEDIA_TYPE',
       `Unsupported media type ${type}; send application/json or text/plain`,
     );
   }
-  return readBody(req, limit, contentLength).then((result) => decode(result, type, limit));
+  const slot = current();
+  return readBody(req, limit, contentLength).then((result) => {
+    resume(slot);
+    const outcome = decode(result, type, limit);
+    leave(slot);
+    return outcome;
+  });
 }

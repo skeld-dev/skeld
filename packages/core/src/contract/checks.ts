@@ -1,3 +1,4 @@
+import { end, start } from '#diag';
 import { Format } from 'typebox/format';
 import { parsePath } from './path.ts';
 import type { ContractRoutes, RouteDefinition } from './types.ts';
@@ -240,10 +241,15 @@ function checkRoute(route: RouteDefinition): string | null {
 }
 
 export function checkContract(routes: ContractRoutes): void {
-  for (const [name, route] of Object.entries(routes)) {
-    const failure = checkRoute(route);
-    if (failure !== null) {
-      throw new TypeError(`Route ${name} (${route.method} ${route.path}): ${failure}`);
+  const span = start('boot.contract_check');
+  try {
+    for (const [name, route] of Object.entries(routes)) {
+      const failure = checkRoute(route);
+      if (failure !== null) {
+        throw new TypeError(`Route ${name} (${route.method} ${route.path}): ${failure}`);
+      }
     }
+  } finally {
+    end(span);
   }
 }

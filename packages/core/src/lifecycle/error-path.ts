@@ -1,3 +1,4 @@
+import { contain, count, destroyed, end, event, leave, next, resume, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { ErrorBody } from '../contract/types.ts';
 import type { ErrorContext } from '../server/types.ts';
@@ -10,9 +11,11 @@ const INTERNAL_BODY: ErrorBody = { status: 500, code: 'INTERNAL', message: 'Inte
 
 function toErrorBody(value: unknown): ErrorBody {
   if (!(value instanceof HttpError) || value.status === null) {
+    event('err.internal');
     return INTERNAL_BODY;
   }
   const { status, code, message, details } = value;
+  count('err.http_error', code);
   return details === null ? { status, code, message } : { status, code, message, details };
 }
 
@@ -45,6 +48,7 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
     }
   }
   exchange.state = 'written';
+  end(exchange.stage);
   writeErrorBody(exchange.runtime, exchange.res, exchange.method, body, exchange.closeConnection);
 }
 
@@ -58,16 +62,32 @@ function classify(exchange: Exchange, context: ErrorContext, index: number, curr
     pending.thrown.push(error);
     classify(exchange, context, index + 1, error, pending);
   };
+  const span = start('err.handler', index);
   let result: HttpError | Promise<HttpError>;
   try {
     result = handler(current, context);
   } catch (error) {
+    end(span);
     rethrown(error);
     return;
   }
   if (result instanceof Promise) {
-    result.then((value: HttpError) => answer(exchange, value, pending), rethrown);
+    result.then(
+      (value: HttpError) => {
+        resume(exchange.diag);
+        end(span);
+        answer(exchange, value, pending);
+        leave(exchange.diag);
+      },
+      (error: unknown) => {
+        resume(exchange.diag);
+        end(span);
+        rethrown(error);
+        leave(exchange.diag);
+      },
+    );
   } else {
+    end(span);
     answer(exchange, result, pending);
   }
 }
@@ -76,24 +96,34 @@ function enterErrorPath(exchange: Exchange, error: unknown, thrown: boolean): vo
   const { res } = exchange;
   if (res.headersSent) {
     exchange.state = 'written';
+    event('err.headers_sent');
+    end(exchange.stage);
     res.destroy();
+    destroyed();
     if (thrown && !exchange.route.hasOnError) {
       report(exchange, res.statusCode, describeThrown(error));
     }
     return;
   }
   const context = new ErrorContextRecord(exchange);
+  contain('error', context);
   const hookFailures: string[] = [];
+  const observers = start('err.hook.on_error');
   runObservers(
+    exchange.diag,
     exchange.route.hooks.onError,
     (hook) => hook(context, error),
     (hookError) => hookFailures.push(`onError hook threw: ${describeThrown(hookError)}`),
-    () => classify(exchange, context, 0, error, { thrown: thrown ? [error] : [], hookFailures }),
+    () => {
+      end(observers);
+      classify(exchange, context, 0, error, { thrown: thrown ? [error] : [], hookFailures });
+    },
   );
 }
 
 export function fail(exchange: Exchange, error: unknown, thrown: boolean): void {
   if (exchange.state === 'running') {
+    exchange.stage = next(exchange.stage, 'err.path');
     enterErrorPath(exchange, error, thrown);
     return;
   }

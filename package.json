@@ -17,7 +17,9 @@
     "lint": "biome check .",
     "knip": "knip",
     "bench": "tsc -b packages/core && node benchmarks/run.ts",
-    "readme-check": "node tools/check-readme-example.ts"
+    "readme-check": "node tools/check-readme-example.ts",
+    "pack-check": "node tools/check-pack-markers.ts --pack",
+    "map-check": "node tools/check-instrumentation-map.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",

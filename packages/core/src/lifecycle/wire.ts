@@ -1,4 +1,5 @@
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
+import { end, start, wrote } from '#diag';
 import type { ErrorBody } from '../contract/types.ts';
 import type { EngineRuntime } from './types.ts';
 
@@ -21,8 +22,10 @@ export function writeJson(
   res.writeHead(status, headers);
   if (method === 'HEAD') {
     res.end();
+    wrote(status, headers, null);
   } else {
     res.end(payload);
+    wrote(status, headers, payload);
   }
 }
 
@@ -33,5 +36,7 @@ export function writeErrorBody(
   body: ErrorBody,
   close: boolean,
 ): void {
+  const span = start('err.write');
   writeJson(res, method, body.status, runtime.errorSerializer(body), close || runtime.isClosing());
+  end(span);
 }

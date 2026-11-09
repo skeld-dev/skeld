@@ -1,3 +1,4 @@
+import { limit } from '#diag';
 import type { PathPart } from './path-decode.ts';
 import type { RouteEntry, TreeNode } from './tree.ts';
 import type { FindResult } from './types.ts';
@@ -23,6 +24,7 @@ function walk<T>(
     }
   }
   if (node.paramChild !== null && part.text !== '') {
+    limit('limit.param_length', part.rawLength, maxParamLength);
     // Node's HTTP parser refuses non-ASCII request-target bytes, so the raw length is the byte count.
     if (part.rawLength > maxParamLength) {
       return 'param-too-long';

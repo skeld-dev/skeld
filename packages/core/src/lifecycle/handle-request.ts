@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { begin, contain, destroyed, end, event, leave, next, resume, routed, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { RouteInfo } from '../contract/types.ts';
 import { type BodyOutcome, readRouteBody } from './body.ts';
@@ -38,17 +39,30 @@ function runHandler(exchange: Exchange, parts: ValidatedParts): void {
     return;
   }
   const { route, req } = exchange;
+  exchange.stage = next(exchange.stage, 'req.handler');
+  const arg = start('req.handler.arg');
+  const argument = new HandlerRequest(route.info, parts, req);
+  end(arg);
+  contain('handler', argument);
   let reply: RuntimeReply | Promise<RuntimeReply>;
   try {
-    reply = route.handler(new HandlerRequest(route.info, parts, req));
+    reply = route.handler(argument);
   } catch (error) {
     fail(exchange, error, true);
     return;
   }
   if (reply instanceof Promise) {
     reply.then(
-      (value: RuntimeReply) => respond(exchange, value),
-      (error: unknown) => fail(exchange, error, true),
+      (value: RuntimeReply) => {
+        resume(exchange.diag);
+        respond(exchange, value);
+        leave(exchange.diag);
+      },
+      (error: unknown) => {
+        resume(exchange.diag);
+        fail(exchange, error, true);
+        leave(exchange.diag);
+      },
     );
   } else {
     respond(exchange, reply);
@@ -66,7 +80,9 @@ function validateStage(exchange: Exchange, body: unknown): void {
     runHandler(exchange, parts);
     return;
   }
+  exchange.stage = next(exchange.stage, 'req.hook.pre_handler');
   const context = new ValidatedContextRecord(exchange, parts.params, parts.query, parts.body);
+  contain('validated', context);
   runStage(
     exchange,
     hooks,
@@ -90,7 +106,10 @@ function bodyRead(exchange: Exchange, outcome: BodyOutcome): void {
       return;
     case 'aborted':
       exchange.state = 'written';
+      end(exchange.stage);
+      event('refuse.body_aborted');
       exchange.res.destroy();
+      destroyed();
       return;
   }
 }
@@ -104,11 +123,20 @@ function readStage(exchange: Exchange): void {
     validateStage(exchange, undefined);
     return;
   }
+  exchange.stage = next(exchange.stage, 'req.body');
   const outcome = readRouteBody(req, route.bodyLimit);
   if (outcome instanceof Promise) {
     outcome.then(
-      (value: BodyOutcome) => bodyRead(exchange, value),
-      (error: unknown) => fail(exchange, error, false),
+      (value: BodyOutcome) => {
+        resume(exchange.diag);
+        bodyRead(exchange, value);
+        leave(exchange.diag);
+      },
+      (error: unknown) => {
+        resume(exchange.diag);
+        fail(exchange, error, false);
+        leave(exchange.diag);
+      },
     );
   } else {
     bodyRead(exchange, outcome);
@@ -116,19 +144,25 @@ function readStage(exchange: Exchange): void {
 }
 
 export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res: ServerResponse): void {
-  const exchange = preRoute(runtime, req, res);
+  const diag = begin(req, res);
+  const exchange = preRoute(runtime, req, res, diag);
   if (exchange === null) {
+    leave(diag);
     return;
   }
+  routed(exchange.route.info);
   const { hooks } = exchange.route;
   if (hooks.onResponse.length > 0) {
     watchCompletion(exchange, hooks.onResponse);
   }
   if (hooks.onRequest.length === 0) {
     readStage(exchange);
+    leave(diag);
     return;
   }
+  exchange.stage = next(exchange.stage, 'req.hook.on_request');
   const context = new RequestContextRecord(exchange);
+  contain('request', context);
   runStage(
     exchange,
     hooks.onRequest,
@@ -136,4 +170,5 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
     () => readStage(exchange),
     (error) => fail(exchange, error, true),
   );
+  leave(diag);
 }

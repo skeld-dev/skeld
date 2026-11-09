@@ -1,3 +1,4 @@
+import { end, open, start } from '#diag';
 import { handleRequest } from '../lifecycle/handle-request.ts';
 import { BootError } from './boot-error.ts';
 import { bootPlugins } from './boot.ts';
@@ -56,7 +57,13 @@ export function createServer(options: ServerOptions = {}): Server {
     const target = resolveListenOptions(listenOptions);
     listenCalled = true;
     root.sealed = true;
-    await bootPlugins(root, resolved.pluginTimeoutMs);
+    open(resolved);
+    const plugins = start('boot.plugins');
+    try {
+      await bootPlugins(root, resolved.pluginTimeoutMs);
+    } finally {
+      end(plugins);
+    }
     const runtime = buildRuntime(root, resolved, () => closing);
     if (closing) {
       throw new BootError('SERVER_CLOSED', 'listen() was called after close()', null, null);

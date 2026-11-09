@@ -1,6 +1,7 @@
 import { createServer, type RequestListener } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { getSystemErrorMessage } from 'node:util';
+import { closed, end, event, listening, start, track } from '#diag';
 import { BootError } from './boot-error.ts';
 import type { HttpServerHandle, ListeningAddress, ResolvedServerOptions } from './types.ts';
 
@@ -40,11 +41,14 @@ export function createHttpServer(options: ResolvedServerOptions, onRequest: Requ
   return {
     listen(host, port) {
       const { promise, resolve, reject } = Promise.withResolvers<ListeningAddress>();
+      const span = start('boot.listen');
       const onError = (error: NodeJS.ErrnoException): void => {
+        end(span);
         reject(listenFailure(host, port, error));
       };
       server.once('error', onError);
       server.listen(port, host, () => {
+        end(span);
         server.off('error', onError);
         const address = server.address();
         if (address === null || typeof address === 'string') {
@@ -53,15 +57,22 @@ export function createHttpServer(options: ResolvedServerOptions, onRequest: Requ
           );
           return;
         }
+        listening(server);
         resolve(toListeningAddress(address));
       });
       return promise;
     },
     close(timeoutMs) {
       const { promise, resolve } = Promise.withResolvers<void>();
-      const timer = setTimeout(() => server.closeAllConnections(), timeoutMs);
+      const span = track('close.total');
+      const timer = setTimeout(() => {
+        event('close.forced');
+        server.closeAllConnections();
+      }, timeoutMs);
       server.close(() => {
         clearTimeout(timer);
+        end(span);
+        closed();
         resolve();
       });
       server.closeIdleConnections();

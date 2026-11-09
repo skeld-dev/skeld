@@ -1,6 +1,15 @@
 import { relative } from 'node:path';
 import { generatorBottleneckText } from './verdict.ts';
-import type { BenchSample, BenchSummary, BenchVerdict, CheckRow, RouteId, RunOptions, ServerId } from './types.ts';
+import type {
+  BenchSample,
+  BenchSummary,
+  BenchVerdict,
+  BuildId,
+  CheckRow,
+  RouteId,
+  RunOptions,
+  ServerId,
+} from './types.ts';
 import {
   connections,
   expectedBody,
@@ -75,26 +84,49 @@ export function startLines(
   ];
 }
 
-const progress = (round: number, rounds: number, server: ServerId, text: string): string =>
-  `[${round}/${rounds}] ${server.padEnd(9)}  ${text}`;
-
-export function startedLine(round: number, rounds: number, server: ServerId, port: number, ms: number): string {
-  return progress(round, rounds, server, `started on ${host}:${port} in ${Math.round(ms)} ms`);
+export function diagStartLines(
+  options: RunOptions,
+  runDirectory: string,
+  minutes: number,
+  unpinnedReason: string | null,
+): readonly string[] {
+  const first = options.check
+    ? 'DarkStart diag check: the normal and diag builds start once, then the clean and planted scenario passes; nothing is measured'
+    : `DarkStart diag benchmark: the normal and diag builds, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min, then the clean and planted scenario passes`;
+  return [
+    first,
+    `Sampling: steps on 1 in ${options.stepN} requests, CPU on 1 in ${options.cpuN}`,
+    `Cores: ${coresText(unpinnedReason)}`,
+    `Results: ${displayPath(runDirectory)}/`,
+  ];
 }
 
-export function stoppedLine(round: number, rounds: number, server: ServerId): string {
-  return progress(round, rounds, server, 'stopped');
+const progressLabelWidth = 14;
+
+export function entrantLabel(entrant: { readonly server: ServerId; readonly build: BuildId }): string {
+  return entrant.build === 'darkstart' ? entrant.server : entrant.build;
 }
 
-export function warmUpLine(round: number, rounds: number, server: ServerId, route: RouteId, seconds: number): string {
-  return progress(round, rounds, server, `${route.padEnd(5)}  warm-up ${seconds} s`);
+const progress = (round: number, rounds: number, label: string, text: string): string =>
+  `[${round}/${rounds}] ${label.padEnd(progressLabelWidth)}  ${text}`;
+
+export function startedLine(round: number, rounds: number, label: string, port: number, ms: number): string {
+  return progress(round, rounds, label, `started on ${host}:${port} in ${Math.round(ms)} ms`);
+}
+
+export function stoppedLine(round: number, rounds: number, label: string): string {
+  return progress(round, rounds, label, 'stopped');
+}
+
+export function warmUpLine(round: number, rounds: number, label: string, route: RouteId, seconds: number): string {
+  return progress(round, rounds, label, `${route.padEnd(5)}  warm-up ${seconds} s`);
 }
 
 export function measuredLine(rounds: number, sample: BenchSample): string {
   return progress(
     sample.round,
     rounds,
-    sample.server,
+    entrantLabel(sample),
     `${sample.route.padEnd(5)}  ${formatMicroseconds(sample.serverCpuMicrosecondsPerRequest)} CPU µs/req  ${formatRate(sample.requestsPerSecond)} req/s  p99 ${formatMs(sample.latencyP99Ms)} ms`,
   );
 }
@@ -207,24 +239,67 @@ export function summaryLines(
   return [...table, verdictLine(verdict), ...(note === null ? [] : [note]), `Report: ${displayPath(reportPath)}`];
 }
 
+const diagSummaryColumns: readonly Column[] = [
+  { header: 'Build', align: 'left' },
+  { header: 'Route', align: 'left' },
+  { header: 'Rounds', align: 'right' },
+  { header: 'Median CPU µs/req', align: 'right' },
+  { header: 'Min', align: 'right' },
+  { header: 'Max', align: 'right' },
+  { header: 'Median req/s', align: 'right' },
+  { header: 'Median p99 ms', align: 'right' },
+];
+
+export function diagSummaryLines(
+  summary: readonly BenchSummary[],
+  overhead: string,
+  security: string,
+  readoutPath: string,
+): readonly string[] {
+  const table =
+    summary.length === 0
+      ? []
+      : [
+          ...renderTable(
+            diagSummaryColumns,
+            summary.map((group) => [
+              entrantLabel(group),
+              group.route,
+              String(group.rounds),
+              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.median ?? null),
+              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.min ?? null),
+              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.max ?? null),
+              formatRate(group.requestsPerSecond.median),
+              formatMs(group.latencyP99Ms.median),
+            ]),
+          ),
+          '',
+        ];
+  return [...table, overhead, security, `Readout: ${displayPath(readoutPath)}`];
+}
+
 export function nonConformingWarning(found: readonly string[]): string {
   return `this run differs from the acceptance protocol (${found.join('; ')}). It is recorded and gets no verdict.`;
 }
 
 export function generatorWarning(sample: BenchSample, generatorCpuPercent: number): string {
   const server = sample.serverCpuPercent === null ? 'unknown' : `${Math.round(sample.serverCpuPercent)} %`;
-  return `round ${sample.round} ${sample.server} ${sample.route}: the load generator used ${Math.round(generatorCpuPercent)} % of a core, at or above its ${generatorCeilingPercent} % ceiling for ${workers} workers, and the server ${server}; this round measured autocannon, not the server.`;
+  return `round ${sample.round} ${entrantLabel(sample)} ${sample.route}: the load generator used ${Math.round(generatorCpuPercent)} % of a core, at or above its ${generatorCeilingPercent} % ceiling for ${workers} workers, and the server ${server}; this round measured autocannon, not the server.`;
 }
 
 export function busyWarning(loadAverage: number): string {
   return `the 1-minute load average was ${loadAverage.toFixed(2)} when the run started; other work on this machine lowers every number.`;
 }
 
+export function inheritedDiagWarning(names: readonly string[]): string {
+  return `the runner's environment sets ${names.join(', ')}; every server starts without them, and the benchmark sets the diag build's own.`;
+}
+
 export function staleLockWarning(pid: number): string {
   return `replaced a lock left by pid ${pid}, which is no longer running.`;
 }
 
-export function killedWarning(server: ServerId): string {
+export function killedWarning(server: string): string {
   return `${server} did not exit within ${stopGraceMs / 1000} s of SIGTERM and was killed.`;
 }
 

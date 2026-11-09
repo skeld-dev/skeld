@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { Slot, Token } from '#diag';
 import type { RouteParams } from '../router/types.ts';
 import type { EngineRuntime, RouteRuntime } from './types.ts';
 
@@ -13,6 +14,8 @@ export interface Exchange {
   readonly path: string;
   readonly query: string;
   readonly params: RouteParams;
+  readonly diag: Slot;
+  stage: Token;
   state: ExchangeState;
   closeConnection: boolean;
   lateSendError: Error | null;

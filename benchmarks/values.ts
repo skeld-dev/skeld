@@ -16,6 +16,15 @@ export const durationRange = { min: 1, max: 600 } as const;
 export const roundsRange = { min: 1, max: 50 } as const;
 export const defaultOut = 'benchmarks/results';
 
+export const defaultStepN = 8;
+export const defaultCpuN = 32;
+export const stepRange = { min: 1, max: 1024 } as const;
+export const overheadLine = 1.1;
+export const spanSumTolerance = 0.1;
+export const startProofMs = 2000;
+export const startProofPollMs = 50;
+export const readoutFile = 'readout.md';
+
 export const host = '127.0.0.1';
 export const standalonePort = 3000;
 export const readyTimeoutMs = 10_000;

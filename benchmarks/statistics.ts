@@ -1,6 +1,6 @@
-import type { BenchSample, BenchSpread, BenchSummary, RouteId, ServerId } from './types.ts';
+import type { BenchSample, BenchSpread, BenchSummary, BuildId, RouteId, ServerId } from './types.ts';
 
-function median(values: readonly number[]): number {
+export function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   const upper = sorted[middle] ?? Number.NaN;
@@ -18,6 +18,7 @@ const spread = (values: readonly number[]): BenchSpread => ({
 
 interface Group {
   readonly server: ServerId;
+  readonly build: BuildId;
   readonly route: RouteId;
   readonly rounds: number;
   readonly serverCpuMicrosecondsPerRequest: BenchSpread | null;
@@ -41,34 +42,40 @@ const cpuSpread = (samples: readonly BenchSample[]): BenchSpread | null => {
   return values.length === samples.length ? spread(values) : null;
 };
 
+const builds: readonly BuildId[] = ['darkstart', 'darkstart-diag'];
+
 export function summarize(
   samples: readonly BenchSample[],
   servers: readonly ServerId[],
   routes: readonly RouteId[],
 ): readonly BenchSummary[] {
   const groups = routes.flatMap((route) =>
-    servers.flatMap((server): Group[] => {
-      const measured = samples.filter(
-        (sample) => sample.kind === 'measured' && sample.server === server && sample.route === route,
-      );
-      if (measured.length === 0) {
-        return [];
-      }
-      return [
-        {
-          server,
-          route,
-          rounds: measured.length,
-          serverCpuMicrosecondsPerRequest: cpuSpread(measured),
-          requestsPerSecond: spread(measured.map((sample) => sample.requestsPerSecond)),
-          latencyP99Ms: spread(measured.map((sample) => sample.latencyP99Ms)),
-        },
-      ];
-    }),
+    builds.flatMap((build) =>
+      servers.flatMap((server): Group[] => {
+        const measured = samples.filter(
+          (sample) =>
+            sample.kind === 'measured' && sample.server === server && sample.build === build && sample.route === route,
+        );
+        if (measured.length === 0) {
+          return [];
+        }
+        return [
+          {
+            server,
+            build,
+            route,
+            rounds: measured.length,
+            serverCpuMicrosecondsPerRequest: cpuSpread(measured),
+            requestsPerSecond: spread(measured.map((sample) => sample.requestsPerSecond)),
+            latencyP99Ms: spread(measured.map((sample) => sample.latencyP99Ms)),
+          },
+        ];
+      }),
+    ),
   );
   return groups.map((group) => {
     const sameRoute = (server: ServerId): Group | undefined =>
-      groups.find((other) => other.route === group.route && other.server === server);
+      groups.find((other) => other.route === group.route && other.build === group.build && other.server === server);
     return {
       ...group,
       cpuPercentOfFastify: cpuPercentOf(group, sameRoute('fastify')),

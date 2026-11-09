@@ -1,4 +1,4 @@
-import type { CheckRow, RouteId, ServerId } from './types.ts';
+import type { CheckRow, RouteId } from './types.ts';
 import { expectedBody, expectedMediaType, host, preflightTimeoutMs } from './values.ts';
 
 const bodyPreviewLength = 60;
@@ -26,7 +26,7 @@ const answer = async (port: number, route: RouteId): Promise<{ response: Respons
   }
 };
 
-export async function preflight(server: ServerId, port: number, route: RouteId): Promise<CheckRow> {
+export async function preflight(server: string, port: number, route: RouteId): Promise<CheckRow> {
   const answered = await answer(port, route);
   if (answered === null) {
     return { server, route, started: true, status: null, mediaType: null, bytes: null, body: null, passed: false };
