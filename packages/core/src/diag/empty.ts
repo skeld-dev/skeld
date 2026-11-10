@@ -36,6 +36,7 @@ export type BootSpanName =
   | 'boot.plugins'
   | 'boot.plugin'
   | 'boot.runtime'
+  | 'boot.schema_checks'
   | 'boot.compile_validators'
   | 'boot.compile_serializers'
   | 'boot.router_add'
@@ -48,7 +49,8 @@ export type TrackName =
   | 'client.url'
   | 'client.headers'
   | 'client.fetch'
-  | 'client.read';
+  | 'client.read'
+  | 'client.validate';
 export type CountName = 'refuse.not_found' | 'err.http_error';
 export type EventName =
   | 'refuse.framing'

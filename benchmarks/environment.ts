@@ -15,7 +15,6 @@ export interface Packages {
   readonly darkstartResolvedFrom: string;
   readonly fastify: string;
   readonly autocannon: string;
-  readonly typebox: string;
   readonly fastJsonStringify: string;
   readonly hono: string;
   readonly honoNodeServer: string;
@@ -93,7 +92,6 @@ export function resolvePackages(): Packages {
   }
   const fastifyFile = resolveFile('fastify', () => import.meta.resolve('fastify'));
   const autocannonFile = resolveFile('autocannon', () => import.meta.resolve('autocannon'));
-  const typeboxFile = resolveFile('typebox', () => import.meta.resolve('typebox'));
   const honoFile = resolveFile('hono', () => import.meta.resolve('hono'));
   const honoNodeServerFile = resolveFile('@hono/node-server', () => import.meta.resolve('@hono/node-server'));
   const expressFile = resolveFile('express', () => import.meta.resolve('express'));
@@ -106,7 +104,6 @@ export function resolvePackages(): Packages {
     darkstartResolvedFrom: displayPath(dirname(serverFile)),
     fastify: versionOf('fastify', fastifyFile),
     autocannon: versionOf('autocannon', autocannonFile),
-    typebox: versionOf('typebox', typeboxFile),
     fastJsonStringify: versionOf('fast-json-stringify', fastJsonStringifyFile),
     hono: versionOf('hono', honoFile),
     honoNodeServer: versionOf('@hono/node-server', honoNodeServerFile),
@@ -223,7 +220,6 @@ export function captureSoftware(
     uncommittedChanges: porcelain === null ? null : porcelain.trim() !== '',
     fastify: packages.fastify,
     autocannon: packages.autocannon,
-    typebox: packages.typebox,
     fastJsonStringify: packages.fastJsonStringify,
     hono: packages.hono,
     honoNodeServer: packages.honoNodeServer,

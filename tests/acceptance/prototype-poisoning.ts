@@ -1,4 +1,4 @@
-import { Type } from 'typebox';
+import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';
 import { check, conclude } from './support.ts';
@@ -12,11 +12,11 @@ const contract = defineContract({
   hello: {
     method: 'POST',
     path: '/hello',
-    body: Type.Object({
-      name: Type.String({ minLength: 1 }),
-      language: Type.Union([Type.Literal('en'), Type.Literal('pt')]),
+    body: t.object({
+      name: t.string({ minLength: 1, maxLength: 64 }),
+      language: t.union([t.literal('en'), t.literal('pt')]),
     }),
-    responses: { 200: Type.Object({ message: Type.String() }) },
+    responses: { 200: t.object({ message: t.string({ maxLength: 128 }) }) },
   },
 });
 

@@ -1,19 +1,26 @@
 import build from 'fast-json-stringify';
-import type { TSchema } from 'typebox';
 import { errorBodySchema } from '../contract/contract.ts';
 import type { RouteDefinition } from '../contract/types.ts';
-import { createCompileCache } from './compile-cache.ts';
+import { exportNode } from '../schema/export.ts';
+import type { Schema } from '../schema/types.ts';
 import { SchemaCompileError } from './compile-error.ts';
 import type { ResponseSerializers, Serializer } from './types.ts';
 
-const serializers = createCompileCache((schema: TSchema): Serializer => build(schema));
+const serializers = new WeakMap<Schema, Serializer>();
 
-function compileSerializer(schema: TSchema, status: number | null): Serializer {
+function compileSerializer(schema: Schema, status: number | null): Serializer {
+  const cached = serializers.get(schema);
+  if (cached !== undefined) {
+    return cached;
+  }
+  let serializer: Serializer;
   try {
-    return serializers(schema);
+    serializer = build(exportNode(schema));
   } catch (cause) {
     throw new SchemaCompileError('response', status, cause);
   }
+  serializers.set(schema, serializer);
+  return serializer;
 }
 
 export function compileResponseSerializers(route: RouteDefinition): ResponseSerializers {

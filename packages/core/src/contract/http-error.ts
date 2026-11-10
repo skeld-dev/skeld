@@ -8,6 +8,11 @@ function isErrorStatus(status: number | null): boolean {
   return status === null || (Number.isInteger(status) && status >= 400 && status <= 599);
 }
 
+/**
+ * An error with an HTTP status and a code, written to the client as the one error body.
+ * A `null` status marks a client-side failure and is written as 500; throws `RangeError` for a status outside 400-599 or a code other than upper-case letters, digits and `_`.
+ * @example new HttpError(404, 'NOT_FOUND', 'No such user')
+ */
 export class HttpError extends Error {
   override readonly name = 'HttpError';
   readonly status: number | null;

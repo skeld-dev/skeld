@@ -1,6 +1,6 @@
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Type } from 'typebox';
+import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';
 import { check, conclude, parseRaw, type RawResponse } from './support.ts';
@@ -15,8 +15,8 @@ const contract = defineContract({
   upload: {
     method: 'POST',
     path: '/upload',
-    body: Type.Object({ name: Type.String() }),
-    responses: { 200: Type.Object({ ok: Type.Boolean() }) },
+    body: t.object({ name: t.string({ unbounded: 'the 1,048,576-byte server limit is the subject of this script' }) }),
+    responses: { 200: t.object({ ok: t.boolean() }) },
   },
 });
 

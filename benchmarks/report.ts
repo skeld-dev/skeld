@@ -224,7 +224,6 @@ function renderReport(run: BenchRun): string {
       ],
       ['Fastify', software.fastify],
       ['autocannon', software.autocannon],
-      ['typebox', software.typebox],
       ['fast-json-stringify', software.fastJsonStringify],
       ['Hono', `hono ${software.hono}, @hono/node-server ${software.honoNodeServer}`],
       ['Express', software.express],

@@ -1,0 +1,12 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../dist/schema",
+    "lib": ["es2022"],
+    "types": [],
+    "declarationMap": false,
+    "tsBuildInfoFile": "../../schema.tsbuildinfo"
+  },
+  "include": ["*.ts"]
+}

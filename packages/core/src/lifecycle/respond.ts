@@ -1,5 +1,5 @@
 import { contain, end, event, header, next, payload, start, wrote } from '#diag';
-import type { Serializer } from '../schema/types.ts';
+import type { Serializer } from '../compile/types.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { ResponseContextRecord, runStage } from './hooks.ts';
@@ -8,6 +8,7 @@ import { writeJson } from './wire.ts';
 
 const NO_CONTENT = 204;
 const NOT_MODIFIED = 304;
+const SERIALIZATION_FAILED = 'response serialization failed';
 
 function writePayload(exchange: Exchange, status: number, final: string | Uint8Array): void {
   if (exchange.state !== 'running') {
@@ -111,10 +112,11 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
   let serialized: string | null;
   try {
     serialized = serializer === null ? null : serializer(reply.body);
-  } catch (error) {
+  } catch {
+    // C-79: fast-json-stringify quotes the returned value in its message, so the thrown error is never passed on.
     end(serialize);
     event('err.serialize');
-    fail(exchange, error, true);
+    fail(exchange, new Error(SERIALIZATION_FAILED), true);
     return;
   }
   end(serialize);

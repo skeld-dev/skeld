@@ -1,13 +1,16 @@
 import { declare, end, start } from '#diag';
 import { parsePath } from '../contract/path.ts';
-import type { RouteInfo } from '../contract/types.ts';
+import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { EngineRuntime, HookChains, RouteRuntime } from '../lifecycle/types.ts';
 import { createRouter } from '../router/router.ts';
 import type { Router } from '../router/types.ts';
-import { SchemaCompileError } from '../schema/compile-error.ts';
-import type { RequestValidators, ResponseSerializers } from '../schema/types.ts';
-import { compileResponseSerializers, getErrorBodySerializer } from '../schema/serializer.ts';
-import { compileRequestValidators } from '../schema/validator.ts';
+import { derivedBodyCap } from '../compile/body-cap.ts';
+import { checkRouteSchemas } from '../compile/boot-checks.ts';
+import { SchemaCompileError } from '../compile/compile-error.ts';
+import { probeCodegen } from '../compile/generate.ts';
+import type { RequestValidators, ResponseSerializers } from '../compile/types.ts';
+import { compileResponseSerializers, getErrorBodySerializer } from '../compile/serializers.ts';
+import { compileRequestValidators } from '../compile/validators.ts';
 import { BootError } from './boot-error.ts';
 import { causeMessage } from './cause-message.ts';
 import { pluginName, type RouteRecord, type ScopeState } from './scope.ts';
@@ -15,8 +18,25 @@ import type { ErrorHandler, ResolvedServerOptions } from './types.ts';
 
 const NO_HOOKS: HookChains = { onRequest: [], preHandler: [], onSend: [], onResponse: [], onError: [] };
 
+const CODEGEN_UNAVAILABLE_MESSAGE =
+  'Code generation from strings is disabled in this process (node --disallow-code-generation-from-strings or an equivalent policy). @darkstart/core/server compiles its validators and serializers at listen and cannot start; the schema, contract and client subpaths run without it.';
+
 function describe(info: RouteInfo): string {
   return `${info.name} (${info.method} ${info.path})`;
+}
+
+function refuseSchemaFindings(info: RouteInfo, plugin: string | null, definition: RouteDefinition): void {
+  const found = checkRouteSchemas(definition);
+  if (found === null) {
+    return;
+  }
+  const { part, finding } = found;
+  const message = `Route ${describe(info)}: ${part} schema at "${finding.pointer}": ${finding.message}`;
+  throw new BootError(finding.code, message, info, plugin);
+}
+
+function effectiveBodyLimit(configured: number, definition: RouteDefinition): number {
+  return definition.body === undefined ? configured : Math.min(configured, derivedBodyCap(definition.body));
 }
 
 function compiled<T>(info: RouteInfo, plugin: string | null, compile: () => T): T {
@@ -55,6 +75,12 @@ function toRouteRuntime(
 ): RouteRuntime {
   const { info, definition } = route;
   const plugin = pluginName(state);
+  const schemaChecks = start('boot.schema_checks', info.name);
+  try {
+    refuseSchemaFindings(info, plugin, definition);
+  } finally {
+    end(schemaChecks);
+  }
   const compileValidators = start('boot.compile_validators', info.name);
   let validators: RequestValidators;
   try {
@@ -75,7 +101,7 @@ function toRouteRuntime(
     handler: route.handler,
     validators,
     serializers,
-    bodyLimit: route.bodyLimit ?? options.bodyLimit,
+    bodyLimit: effectiveBodyLimit(route.bodyLimit ?? options.bodyLimit, definition),
     readsBody: definition.body !== undefined,
     hooks,
     errorHandlers,
@@ -119,6 +145,10 @@ export function buildRuntime(
 ): EngineRuntime {
   const span = start('boot.runtime');
   try {
+    const unavailable = probeCodegen();
+    if (unavailable !== null) {
+      throw new BootError('CODEGEN_UNAVAILABLE', CODEGEN_UNAVAILABLE_MESSAGE, null, null, { cause: unavailable });
+    }
     const router = createRouter<RouteRuntime>();
     addScope(router, root, NO_HOOKS, [], options);
     return Object.freeze({

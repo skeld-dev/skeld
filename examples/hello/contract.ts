@@ -1,21 +1,21 @@
-import { Type } from 'typebox';
 import { defineContract } from '@darkstart/core/contract';
+import * as t from '@darkstart/core/schema';
 
-const Name = Type.String({ minLength: 1, maxLength: 64 });
-const Greeting = Type.Object({ message: Type.String() });
+const Name = t.string({ minLength: 1, maxLength: 64 });
+const Greeting = t.object({ message: t.string({ maxLength: 72 }) });
 
 export const helloContract = defineContract({
   greet: {
     method: 'GET',
     path: '/hello/:name',
-    params: Type.Object({ name: Name }),
-    query: Type.Object({ excited: Type.Optional(Type.Boolean()) }),
+    params: t.object({ name: Name }),
+    query: t.object({ excited: t.optional(t.boolean()) }),
     responses: { 200: Greeting },
   },
   greetInLanguage: {
     method: 'POST',
     path: '/hello',
-    body: Type.Object({ name: Name, language: Type.Union([Type.Literal('en'), Type.Literal('pt')]) }),
+    body: t.object({ name: Name, language: t.union([t.literal('en'), t.literal('pt')]) }),
     responses: { 200: Greeting },
   },
 });

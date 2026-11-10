@@ -1,6 +1,6 @@
 import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { Router } from '../router/types.ts';
-import type { RequestValidators, ResponseSerializers, Serializer } from '../schema/types.ts';
+import type { RequestValidators, ResponseSerializers, Serializer } from '../compile/types.ts';
 import type {
   ErrorHandler,
   OnErrorHook,

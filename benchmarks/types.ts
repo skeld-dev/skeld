@@ -57,7 +57,6 @@ export interface BenchSoftware {
   readonly uncommittedChanges: boolean | null;
   readonly fastify: string;
   readonly autocannon: string;
-  readonly typebox: string;
   readonly fastJsonStringify: string;
   readonly hono: string;
   readonly honoNodeServer: string;

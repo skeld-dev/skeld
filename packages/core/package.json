@@ -1,6 +1,6 @@
 {
   "name": "@darkstart/core",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -55,13 +55,33 @@
       "types": "./dist/client/client.d.ts",
       "default": "./dist/client/client.js"
     },
+    "./schema": {
+      "darkstart-source": "./src/schema/schema.ts",
+      "types": "./dist/schema/schema.d.ts",
+      "default": "./dist/schema/schema.js"
+    },
+    "./secret": {
+      "darkstart-source": "./src/schema/secret.ts",
+      "types": "./dist/schema/secret.d.ts",
+      "default": "./dist/schema/secret.js"
+    },
+    "./redact": {
+      "darkstart-source": "./src/schema/redact.ts",
+      "types": "./dist/schema/redact.d.ts",
+      "default": "./dist/schema/redact.js"
+    },
+    "./json-schema": {
+      "darkstart-source": "./src/schema/json-schema.ts",
+      "types": "./dist/schema/json-schema.d.ts",
+      "default": "./dist/schema/json-schema.js"
+    },
+    "./generated-check": {
+      "darkstart-source": "./src/compile/generate.ts"
+    },
     "./package.json": "./package.json"
   },
   "dependencies": {
     "fast-json-stringify": "7.2.0"
-  },
-  "peerDependencies": {
-    "typebox": "1.4.3"
   },
   "publishConfig": {
     "access": "public"

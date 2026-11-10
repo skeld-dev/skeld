@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "customConditions": [],
+    "skipLibCheck": false,
+    "types": ["node"]
+  },
+  "files": ["routes200-derived.ts"]
+}

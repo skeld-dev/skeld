@@ -1,4 +1,4 @@
-import { Type } from 'typebox';
+import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';
 import { check, conclude, rawExchange } from './support.ts';
@@ -12,8 +12,8 @@ const contract = defineContract({
   hello: {
     method: 'GET',
     path: '/hello/:name',
-    params: Type.Object({ name: Type.String() }),
-    responses: { 200: Type.Object({ ok: Type.Boolean() }) },
+    params: t.object({ name: t.string({ maxLength: 64 }) }),
+    responses: { 200: t.object({ ok: t.boolean() }) },
   },
 });
 

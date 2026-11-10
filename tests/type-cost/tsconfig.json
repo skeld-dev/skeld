@@ -4,7 +4,8 @@
     "composite": false,
     "noEmit": true,
     "customConditions": [],
-    "skipLibCheck": true
+    "skipLibCheck": false,
+    "types": ["node"]
   },
   "files": ["routes200.ts"]
 }

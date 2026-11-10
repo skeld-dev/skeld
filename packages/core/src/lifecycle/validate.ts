@@ -2,7 +2,7 @@ import { end, event, limit, next, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { ErrorDetail } from '../contract/types.ts';
 import { parseQuery } from '../request/query.ts';
-import type { PartValidator } from '../schema/types.ts';
+import type { PartValidator } from '../compile/types.ts';
 import type { Exchange } from './exchange.ts';
 
 const DETAILS_CAP = 100;

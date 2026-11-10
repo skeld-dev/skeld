@@ -1,10 +1,10 @@
 import { defineContract } from '@darkstart/core/contract';
+import * as t from '@darkstart/core/schema';
 import { createServer } from '@darkstart/core/server';
-import { Type } from 'typebox';
 import { host } from '../values.ts';
 import { announceReady, failToStart, parsePort } from './server-command.ts';
 
-const Hello = Type.Object({ hello: Type.String() });
+const Hello = t.object({ hello: t.string({ maxLength: 64 }) });
 
 const benchContract = defineContract({
   hello: {

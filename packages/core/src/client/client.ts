@@ -1,7 +1,13 @@
 import { end, event, track } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
-import type { ContractRoutes, RouteDefinition } from '../contract/types.ts';
-import { readResponseBody } from './response.ts';
+import type { ContractRoutes, ErrorDetail, RouteDefinition } from '../contract/types.ts';
+import { compileCheck } from '../schema/check.ts';
+import { explain } from '../schema/explain.ts';
+import { compileFinish } from '../schema/finish.ts';
+import { isRequired } from '../schema/messages.ts';
+import { toPointer } from '../schema/pointer.ts';
+import type { Check, Finish, Schema } from '../schema/types.ts';
+import { type ReadBody, readResponseBody } from './response.ts';
 import type { Client, ClientOptions } from './types.ts';
 import { type CallValues, createUrlBuilder } from './url.ts';
 
@@ -18,6 +24,12 @@ interface ReceivedResult {
   readonly status: number;
   readonly headers: Headers;
   readonly body: unknown;
+}
+
+interface ResponseValidator {
+  readonly schema: Schema;
+  readonly check: Check;
+  readonly finish: Finish | null;
 }
 
 interface RuntimeClient {
@@ -65,6 +77,47 @@ function buildHeaders(route: RouteDefinition, input: CallValues | undefined): He
   }
 }
 
+function compileResponseValidators(route: RouteDefinition): ReadonlyMap<number, ResponseValidator> {
+  const validators = new Map<number, ResponseValidator>();
+  for (const key of Object.keys(route.responses)) {
+    const status = Number(key);
+    const schema = route.responses[status];
+    if (schema !== null && schema !== undefined) {
+      validators.set(status, { schema, check: compileCheck(schema), finish: compileFinish(schema, 'raw') });
+    }
+  }
+  return validators;
+}
+
+function bodyDetails(validator: ResponseValidator, read: ReadBody): readonly ErrorDetail[] {
+  if (read.kind === 'json') {
+    return explain(validator.schema, read.body, 100).map((issue) => ({
+      path: `/body${toPointer(issue.path)}`,
+      message: issue.message,
+    }));
+  }
+  return [{ path: '/body', message: read.kind === 'none' ? isRequired : 'must be JSON' }];
+}
+
+function validateResponse(validator: ResponseValidator, target: string, status: number, read: ReadBody): unknown {
+  const span = track('client.validate');
+  try {
+    if (read.kind === 'json' && validator.check(read.body)) {
+      return validator.finish === null ? read.body : validator.finish(read.body);
+    }
+    const details = bodyDetails(validator, read);
+    event('client.error', 'INVALID_RESPONSE');
+    throw new HttpError(
+      null,
+      'INVALID_RESPONSE',
+      `${target} answered ${status} with a body that does not match the contract`,
+      { details },
+    );
+  } finally {
+    end(span);
+  }
+}
+
 function createCall(
   name: string,
   route: RouteDefinition,
@@ -72,6 +125,7 @@ function createCall(
   fetch: typeof globalThis.fetch,
 ): (input?: CallParts) => Promise<ReceivedResult> {
   const buildUrl = createUrlBuilder(base, name, route.path);
+  const validators = compileResponseValidators(route);
   return async (input) => {
     const call = track('client.call', name);
     try {
@@ -97,6 +151,11 @@ function createCall(
         event('client.error', 'NETWORK');
         throw new HttpError(null, 'NETWORK', `${target} failed: ${failureText(read.cause)}`, { cause: read.cause });
       }
+      const validator = validators.get(response.status);
+      if (validator !== undefined) {
+        const body = validateResponse(validator, target, response.status, read);
+        return { status: response.status, headers: response.headers, body };
+      }
       if (read.kind === 'invalid-json') {
         event('client.error', 'INVALID_RESPONSE');
         throw new HttpError(
@@ -113,6 +172,11 @@ function createCall(
   };
 }
 
+/**
+ * Creates a typed client with one call per route of a contract.
+ * A call rejects with HttpError `INVALID_RESPONSE` when a declared body fails its schema; throws `TypeError` for a bad `baseUrl`.
+ * @example createClient(defineContract({ health: { method: 'GET', path: '/health', responses: { 204: null } } }), { baseUrl: 'http://127.0.0.1:3000' })
+ */
 export function createClient<const C extends ContractRoutes>(contract: C, options: ClientOptions): Client<C>;
 // The one erasure point: a mapped Client<C> cannot be built by a loop, so this overload pairs it with RuntimeClient.
 export function createClient<const C extends ContractRoutes>(

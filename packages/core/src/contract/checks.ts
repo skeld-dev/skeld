@@ -1,5 +1,6 @@
 import { end, start } from '#diag';
-import { Format } from 'typebox/format';
+import { isModelSchema, isNode } from '../schema/node.ts';
+import type { Kind, Schema } from '../schema/types.ts';
 import { parsePath } from './path.ts';
 import type { ContractRoutes, RouteDefinition } from './types.ts';
 
@@ -7,31 +8,10 @@ type KeyedPart = 'params' | 'query' | 'headers';
 
 const PARAMETER_SEGMENT = /^:[A-Za-z_][A-Za-z0-9_]*$/;
 const FORBIDDEN_PATH_CHARACTER = /[?#%\s]/;
-const SCALAR_TYPES: ReadonlySet<unknown> = new Set(['string', 'number', 'integer', 'boolean']);
+const SCALAR_KINDS: ReadonlySet<Kind> = new Set(['string', 'number', 'integer', 'boolean', 'literal']);
 const BODYLESS_STATUSES = ['204', '304'];
 const KEYED_PARTS: readonly KeyedPart[] = ['params', 'query', 'headers'];
 const REQUEST_PARTS = ['params', 'query', 'headers', 'body'] as const;
-export const SUBSCHEMA_KEYWORDS = [
-  'items',
-  'prefixItems',
-  'anyOf',
-  'allOf',
-  'oneOf',
-  'not',
-  'additionalProperties',
-  'unevaluatedProperties',
-  'unevaluatedItems',
-  'contains',
-  'propertyNames',
-  'if',
-  'then',
-  'else',
-];
-export const SUBSCHEMA_MAP_KEYWORDS = ['properties', 'patternProperties', '$defs', 'dependentSchemas'];
-
-function isRecord(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
-}
 
 function checkPath(path: string): string | null {
   if (!path.startsWith('/')) {
@@ -61,6 +41,25 @@ function checkPath(path: string): string | null {
     return `parameter :${repeated} appears twice`;
   }
   return null;
+}
+
+function checkSchemas(route: RouteDefinition): string | null {
+  const part = REQUEST_PARTS.find((name) => route[name] !== undefined && !isNode(route[name]));
+  if (part !== undefined) {
+    return `${part} is not a schema`;
+  }
+  const status = Object.keys(route.responses).find((key) => {
+    const schema = route.responses[Number(key)];
+    return schema !== null && !isNode(schema);
+  });
+  if (status !== undefined) {
+    return `responses.${status} is not a schema`;
+  }
+  const keyed = KEYED_PARTS.find((name) => {
+    const schema: Schema | undefined = route[name];
+    return schema !== undefined && schema.kind !== 'object';
+  });
+  return keyed === undefined ? null : `${keyed} is not an object schema`;
 }
 
 function checkParams(route: RouteDefinition): string | null {
@@ -123,24 +122,21 @@ function checkHeaderKeys(route: RouteDefinition): string | null {
   return upper === undefined ? null : `headers key ${upper} must be lower case`;
 }
 
-function isScalarSchema(schema: unknown): boolean {
-  if (!isRecord(schema)) {
+function isScalarSchema(schema: Schema): boolean {
+  if (!isModelSchema(schema)) {
     return false;
   }
-  const anyOf: unknown = Reflect.get(schema, 'anyOf');
-  if (Array.isArray(anyOf)) {
-    return anyOf.length > 0 && anyOf.every(isScalarSchema);
-  }
-  const type: unknown = Reflect.get(schema, 'type');
-  if (type !== undefined) {
-    return SCALAR_TYPES.has(type);
-  }
-  const constant: unknown = Reflect.get(schema, 'const');
-  return typeof constant === 'string' || typeof constant === 'number' || typeof constant === 'boolean';
+  return schema.kind === 'union' ? schema.members.every(isScalarSchema) : SCALAR_KINDS.has(schema.kind);
 }
 
-function isScalarArraySchema(schema: unknown): boolean {
-  return isRecord(schema) && Reflect.get(schema, 'type') === 'array' && isScalarSchema(Reflect.get(schema, 'items'));
+function isKeyedPropertySchema(schema: Schema, allowsArrays: boolean): boolean {
+  if (!isModelSchema(schema)) {
+    return false;
+  }
+  if (schema.kind === 'optional') {
+    return isKeyedPropertySchema(schema.inner, allowsArrays);
+  }
+  return isScalarSchema(schema) || (allowsArrays && schema.kind === 'array' && isScalarSchema(schema.items));
 }
 
 function checkPropertyKinds(route: RouteDefinition): string | null {
@@ -151,7 +147,7 @@ function checkPropertyKinds(route: RouteDefinition): string | null {
     }
     const allowsArrays = part === 'query';
     const refused = Object.entries(schema.properties).find(
-      ([, property]) => !(isScalarSchema(property) || (allowsArrays && isScalarArraySchema(property))),
+      ([, property]) => !isKeyedPropertySchema(property, allowsArrays),
     );
     if (refused !== undefined) {
       const kinds = 'must be a string, number, integer, boolean or literal schema';
@@ -161,82 +157,15 @@ function checkPropertyKinds(route: RouteDefinition): string | null {
   return null;
 }
 
-function childSchemas(node: object): unknown[] {
-  const children: unknown[] = [];
-  for (const keyword of SUBSCHEMA_KEYWORDS) {
-    const value: unknown = Reflect.get(node, keyword);
-    if (Array.isArray(value)) {
-      children.push(...value);
-    } else if (value !== undefined) {
-      children.push(value);
-    }
-  }
-  for (const keyword of SUBSCHEMA_MAP_KEYWORDS) {
-    const value: unknown = Reflect.get(node, keyword);
-    if (isRecord(value)) {
-      children.push(...Object.values(value));
-    }
-  }
-  return children;
-}
-
-function findInSchema<T>(schema: unknown, visit: (node: object) => T | null): T | null {
-  if (!isRecord(schema)) {
-    return null;
-  }
-  const found = visit(schema);
-  if (found !== null) {
-    return found;
-  }
-  for (const child of childSchemas(schema)) {
-    const inChild = findInSchema(child, visit);
-    if (inChild !== null) {
-      return inChild;
-    }
-  }
-  return null;
-}
-
-function closedUnionMember(node: object): true | null {
-  const anyOf: unknown = Reflect.get(node, 'anyOf');
-  const closed =
-    Array.isArray(anyOf) &&
-    anyOf.some((member) => isRecord(member) && Reflect.get(member, 'additionalProperties') === false);
-  return closed ? true : null;
-}
-
-function checkResponseUnions(route: RouteDefinition): string | null {
-  const status = Object.keys(route.responses).find(
-    (key) => findInSchema(route.responses[Number(key)], closedUnionMember) !== null,
-  );
-  return status === undefined ? null : `response ${status} has an anyOf member with additionalProperties: false`;
-}
-
-function unknownFormat(node: object): string | null {
-  const format: unknown = Reflect.get(node, 'format');
-  return typeof format === 'string' && !Format.Has(format) ? format : null;
-}
-
-function checkFormats(route: RouteDefinition): string | null {
-  for (const part of REQUEST_PARTS) {
-    const format = findInSchema(route[part], unknownFormat);
-    if (format !== null) {
-      return `${part} schema uses unknown format "${format}"`;
-    }
-  }
-  return null;
-}
-
 function checkRoute(route: RouteDefinition): string | null {
   return (
     checkPath(route.path) ??
+    checkSchemas(route) ??
     checkParams(route) ??
     checkBody(route) ??
     checkResponses(route) ??
     checkHeaderKeys(route) ??
-    checkPropertyKinds(route) ??
-    checkResponseUnions(route) ??
-    checkFormats(route)
+    checkPropertyKinds(route)
   );
 }
 

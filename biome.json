@@ -219,5 +219,17 @@
         "noSecrets": "error"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["examples/**", "tests/**", "benchmarks/**"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noNamespaceImport": "off"
+          }
+        }
+      }
+    }
+  ]
 }

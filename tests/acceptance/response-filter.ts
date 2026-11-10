@@ -1,4 +1,4 @@
-import { Type } from 'typebox';
+import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';
 import { check, conclude } from './support.ts';
@@ -11,7 +11,7 @@ const contract = defineContract({
   note: {
     method: 'GET',
     path: '/note',
-    responses: { 200: Type.Object({ id: Type.String(), title: Type.String() }) },
+    responses: { 200: t.object({ id: t.string({ maxLength: 36 }), title: t.string({ maxLength: 64 }) }) },
   },
 });
 

@@ -5,5 +5,5 @@
     "outDir": ".tsout",
     "tsBuildInfoFile": "./.tsbuildinfo"
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "api-reference/*.ts"]
 }

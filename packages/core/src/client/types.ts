@@ -1,11 +1,18 @@
-import type { Static, TSchema } from 'typebox';
 import type { ContractRoutes, Empty, RouteDefinition } from '../contract/types.ts';
+import type { Schema, Wire } from '../schema/types.ts';
 
+/** The options of `createClient`. */
 export interface ClientOptions {
+  /**
+   * The service's origin and base path: an absolute http or https URL with no query or fragment.
+   * `createClient` throws `TypeError` for any other value; trailing slashes are dropped.
+   */
   readonly baseUrl: string | URL;
+  /** The function that sends each request (default `globalThis.fetch`). */
   readonly fetch?: typeof globalThis.fetch;
 }
 
+/** Every status from 200 to 599, the range a call can resolve with. */
 export type FetchStatus =
   | 200
   | 201
@@ -408,29 +415,46 @@ export type FetchStatus =
   | 598
   | 599;
 
-export type CallInput<R extends RouteDefinition> = (R extends { readonly params: infer S extends TSchema }
-  ? { readonly params: Static<S> }
+/** What a route call takes: each request part the route declares, in its JSON form. */
+export type CallInput<R extends RouteDefinition> = (R extends { readonly params: infer S extends Schema }
+  ? { readonly params: Wire<S> }
   : unknown) &
-  (R extends { readonly query: infer S extends TSchema } ? { readonly query: Static<S> } : unknown) &
-  (R extends { readonly headers: infer S extends TSchema } ? { readonly headers: Static<S> } : unknown) &
-  (R extends { readonly body: infer S extends TSchema } ? { readonly body: Static<S> } : unknown);
+  (R extends { readonly query: infer S extends Schema } ? { readonly query: Wire<S> } : unknown) &
+  (R extends { readonly headers: infer S extends Schema } ? { readonly headers: Wire<S> } : unknown) &
+  (R extends { readonly body: infer S extends Schema } ? { readonly body: Wire<S> } : unknown);
 
+/**
+ * What a route call resolves with: the status, the headers and the body.
+ * For a status the contract declares with a schema the body has passed its check; for any other it is unchecked.
+ */
 export type CallResult<R extends RouteDefinition> =
   | {
       [S in keyof R['responses']]: {
         readonly status: S;
         readonly headers: Headers;
-        readonly body: R['responses'][S] extends TSchema ? Static<R['responses'][S]> : null;
+        readonly body: R['responses'][S] extends Schema ? Wire<R['responses'][S]> : null;
       };
     }[keyof R['responses']]
-  | { readonly status: Exclude<FetchStatus, keyof R['responses']>; readonly headers: Headers; readonly body: unknown };
+  | {
+      /** The response status. */
+      readonly status: Exclude<FetchStatus, keyof R['responses']>;
+      /** The response headers. */
+      readonly headers: Headers;
+      /** The response body; for a status the contract does not declare, unchecked JSON, text or `null`. */
+      readonly body: unknown;
+    };
 
+/**
+ * The function a client gives for one route.
+ * It resolves for every status from 200 to 599; it rejects with HttpError `NETWORK` or `INVALID_RESPONSE`.
+ */
 export type RouteCall<R extends RouteDefinition> = R extends
-  | { readonly params: TSchema }
-  | { readonly query: TSchema }
-  | { readonly headers: TSchema }
-  | { readonly body: TSchema }
+  | { readonly params: Schema }
+  | { readonly query: Schema }
+  | { readonly headers: Schema }
+  | { readonly body: Schema }
   ? (input: CallInput<R>) => Promise<CallResult<R>>
   : (input?: Empty) => Promise<CallResult<R>>;
 
+/** A typed client: one `RouteCall` per route name of the contract. */
 export type Client<C extends ContractRoutes> = { readonly [K in keyof C]: RouteCall<C[K]> };

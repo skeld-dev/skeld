@@ -1,7 +1,7 @@
 import { defineContract } from '@darkstart/core/contract';
+import * as t from '@darkstart/core/schema';
 import type { Scope } from '@darkstart/core/server';
 import { createServer } from '@darkstart/core/server';
-import { Type } from 'typebox';
 import { announceReady, failToStart } from '../servers/server-command.ts';
 import { host, standalonePort } from '../values.ts';
 
@@ -57,13 +57,13 @@ function readCanary(value: string | undefined): string {
 const { port, plant } = parseArguments(process.argv.slice(2));
 const token = readCanary(process.env.DARKSTART_DIAG_CANARY);
 
-const Hello = Type.Object({ hello: Type.String() });
-const ScenarioBody = Type.Object({
-  hello: Type.String({ maxLength: 64 }),
-  pad: Type.Optional(Type.String({ maxLength: canaryBodyLimit })),
-  constructor: Type.Optional(Type.String({ maxLength: 64 })),
+const Hello = t.object({ hello: t.string({ maxLength: 64 }) });
+const ScenarioBody = t.object({
+  hello: t.string({ maxLength: 64 }),
+  pad: t.optional(t.string({ maxLength: canaryBodyLimit })),
+  constructor: t.optional(t.string({ maxLength: 64 })),
 });
-const BlockQuery = Type.Object({ ms: Type.Integer({ minimum: 1, maximum: 200 }) });
+const BlockQuery = t.object({ ms: t.integer({ minimum: 1, maximum: 200 }) });
 
 const scenarioContract = defineContract({
   hello: { method: 'GET', path: '/hello', responses: { 200: Hello } },

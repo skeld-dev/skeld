@@ -1,13 +1,18 @@
-import type { Validator } from 'typebox/compile';
 import type { RouteInfo } from '../../contract/types.ts';
+import type { Check, Schema } from '../../schema/types.ts';
 import { type Counter, keyedCounter } from './counts.ts';
+
+export interface ResponseCheck {
+  readonly schema: Schema;
+  readonly check: Check;
+}
 
 export interface RouteRecord {
   readonly name: string;
   readonly method: string;
   readonly path: string;
   readonly count: Counter;
-  readonly validators: Map<number, Validator | null>;
+  readonly validators: Map<number, ResponseCheck | null>;
   slowestNs: number;
 }
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Type } from 'typebox';
+import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';
 import { check, conclude, rawExchange } from './support.ts';
@@ -9,7 +9,7 @@ const statement =
 const expectedBody = '{"status":500,"code":"INTERNAL","message":"Internal Server Error"}';
 
 const contract = defineContract({
-  leak: { method: 'GET', path: '/leak', responses: { 200: Type.Object({ ok: Type.Boolean() }) } },
+  leak: { method: 'GET', path: '/leak', responses: { 200: t.object({ ok: t.boolean() }) } },
 });
 
 const token = randomUUID();

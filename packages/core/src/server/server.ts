@@ -39,6 +39,11 @@ export type {
   ValidatedContext,
 } from './types.ts';
 
+/**
+ * Creates a server, the root scope of a service; nothing listens until `listen`.
+ * Throws BootError `INVALID_OPTION` for an option that is not a positive integer or a `headersTimeout` above `requestTimeout`.
+ * @example const server = createServer({ bodyLimit: 65_536 }); await server.listen({ port: 0 }); await server.close();
+ */
 export function createServer(options: ServerOptions = {}): Server {
   const resolved = resolveServerOptions(options);
   const root = createScopeState('root', null);

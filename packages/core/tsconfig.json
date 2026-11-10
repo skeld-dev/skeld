@@ -6,5 +6,7 @@
     "declarationMap": false,
     "tsBuildInfoFile": "./.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/schema/**"],
+  "references": [{ "path": "./src/schema" }]
 }

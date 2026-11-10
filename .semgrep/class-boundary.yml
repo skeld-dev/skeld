@@ -9,6 +9,7 @@ rules:
     paths:
       exclude:
         - "/packages/core/src/lifecycle/"
+        - "/packages/core/src/schema/secret.ts"
         - "**/dist/**"
         - "**/.tsout/**"
     patterns:
@@ -31,3 +32,15 @@ rules:
           - pattern: class { ... $M(...) { ... } ... }
       - focus-metavariable: $M
       - pattern-regex: (?m)(?:^|[{;])[ \t]*(?:static[ \t]+|async[ \t]+|set[ \t]+|\*[ \t]*)*(?!(?:get|constructor)\b)#?\w+[ \t]*[(<]
+  - id: secret-class-member
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      The Secret class carries only #value, a constructor, a static block, toString, toJSON and the
+      inspect method (ADR-021); any other member can read or widen the wrapped value.
+    paths:
+      include:
+        - "/packages/core/src/schema/secret.ts"
+    patterns:
+      - pattern-regex: (?ms)^(?:export[ \t]+)?class[ \t][^\n]*\{[ \t]*$.*?^\}
+      - pattern-regex: (?m)^[ ]{2}(?![ }])(?!/[/*])(?!(?:readonly[ \t]+)?#value\b[^(\n]*;[ \t]*$)(?!constructor\()(?!static[ \t]*\{)(?!toString\(\))(?!toJSON\(\))(?!\[Symbol\.for\('nodejs\.util\.inspect\.custom'\)\]\(\))[^\n]*

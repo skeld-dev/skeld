@@ -1,13 +1,16 @@
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { Compile, type Validator } from 'typebox/compile';
 import type { RouteDefinition, RouteInfo } from '../../contract/types.ts';
-import { closeSchema } from '../../schema/validator.ts';
+import { compileCheck } from '../../schema/check.ts';
+import { explain } from '../../schema/explain.ts';
+import { isModelSchema, type ModelSchema } from '../../schema/node.ts';
+import { toPointer } from '../../schema/pointer.ts';
+import type { Schema } from '../../schema/types.ts';
 import type { HeaderValue } from '../empty.ts';
 import { config } from './config.ts';
 import { counter, keyedCounter } from './counts.ts';
 import { raise } from './events.ts';
-import { routeRecord } from './routes.ts';
+import { type ResponseCheck, routeRecord } from './routes.ts';
 import { type SlotRecord, state } from './slots.ts';
 
 const STACK_FRAME = /\bat (?:async )?(?:[^\s()"]+ \()?(?:file:\/\/|node:|\/|[A-Za-z]:\\{1,2})[^\s()"]*:\d+:\d+\)?/;
@@ -34,14 +37,45 @@ const canaryStderr = counter('canary.stderr');
 export function declareRoute(info: RouteInfo, definition: RouteDefinition): void {
   const route = routeRecord(info);
   for (const [status, schema] of Object.entries(definition.responses)) {
-    route.validators.set(Number(status), schema === null ? null : Compile(closeSchema(schema)));
+    route.validators.set(Number(status), schema === null ? null : { schema, check: compileCheck(schema) });
   }
 }
 
 const asText = (payload: string | Uint8Array): string =>
   typeof payload === 'string' ? payload : decoder.decode(payload);
 
-function schemaFailure(validator: Validator, payload: string | Uint8Array): string | null {
+function unwrapped(schema: Schema): ModelSchema | null {
+  let current = schema;
+  while (isModelSchema(current)) {
+    if (current.kind !== 'optional' && current.kind !== 'exposed') {
+      return current;
+    }
+    current = current.inner;
+  }
+  return null;
+}
+
+function declaredSegments(schema: Schema, path: readonly (string | number)[]): (string | number)[] {
+  const kept: (string | number)[] = [];
+  let current = schema;
+  for (const segment of path) {
+    const step = unwrapped(current);
+    let next: Schema | undefined;
+    if (step?.kind === 'object' && typeof segment === 'string' && Object.hasOwn(step.properties, segment)) {
+      next = step.properties[segment];
+    } else if (step?.kind === 'array' && typeof segment === 'number') {
+      next = step.items;
+    }
+    if (next === undefined) {
+      return kept;
+    }
+    kept.push(segment);
+    current = next;
+  }
+  return kept;
+}
+
+function schemaFailure(validator: ResponseCheck, payload: string | Uint8Array): string | null {
   let value: unknown;
   try {
     value = JSON.parse(asText(payload));
@@ -51,11 +85,12 @@ function schemaFailure(validator: Validator, payload: string | Uint8Array): stri
     }
     throw error;
   }
-  if (validator.Check(value)) {
+  if (validator.check(value)) {
     return null;
   }
-  const first = validator.Errors(value)[0];
-  return first === undefined ? '' : first.schemaPath;
+  const first = explain(validator.schema, value, 1)[0];
+  const pointer = toPointer(declaredSegments(validator.schema, first?.path ?? []));
+  return pointer === '' ? '/' : pointer;
 }
 
 export function checkPayload(status: number, serialized: string, final: string | Uint8Array): void {

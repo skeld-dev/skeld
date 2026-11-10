@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/knip/schema.json",
+  "ignoreBinaries": ["taskset"],
   "ignoreExportsUsedInFile": {
     "interface": true,
     "type": true
@@ -13,7 +14,7 @@
       "entry": ["servers/*.ts", "diag/scenario-server.ts"]
     },
     "tests": {
-      "entry": ["acceptance/*.ts", "type-cost/*.ts"]
+      "entry": ["acceptance/*.ts", "type-cost/*.ts", "schema/*.ts"]
     },
     "tools": {
       "entry": ["*.ts"]
