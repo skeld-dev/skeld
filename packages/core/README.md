@@ -12,11 +12,11 @@ Requires an ES module project (`"type": "module"` in your `package.json`).
 npm install @darkstart/core
 ```
 
-The package has one runtime dependency, `fast-json-stringify`, which the server's response serializer uses.
+The package has no runtime dependency: the server generates its own validators and response serializers from the contract.
 
 ### Where each subpath runs
 
-`@darkstart/core/schema`, `/secret`, `/redact`, `/json-schema`, `/contract` and `/client` run on Node 22 and later and in browsers, so one contract file serves the server and its clients. `@darkstart/core/server` needs Node 26.12 or later: it runs on `node:http` and compiles its validators by code generation at `listen`, so under `node --disallow-code-generation-from-strings` `listen` rejects with `BootError` code `CODEGEN_UNAVAILABLE`. The package's `engines` field (`node >=26.12.0`) covers the whole package: on an older Node, npm prints an engine warning and installs it anyway unless `engine-strict` is set, and `fast-json-stringify` is installed even though those six subpaths never load it.
+`@darkstart/core/schema`, `/secret`, `/redact`, `/json-schema`, `/contract` and `/client` run on Node 22 and later and in browsers, so one contract file serves the server and its clients. `@darkstart/core/server` needs Node 26.12 or later: it runs on `node:http` and compiles its validators and serializers by code generation at `listen`, so under `node --disallow-code-generation-from-strings` `listen` rejects with `BootError` code `CODEGEN_UNAVAILABLE`. The package's `engines` field (`node >=26.12.0`) covers the whole package: on an older Node, npm prints an engine warning and installs it anyway unless `engine-strict` is set.
 
 ## Subpaths
 

@@ -1,4 +1,4 @@
-import { declare, end, start } from '#diag';
+import { declare, end, mark, start } from '#diag';
 import { parsePath } from '../contract/path.ts';
 import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { EngineRuntime, HookChains, RouteRuntime } from '../lifecycle/types.ts';
@@ -76,12 +76,14 @@ function toRouteRuntime(
   const { info, definition } = route;
   const plugin = pluginName(state);
   const schemaChecks = start('boot.schema_checks', info.name);
+  mark();
   try {
     refuseSchemaFindings(info, plugin, definition);
   } finally {
     end(schemaChecks);
   }
   const compileValidators = start('boot.compile_validators', info.name);
+  mark();
   let validators: RequestValidators;
   try {
     validators = compiled(info, plugin, () => compileRequestValidators(definition));
@@ -89,19 +91,25 @@ function toRouteRuntime(
     end(compileValidators);
   }
   const compileSerializers = start('boot.compile_serializers', info.name);
+  mark();
   let serializers: ResponseSerializers;
   try {
     serializers = compiled(info, plugin, () => compileResponseSerializers(definition));
   } finally {
     end(compileSerializers);
   }
+  const bodyCap = start('boot.body_cap');
+  mark();
+  const bodyLimit = effectiveBodyLimit(route.bodyLimit ?? options.bodyLimit, definition);
+  end(bodyCap);
+  mark();
   return Object.freeze({
     info: Object.freeze(info),
     definition,
     handler: route.handler,
     validators,
     serializers,
-    bodyLimit: effectiveBodyLimit(route.bodyLimit ?? options.bodyLimit, definition),
+    bodyLimit,
     readsBody: definition.body !== undefined,
     hooks,
     errorHandlers,
@@ -131,7 +139,10 @@ function addScope(
         pluginName(state),
       );
     }
+    const declared = start('boot.declare');
+    mark();
     declare(info, route.definition);
+    end(declared);
   }
   for (const child of state.children) {
     addScope(router, child.state, hooks, errorHandlers, options);
@@ -144,6 +155,7 @@ export function buildRuntime(
   isClosing: () => boolean,
 ): EngineRuntime {
   const span = start('boot.runtime');
+  mark();
   try {
     const unavailable = probeCodegen();
     if (unavailable !== null) {
@@ -151,13 +163,19 @@ export function buildRuntime(
     }
     const router = createRouter<RouteRuntime>();
     addScope(router, root, NO_HOOKS, [], options);
+    const errorSerializerSpan = start('boot.error_serializer');
+    mark();
+    const errorSerializer = getErrorBodySerializer();
+    end(errorSerializerSpan);
+    mark();
     return Object.freeze({
       router,
       maxParamLength: options.maxParamLength,
-      errorSerializer: getErrorBodySerializer(),
+      errorSerializer,
       isClosing,
     });
   } finally {
     end(span);
+    mark();
   }
 }

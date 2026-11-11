@@ -18,7 +18,7 @@ An npm workspaces monorepo. Source runs unbuilt with `node --conditions=darkstar
 
 ## Development
 
-Requires Node 26.12.1 (`.nvmrc`).
+Requires Node 26.13.0 (`.nvmrc`).
 
 ```sh
 npm install

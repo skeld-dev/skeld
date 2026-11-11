@@ -25,12 +25,12 @@ export interface ServerOptions {
   readonly keepAliveTimeout?: number;
   /**
    * Time allowed to receive a whole request, in milliseconds (default 300 000).
-   * A request still arriving after it is answered 408 and its connection closed.
+   * A request still arriving after it is answered 408 and its connection closed, up to a tenth of `headersTimeout` later (at least 1 s, at most 30 s).
    */
   readonly requestTimeout?: number;
   /**
    * Time allowed to receive the request headers, in milliseconds; at most `requestTimeout` (default 60 000).
-   * Headers still arriving after it are answered 408 and the connection closed.
+   * Headers still arriving after it are answered 408 and the connection closed, up to a tenth of it later (at least 1 s, at most 30 s).
    */
   readonly headersTimeout?: number;
   /** Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB). */
@@ -76,7 +76,7 @@ export interface RouteRequest<R extends RouteDefinition> {
 
 /**
  * What a handler returns: a declared status, its body and optional headers.
- * Keys the response schema does not declare are not written.
+ * Keys the response schema does not declare are not written; on an error response the engine writes, only the CORS response headers and `vary` in `headers` are kept.
  */
 export type RouteReply<R extends RouteDefinition> = {
   [S in keyof R['responses']]: R['responses'][S] extends Schema
@@ -126,7 +126,10 @@ export interface RequestContext {
   readonly headers: RawHeaders;
   /** Aborted when the connection closes or the request is destroyed. */
   readonly signal: AbortSignal;
-  /** Sets a header on the response. */
+  /**
+   * Sets a header on the response.
+   * On an error response the engine writes, only the CORS response headers and `vary` are kept.
+   */
   setHeader(name: string, value: string | number | readonly string[]): void;
   /**
    * Replies at once; later hooks and the handler do not run.
@@ -159,7 +162,10 @@ export interface ResponseContext {
   readonly signal: AbortSignal;
   /** The status being written. */
   readonly status: number;
-  /** Sets a header on the response. */
+  /**
+   * Sets a header on the response.
+   * On an error response the engine writes, only the CORS response headers and `vary` are kept.
+   */
   setHeader(name: string, value: string | number | readonly string[]): void;
 }
 

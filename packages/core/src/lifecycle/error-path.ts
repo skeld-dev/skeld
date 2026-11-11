@@ -5,9 +5,9 @@ import type { ErrorContext } from '../server/types.ts';
 import type { Exchange } from './exchange.ts';
 import { ErrorContextRecord, runObservers } from './hooks.ts';
 import { describeThrown, writeStderrLine } from './stderr.ts';
-import { writeErrorBody } from './wire.ts';
+import { INTERNAL_BODY, writeErrorBody } from './wire.ts';
 
-const INTERNAL_BODY: ErrorBody = { status: 500, code: 'INTERNAL', message: 'Internal Server Error' };
+const ERROR_BODY_MISMATCH = 'error body does not match the error schema; the fixed 500 body was written';
 
 function toErrorBody(value: unknown): ErrorBody {
   if (!(value instanceof HttpError) || value.status === null) {
@@ -49,7 +49,9 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
   }
   exchange.state = 'written';
   end(exchange.stage);
-  writeErrorBody(exchange.runtime, exchange.res, exchange.method, body, exchange.closeConnection);
+  if (!writeErrorBody(exchange.runtime, exchange.res, exchange.method, body, exchange.closeConnection)) {
+    report(exchange, INTERNAL_BODY.status, ERROR_BODY_MISMATCH);
+  }
 }
 
 function classify(exchange: Exchange, context: ErrorContext, index: number, current: unknown, pending: Pending): void {

@@ -8,7 +8,11 @@ import { writeJson } from './wire.ts';
 
 const NO_CONTENT = 204;
 const NOT_MODIFIED = 304;
-const SERIALIZATION_FAILED = 'response serialization failed';
+const SCHEMA_MISMATCH = 'response does not match its schema';
+
+function mismatch(location: string | undefined): Error {
+  return new Error(location === undefined || location === '' ? SCHEMA_MISMATCH : `${SCHEMA_MISMATCH} at ${location}`);
+}
 
 function writePayload(exchange: Exchange, status: number, final: string | Uint8Array): void {
   if (exchange.state !== 'running') {
@@ -109,20 +113,25 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
     return;
   }
   const serialize = start('req.respond.serialize');
-  let serialized: string | null;
+  if (serializer === null) {
+    end(serialize);
+    writeEmpty(exchange, status);
+    return;
+  }
+  let written: string | number;
   try {
-    serialized = serializer === null ? null : serializer(reply.body);
-  } catch {
-    // C-79: fast-json-stringify quotes the returned value in its message, so the thrown error is never passed on.
+    written = serializer.write(reply.body);
+  } catch (error) {
     end(serialize);
     event('err.serialize');
-    fail(exchange, new Error(SERIALIZATION_FAILED), true);
+    fail(exchange, error, true);
     return;
   }
   end(serialize);
-  if (serialized === null) {
-    writeEmpty(exchange, status);
-  } else {
-    sendThrough(exchange, status, serialized);
+  if (typeof written === 'number') {
+    event('err.serialize');
+    fail(exchange, mismatch(serializer.refusals[written]), true);
+    return;
   }
+  sendThrough(exchange, status, written);
 }

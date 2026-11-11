@@ -39,10 +39,14 @@ export type BootSpanName =
   | 'boot.schema_checks'
   | 'boot.compile_validators'
   | 'boot.compile_serializers'
+  | 'boot.body_cap'
+  | 'boot.declare'
+  | 'boot.error_serializer'
   | 'boot.router_add'
   | 'boot.listen';
 export type SpanName = StageName | StepName | ErrorSpanName | BootSpanName;
 export type TrackName =
+  | 'refuse.teardown'
   | 'req.hook.on_response'
   | 'close.total'
   | 'client.call'
@@ -53,6 +57,7 @@ export type TrackName =
   | 'client.validate';
 export type CountName = 'refuse.not_found' | 'err.http_error';
 export type EventName =
+  | 'refuse.close'
   | 'refuse.framing'
   | 'refuse.path'
   | 'refuse.param_too_long'
@@ -69,7 +74,13 @@ export type EventName =
   | 'err.headers_sent'
   | 'close.forced'
   | 'client.error';
-export type LimitName = 'limit.body_bytes' | 'limit.param_length' | 'limit.validation_details' | 'limit.raw_errors';
+export type LimitName =
+  | 'limit.refusal_bytes'
+  | 'limit.refusal_connections'
+  | 'limit.body_bytes'
+  | 'limit.param_length'
+  | 'limit.validation_details'
+  | 'limit.raw_errors';
 export type ContextKind = 'handler' | 'request' | 'validated' | 'response' | 'error' | 'completed';
 export type HeaderValue = number | string | readonly string[];
 
@@ -96,6 +107,7 @@ export type Open = (options: ResolvedServerOptions) => void;
 export type Declare = (route: RouteInfo, definition: RouteDefinition) => void;
 export type Listening = (server: Server) => void;
 export type Closed = () => void;
+export type Mark = () => void;
 
 const none = (): void => undefined;
 const zero = (): number => 0;
@@ -123,3 +135,4 @@ export const open: Open = none;
 export const declare: Declare = none;
 export const listening: Listening = none;
 export const closed: Closed = none;
+export const mark: Mark = none;

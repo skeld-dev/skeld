@@ -3,6 +3,7 @@ import { begin, contain, destroyed, end, event, leave, next, resume, routed, sta
 import { HttpError } from '../contract/http-error.ts';
 import type { RouteInfo } from '../contract/types.ts';
 import { type BodyOutcome, readRouteBody } from './body.ts';
+import { stageBodyRefusal, stopRefusedPipeline } from './body-refusal.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { RequestContextRecord, runStage, ValidatedContextRecord, watchCompletion } from './hooks.ts';
@@ -102,6 +103,9 @@ function bodyRead(exchange: Exchange, outcome: BodyOutcome): void {
       return;
     case 'refused':
       exchange.closeConnection = outcome.close;
+      if (outcome.close) {
+        stageBodyRefusal(exchange.req);
+      }
       fail(exchange, outcome.error, false);
       return;
     case 'aborted':
@@ -110,6 +114,9 @@ function bodyRead(exchange: Exchange, outcome: BodyOutcome): void {
       event('refuse.body_aborted');
       exchange.res.destroy();
       destroyed();
+      return;
+    case 'failed':
+      fail(exchange, outcome.error, false);
       return;
   }
 }
@@ -124,26 +131,16 @@ function readStage(exchange: Exchange): void {
     return;
   }
   exchange.stage = next(exchange.stage, 'req.body');
-  const outcome = readRouteBody(req, route.bodyLimit);
-  if (outcome instanceof Promise) {
-    outcome.then(
-      (value: BodyOutcome) => {
-        resume(exchange.diag);
-        bodyRead(exchange, value);
-        leave(exchange.diag);
-      },
-      (error: unknown) => {
-        resume(exchange.diag);
-        fail(exchange, error, false);
-        leave(exchange.diag);
-      },
-    );
-  } else {
+  const outcome = readRouteBody(req, route.bodyLimit, (value: BodyOutcome) => bodyRead(exchange, value));
+  if (outcome !== null) {
     bodyRead(exchange, outcome);
   }
 }
 
 export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res: ServerResponse): void {
+  if (stopRefusedPipeline(req)) {
+    return;
+  }
   const diag = begin(req, res);
   const exchange = preRoute(runtime, req, res, diag);
   if (exchange === null) {

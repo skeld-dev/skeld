@@ -13,7 +13,7 @@ export interface Series {
   readonly label: string;
   readonly name: string;
   readonly always: boolean;
-  readonly histogram: RecordableHistogram;
+  histogram: RecordableHistogram | null;
   readonly pending: number[];
   n: number;
   cn: number;
@@ -73,12 +73,15 @@ const allSeries: Series[] = [];
 const entries = new Map<string, NameEntry>();
 const window = { syncSelfNs: 0, sampledN: 0, sampledInclNs: 0 };
 
+// createHistogram costs 40 to 65 µs; a boot series holds one value per route, so it gets one only if its buffer fills.
+const isBoot = (name: string): boolean => name.startsWith('boot.');
+
 function createSeries(label: string, name: string, always: boolean): Series {
   const created: Series = {
     label,
     name,
     always,
-    histogram: createHistogram(HISTOGRAM_RANGE),
+    histogram: isBoot(name) ? null : createHistogram(HISTOGRAM_RANGE),
     pending: [],
     n: 0,
     cn: 0,
@@ -124,7 +127,9 @@ for (const name of ALWAYS_PRESENT) {
 export const standaloneSeries = (label: string, always: boolean): Series => createSeries(label, label, always);
 
 function flushPending(series: Series): void {
-  const { histogram, pending } = series;
+  const { pending } = series;
+  series.histogram ??= createHistogram(HISTOGRAM_RANGE);
+  const { histogram } = series;
   for (const value of pending) {
     histogram.record(value);
   }
@@ -188,18 +193,34 @@ export function takeSyncSelfNs(): number {
   return value;
 }
 
-function figures(series: Series): SpanFigures {
+function pendingPercentile(sorted: readonly number[], percentile: number): number {
+  return sorted[Math.max(0, Math.ceil((percentile / 100) * sorted.length) - 1)] ?? 0;
+}
+
+function percentiles(series: Series): { p50: number; p95: number } {
+  if (series.sampled === 0) {
+    return { p50: 0, p95: 0 };
+  }
+  if (series.histogram === null) {
+    const sorted = series.pending.toSorted((a, b) => a - b);
+    series.pending.length = 0;
+    return { p50: toMicros(pendingPercentile(sorted, 50)), p95: toMicros(pendingPercentile(sorted, 95)) };
+  }
   flushPending(series);
   const { histogram } = series;
-  const empty = series.sampled === 0;
+  return { p50: toMicros(histogram.percentile(50)), p95: toMicros(histogram.percentile(95)) };
+}
+
+function figures(series: Series): SpanFigures {
+  const { p50, p95 } = percentiles(series);
   return {
     n: series.n,
     cn: series.cn,
     incl: toMicros(series.incl),
     self: toMicros(series.self),
     cpu: series.cpu,
-    p50: empty ? 0 : toMicros(histogram.percentile(50)),
-    p95: empty ? 0 : toMicros(histogram.percentile(95)),
+    p50,
+    p95,
     max: toMicros(series.maxNs),
   };
 }
@@ -222,7 +243,7 @@ export function takeSpanFigures(): Record<string, SpanFigures> {
     series.maxNs = 0;
     if (series.sampled > 0) {
       series.sampled = 0;
-      series.histogram.reset();
+      series.histogram?.reset();
     }
   }
   return spans;

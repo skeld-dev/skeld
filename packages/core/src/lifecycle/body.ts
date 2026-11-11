@@ -1,4 +1,4 @@
-import { current, event, leave, resume } from '#diag';
+import { event } from '#diag';
 import type { IncomingMessage } from 'node:http';
 import { HttpError } from '../contract/http-error.ts';
 import { readBody } from '../request/body.ts';
@@ -9,7 +9,8 @@ import type { BodyReadResult } from '../request/types.ts';
 export type BodyOutcome =
   | { readonly kind: 'value'; readonly value: unknown }
   | { readonly kind: 'refused'; readonly error: HttpError; readonly close: boolean }
-  | { readonly kind: 'aborted' };
+  | { readonly kind: 'aborted' }
+  | { readonly kind: 'failed'; readonly error: unknown };
 
 const JSON_TYPE = 'application/json';
 const TEXT_TYPE = 'text/plain';
@@ -48,7 +49,11 @@ function decode(result: BodyReadResult, type: string, limit: number): BodyOutcom
   }
 }
 
-export function readRouteBody(req: IncomingMessage, limit: number): BodyOutcome | Promise<BodyOutcome> {
+export function readRouteBody(
+  req: IncomingMessage,
+  limit: number,
+  done: (outcome: BodyOutcome) => void,
+): BodyOutcome | null {
   const declared = req.headers['content-length'];
   const contentLength = declared === undefined ? null : Number.parseInt(declared, 10);
   if ((contentLength === null && req.headers['transfer-encoding'] === undefined) || contentLength === 0) {
@@ -74,11 +79,14 @@ export function readRouteBody(req: IncomingMessage, limit: number): BodyOutcome 
       `Unsupported media type ${type}; send application/json or text/plain`,
     );
   }
-  const slot = current();
-  return readBody(req, limit, contentLength).then((result) => {
-    resume(slot);
-    const outcome = decode(result, type, limit);
-    leave(slot);
-    return outcome;
+  const early = readBody(req, limit, contentLength, (result) => {
+    let outcome: BodyOutcome;
+    try {
+      outcome = decode(result, type, limit);
+    } catch (error) {
+      outcome = { kind: 'failed', error };
+    }
+    done(outcome);
   });
+  return early === null ? null : decode(early, type, limit);
 }

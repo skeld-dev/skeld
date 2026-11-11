@@ -54,7 +54,7 @@ export interface CompletedContext {
 | `status`    | The status written.                                                  |
 | `completed` | Whether the whole response was written before the connection closed. |
 
-Source: `packages/core/src/server/types.ts:167`
+Source: `packages/core/src/server/types.ts:173`
 
 ## ErrorContext
 
@@ -78,7 +78,7 @@ export interface ErrorContext {
 | `headers` | The raw request headers.                                        |
 | `signal`  | Aborted when the connection closes or the request is destroyed. |
 
-Source: `packages/core/src/server/types.ts:181`
+Source: `packages/core/src/server/types.ts:187`
 
 ## ErrorHandler
 
@@ -90,7 +90,7 @@ The nearest scope's handler runs first and a value it throws goes to the parent'
 export type ErrorHandler = (error: unknown, context: ErrorContext) => HttpError | Promise<HttpError>;
 ```
 
-Source: `packages/core/src/server/types.ts:224`
+Source: `packages/core/src/server/types.ts:230`
 
 ## Handler
 
@@ -124,7 +124,7 @@ The hook names `addHook` accepts.
 export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'onError';
 ```
 
-Source: `packages/core/src/server/types.ts:227`
+Source: `packages/core/src/server/types.ts:233`
 
 ## ListeningAddress
 
@@ -144,7 +144,7 @@ export interface ListeningAddress {
 | `port` | The bound port.                                                           |
 | `url`  | The base URL, as in `http://127.0.0.1:3000`; an IPv6 host is in brackets. |
 
-Source: `packages/core/src/server/types.ts:282`
+Source: `packages/core/src/server/types.ts:288`
 
 ## ListenOptions
 
@@ -162,7 +162,7 @@ export interface ListenOptions {
 | `port` | The TCP port, from 0 to 65535; 0 picks a free one.                     |
 | `host` | The address to bind; an empty string is refused (default `127.0.0.1`). |
 
-Source: `packages/core/src/server/types.ts:271`
+Source: `packages/core/src/server/types.ts:277`
 
 ## OnErrorHook
 
@@ -174,7 +174,7 @@ It cannot change the reply; a throw is written to stderr.
 export type OnErrorHook = (context: ErrorContext, error: unknown) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:218`
+Source: `packages/core/src/server/types.ts:224`
 
 ## OnRequestHook
 
@@ -186,7 +186,7 @@ A hook run after routing and before the body is read.
 export type OnRequestHook = (context: RequestContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:198`
+Source: `packages/core/src/server/types.ts:204`
 
 ## OnResponseHook
 
@@ -198,7 +198,7 @@ A throw is written to stderr and changes nothing; it does not run after a hook r
 export type OnResponseHook = (context: CompletedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:213`
+Source: `packages/core/src/server/types.ts:219`
 
 ## OnSendHook
 
@@ -211,7 +211,7 @@ export type OnSendHook = (
 ) => string | Uint8Array | undefined | Promise<string | Uint8Array | undefined>;
 ```
 
-Source: `packages/core/src/server/types.ts:205`
+Source: `packages/core/src/server/types.ts:211`
 
 ## OutgoingHeaders
 
@@ -233,7 +233,7 @@ A function that declares routes, hooks and plugins on the child scope it is give
 export type Plugin = (scope: Scope) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:262`
+Source: `packages/core/src/server/types.ts:268`
 
 ## PreHandlerHook
 
@@ -245,7 +245,7 @@ It never runs for a refused request; `context.send` replies and skips the handle
 export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:203`
+Source: `packages/core/src/server/types.ts:209`
 
 ## RawHeaders
 
@@ -293,7 +293,7 @@ export interface RegisterOptions {
 | ------ | ------------------------------------------------------------------------------------------------------ |
 | `name` | The plugin's name in boot errors (default the function's name, or `plugin #<n>` for an anonymous one). |
 
-Source: `packages/core/src/server/types.ts:265`
+Source: `packages/core/src/server/types.ts:271`
 
 ## RequestContext
 
@@ -349,13 +349,13 @@ export interface ResponseContext {
 | `status`    | The status being written.                                       |
 | `setHeader` | Sets a header on the response.                                  |
 
-Source: `packages/core/src/server/types.ts:149`
+Source: `packages/core/src/server/types.ts:152`
 
 ## RouteReply
 
 What a handler returns: a declared status, its body and optional headers.
 
-Keys the response schema does not declare are not written.
+Keys the response schema does not declare are not written; on an error response the engine writes, only the CORS response headers and `vary` in `headers` are kept.
 
 ```ts
 export type RouteReply<R extends RouteDefinition> = {
@@ -439,7 +439,7 @@ export interface Scope {
 | `setErrorHandler` | Sets this scope's error handler.                                                                              |
 | `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                   |
 
-Source: `packages/core/src/server/types.ts:233`
+Source: `packages/core/src/server/types.ts:239`
 
 ## Server
 
@@ -457,7 +457,7 @@ export interface Server extends Scope {
 | `listen` | Runs the plugins, checks and compiles every route, then listens; resolves with the bound address. |
 | `close`  | Stops accepting connections and resolves once every open one has closed.                          |
 
-Source: `packages/core/src/server/types.ts:292`
+Source: `packages/core/src/server/types.ts:298`
 
 ## ServerOptions
 
@@ -509,7 +509,7 @@ export interface ValidatedContext extends RequestContext {
 | `query`  | The validated query parameters. |
 | `body`   | The validated body.             |
 
-Source: `packages/core/src/server/types.ts:139`
+Source: `packages/core/src/server/types.ts:142`
 
 ## createServer
 

@@ -17,6 +17,9 @@ export interface RequestValidators {
   readonly body: PartValidator | null;
 }
 
-export type Serializer = (body: unknown) => string;
+export interface Serializer {
+  readonly write: (body: unknown) => string | number;
+  readonly refusals: readonly string[];
+}
 
 export type ResponseSerializers = ReadonlyMap<number, Serializer | null>;

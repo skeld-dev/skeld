@@ -1,9 +1,8 @@
-import build from 'fast-json-stringify';
 import { errorBodySchema } from '../contract/contract.ts';
 import type { RouteDefinition } from '../contract/types.ts';
-import { exportNode } from '../schema/export.ts';
 import type { Schema } from '../schema/types.ts';
 import { SchemaCompileError } from './compile-error.ts';
+import { generateSerializer } from './generate.ts';
 import type { ResponseSerializers, Serializer } from './types.ts';
 
 const serializers = new WeakMap<Schema, Serializer>();
@@ -15,8 +14,11 @@ function compileSerializer(schema: Schema, status: number | null): Serializer {
   }
   let serializer: Serializer;
   try {
-    serializer = build(exportNode(schema));
+    serializer = generateSerializer(schema);
   } catch (cause) {
+    if (cause instanceof EvalError) {
+      throw cause;
+    }
     throw new SchemaCompileError('response', status, cause);
   }
   serializers.set(schema, serializer);

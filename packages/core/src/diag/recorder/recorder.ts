@@ -14,6 +14,7 @@ import type {
   Leave,
   Limit,
   Listening,
+  Mark,
   Next,
   Open,
   Payload,
@@ -33,6 +34,7 @@ import { raise } from './events.ts';
 import { claimFolder, writeRunFile } from './files.ts';
 import { finishDestroyed, finishWrote } from './finish.ts';
 import { unwatchFloor, watchFloor } from './floor.ts';
+import { closeBoot, markBoot, openBoot } from './ledger.ts';
 import { limitState, observe } from './limits.ts';
 import { startProcessWatch, stopProcessWatch } from './process.ts';
 import { runHeader } from './run.ts';
@@ -134,11 +136,13 @@ export const open: Open = (options) => {
   bootFigures.startedAt = Date.now();
   claimFolder(settings.dir, runFile(options));
   process.on('exit', writeFinal);
+  openBoot();
 };
 
 export const declare: Declare = declareRoute;
 
 export const listening: Listening = (server) => {
+  closeBoot();
   state.listening = true;
   run.status = 'listening';
   run.listeningAt = Date.now();
@@ -153,6 +157,8 @@ export const listening: Listening = (server) => {
     writeRunFile(runFile(run.options));
   }
 };
+
+export const mark: Mark = markBoot;
 
 export const closed: Closed = () => {
   if (run.timer !== null) {

@@ -5,6 +5,7 @@ import { failingNames, takeEventFigures, takeJournal } from './events.ts';
 import { appendJournal, appendSnapshot } from './files.ts';
 import { totalSeries, writeGauge } from './finish.ts';
 import { settleFloor } from './floor.ts';
+import { bootLedger } from './ledger.ts';
 import { takeLimitFigures } from './limits.ts';
 import { takeProcessFigures } from './process.ts';
 import { routeList } from './routes.ts';
@@ -40,6 +41,7 @@ function takeGauges(socketsOpen: number): Record<string, unknown> {
   };
   gauges['boot.ready_ms'] = bootFigures.readyMs;
   gauges['boot.routes'] = routeList.length;
+  gauges['boot.stages'] = bootLedger();
   gauges['close.inflight'] = gaugeState.closeInflight;
   return gauges;
 }

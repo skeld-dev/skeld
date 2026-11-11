@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { cpus, loadavg, release, totalmem, type } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +14,6 @@ export interface Packages {
   readonly darkstartResolvedFrom: string;
   readonly fastify: string;
   readonly autocannon: string;
-  readonly fastJsonStringify: string;
   readonly hono: string;
   readonly honoNodeServer: string;
   readonly express: string;
@@ -96,15 +94,11 @@ export function resolvePackages(): Packages {
   const honoNodeServerFile = resolveFile('@hono/node-server', () => import.meta.resolve('@hono/node-server'));
   const expressFile = resolveFile('express', () => import.meta.resolve('express'));
   const lightFile = resolveFile('@lightstart/server', () => import.meta.resolve('@lightstart/server'));
-  const fastJsonStringifyFile = resolveFile('fast-json-stringify', () =>
-    createRequire(serverFile).resolve('fast-json-stringify'),
-  );
   return {
     darkstart: versionOf('@darkstart/core', manifestFile),
     darkstartResolvedFrom: displayPath(dirname(serverFile)),
     fastify: versionOf('fastify', fastifyFile),
     autocannon: versionOf('autocannon', autocannonFile),
-    fastJsonStringify: versionOf('fast-json-stringify', fastJsonStringifyFile),
     hono: versionOf('hono', honoFile),
     honoNodeServer: versionOf('@hono/node-server', honoNodeServerFile),
     express: versionOf('express', expressFile),
@@ -220,7 +214,6 @@ export function captureSoftware(
     uncommittedChanges: porcelain === null ? null : porcelain.trim() !== '',
     fastify: packages.fastify,
     autocannon: packages.autocannon,
-    fastJsonStringify: packages.fastJsonStringify,
     hono: packages.hono,
     honoNodeServer: packages.honoNodeServer,
     express: packages.express,

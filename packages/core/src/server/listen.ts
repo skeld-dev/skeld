@@ -5,6 +5,17 @@ import { closed, end, event, listening, start, track } from '#diag';
 import { BootError } from './boot-error.ts';
 import type { HttpServerHandle, ListeningAddress, ResolvedServerOptions } from './types.ts';
 
+const CHECKS_PER_HEADERS_TIMEOUT = 10;
+const MIN_CHECKING_INTERVAL_MS = 1_000;
+const MAX_CHECKING_INTERVAL_MS = 30_000;
+
+function connectionsCheckingInterval(headersTimeout: number): number {
+  return Math.min(
+    MAX_CHECKING_INTERVAL_MS,
+    Math.max(MIN_CHECKING_INTERVAL_MS, Math.floor(headersTimeout / CHECKS_PER_HEADERS_TIMEOUT)),
+  );
+}
+
 function hostPort(host: string, port: number): string {
   return host.includes(':') ? `[${host}]:${port}` : `${host}:${port}`;
 }
@@ -32,6 +43,7 @@ export function createHttpServer(options: ResolvedServerOptions, onRequest: Requ
     {
       requestTimeout: options.requestTimeout,
       headersTimeout: options.headersTimeout,
+      connectionsCheckingInterval: connectionsCheckingInterval(options.headersTimeout),
       keepAliveTimeout: options.keepAliveTimeout,
       maxHeaderSize: options.maxHeaderSize,
       insecureHTTPParser: false,

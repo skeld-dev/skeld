@@ -9,7 +9,7 @@ export const keepLinePercent = 100;
 
 export const defaultPipelining = 1;
 export const defaultWarmUpSeconds = 3;
-export const defaultDurationSeconds = 5;
+export const defaultDurationSeconds = 10;
 export const defaultRounds = 3;
 export const pipeliningRange = { min: 1, max: 100 } as const;
 export const durationRange = { min: 1, max: 600 } as const;

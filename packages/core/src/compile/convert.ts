@@ -10,7 +10,7 @@ interface ProjectedKey {
 }
 
 const INTEGER_LITERAL = /^-?(0|[1-9][0-9]*)$/;
-// RFC 8259 §6 number grammar (ADR-011).
+// RFC 8259 §6 number grammar.
 const NUMBER_LITERAL = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$/;
 
 function toInteger(text: string): number | null {

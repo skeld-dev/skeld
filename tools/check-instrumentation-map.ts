@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { join, posix, relative, resolve } from 'node:path';
 import type { SyntaxKind } from 'typescript/unstable/ast';
 
 type ScannerModule = typeof import('typescript/unstable/ast/scanner');
@@ -21,6 +21,7 @@ interface Call {
 }
 
 interface SourceFile {
+  readonly tokens: readonly Token[];
   readonly declared: ReadonlySet<string>;
   readonly literals: ReadonlySet<string>;
 }
@@ -86,6 +87,7 @@ const ruleTitles: Readonly<Record<string, string>> = {
 };
 const namePosition: Readonly<Record<string, number>> = { start: 0, track: 0, count: 0, event: 0, limit: 0, next: 1 };
 const declarationKeywords = new Set(['function', 'class', 'const', 'let', 'var']);
+const topLevelStarts = new Set([...declarationKeywords, 'export', 'import', 'interface', 'type']);
 const memberPrefixes = new Set(['{', ',', ';', '}']);
 const modifiers = new Set([
   'async',
@@ -256,23 +258,25 @@ function closing(tokens: readonly Token[], open: number): number {
   return tokens.length;
 }
 
-function argumentAt(tokens: readonly Token[], open: number, position: number): readonly Token[] {
+function entries(tokens: readonly Token[], open: number): Token[][] {
   const end = closing(tokens, open);
+  const list: Token[][] = [];
   let start = open + 1;
   let index = start;
-  let seen = 0;
   while (index < end) {
     const token = tokens[index];
     if (is(token, ',')) {
-      if (seen === position) {
-        return tokens.slice(start, index);
-      }
-      seen++;
+      list.push(tokens.slice(start, index));
       start = index + 1;
     }
     index = opens(token) ? closing(tokens, index) + 1 : index + 1;
   }
-  return seen === position ? tokens.slice(start, end) : [];
+  list.push(tokens.slice(start, end));
+  return list;
+}
+
+function argumentAt(tokens: readonly Token[], open: number, position: number): readonly Token[] {
+  return entries(tokens, open)[position] ?? [];
 }
 
 function specifiers(clause: readonly Token[], open: number): Token[][] {
@@ -442,11 +446,160 @@ function readSource(src: string, tokenizer: Tokenize): Source {
     const tokens = tokenizer(readFileSync(join(src, path), 'utf8'));
     scanCalls(tokens, path, calls, dynamic);
     files.set(path, {
+      tokens,
       declared: scanDeclarations(tokens),
       literals: new Set(tokens.filter((token) => token.type === 'string').map((token) => token.text)),
     });
   }
   return { files, calls, dynamic };
+}
+
+function depthsOf(tokens: readonly Token[]): number[] {
+  const depths: number[] = [];
+  let depth = 0;
+  for (const token of tokens) {
+    if (closes(token)) {
+      depth--;
+    }
+    depths.push(depth);
+    if (opens(token)) {
+      depth++;
+    }
+  }
+  return depths;
+}
+
+function returnedLiteral(tokens: readonly Token[], name: string): number | undefined {
+  const depths = depthsOf(tokens);
+  const start = tokens.findIndex(
+    (token, index) => depths[index] === 0 && is(token, 'function') && is(tokens[index + 1], name),
+  );
+  if (start === -1) {
+    return undefined;
+  }
+  let end = start + 2;
+  while (end < tokens.length && !(depths[end] === 0 && topLevelStarts.has(tokens[end]?.text ?? ''))) {
+    end++;
+  }
+  const returns = tokens.slice(start, end).flatMap((token, index) => (is(token, 'return') ? [start + index] : []));
+  const [only] = returns;
+  return returns.length === 1 && only !== undefined && is(tokens[only + 1], '{') ? only + 1 : undefined;
+}
+
+function literalSource(
+  path: string,
+  name: string,
+  files: ReadonlyMap<string, SourceFile>,
+): { path: string; open: number } | undefined {
+  const tokens = files.get(path)?.tokens ?? [];
+  const local = returnedLiteral(tokens, name);
+  if (local !== undefined) {
+    return { path, open: local };
+  }
+  for (const [index, token] of tokens.entries()) {
+    if (!is(token, 'import') || is(tokens[index + 1], '(') || is(tokens[index + 1], '.')) {
+      continue;
+    }
+    const end = staticImportEnd(tokens, index);
+    const target = tokens[end + 1];
+    if (!is(tokens[end], 'from') || target?.type !== 'string' || !target.text.startsWith('.')) {
+      continue;
+    }
+    const bindings = new Map<string, string>();
+    importClause(tokens.slice(index + 1, end), bindings, new Set());
+    const imported = bindings.get(name);
+    if (imported !== undefined) {
+      const from = posix.normalize(posix.join(posix.dirname(path), target.text));
+      const open = returnedLiteral(files.get(from)?.tokens ?? [], imported);
+      return open === undefined ? undefined : { path: from, open };
+    }
+  }
+  return undefined;
+}
+
+function calleeOf(value: readonly Token[], tokens: readonly Token[]): string | undefined {
+  const [first, second] = value;
+  if (first?.type !== 'word') {
+    return undefined;
+  }
+  if (is(second, '(') && closing(value, 1) === value.length - 1) {
+    return first.text;
+  }
+  const bound = tokens.flatMap((token, index) =>
+    value.length === 1 &&
+    is(token, first.text) &&
+    is(tokens[index - 1], 'const') &&
+    is(tokens[index + 1], '=') &&
+    tokens[index + 2]?.type === 'word' &&
+    is(tokens[index + 3], '(') &&
+    is(tokens[closing(tokens, index + 3) + 1], ';')
+      ? [tokens[index + 2]?.text ?? '']
+      : [],
+  );
+  return bound.length === 1 ? bound[0] : undefined;
+}
+
+function addPaths(
+  at: { path: string; open: number },
+  prefix: string,
+  files: ReadonlyMap<string, SourceFile>,
+  found: { names: Set<string>; seen: Set<string> },
+): void {
+  const tokens = files.get(at.path)?.tokens ?? [];
+  const key = `${at.path}:${at.open}`;
+  if (found.seen.has(key)) {
+    return;
+  }
+  found.seen.add(key);
+  for (const entry of entries(tokens, at.open)) {
+    const [head, colon] = entry;
+    const shorthand = entry.length === 1 && head?.type === 'word';
+    if (head === undefined || (head.type !== 'word' && head.type !== 'string') || (!shorthand && !is(colon, ':'))) {
+      continue;
+    }
+    const name = prefix === '' ? head.text : `${prefix}.${head.text}`;
+    found.names.add(name);
+    const value = shorthand ? entry : entry.slice(2);
+    const [open] = value;
+    const callee = calleeOf(value, tokens);
+    const next =
+      open !== undefined && is(open, '{') && closing(value, 0) === value.length - 1
+        ? { path: at.path, open: tokens.indexOf(open) }
+        : callee === undefined
+          ? undefined
+          : literalSource(at.path, callee, files);
+    if (next !== undefined) {
+      addPaths(next, name, files, found);
+    }
+  }
+}
+
+function recorderNames(files: ReadonlyMap<string, SourceFile>): Set<string> {
+  const found = { names: new Set<string>(), seen: new Set<string>() };
+  for (const [path, file] of files) {
+    if (!path.startsWith('diag/')) {
+      continue;
+    }
+    for (const literal of file.literals) {
+      found.names.add(literal);
+    }
+    file.tokens.forEach((token, index) => {
+      const composed = token.type === 'head' ? /^`([a-z][a-z0-9_.]*)\{\$\{$/.exec(token.text)?.[1] : undefined;
+      if (composed !== undefined && file.tokens[closing(file.tokens, index)]?.text === '}}`') {
+        found.names.add(composed);
+      }
+      const stringified =
+        is(token, 'JSON') &&
+        is(file.tokens[index + 1], '.') &&
+        is(file.tokens[index + 2], 'stringify') &&
+        is(file.tokens[index + 3], '(') &&
+        is(file.tokens[index + 4], '{');
+      if (stringified) {
+        addPaths({ path, open: index + 4 }, '', files, found);
+      }
+    });
+  }
+  return found.names;
 }
 
 function cells(line: string): string[] {
@@ -640,7 +793,7 @@ function checkCodeRow(
 function checkRecorderRow(
   row: Row,
   derived: readonly string[],
-  context: { source: Source; literals: ReadonlySet<string>; names: ReadonlySet<string> },
+  context: { source: Source; emitted: ReadonlySet<string>; names: ReadonlySet<string> },
   mapFile: string,
   problems: Problem[],
 ): void {
@@ -652,15 +805,24 @@ function checkRecorderRow(
       message: `${row.name} is a recorder or derived row but called from engine code`,
     });
   }
+  const emitted = context.emitted.has(row.name);
+  if (row.status === 'planned' && emitted) {
+    problems.push({
+      rule: 'R9',
+      file: mapFile,
+      line: row.line,
+      message: `${row.name} is planned but the recorder emits it`,
+    });
+  }
   if (row.status !== 'built') {
     return;
   }
-  if (!context.literals.has(row.name)) {
+  if (!emitted) {
     problems.push({
       rule: 'R8',
       file: mapFile,
       line: row.line,
-      message: `${row.name} is built but is no string literal under diag/`,
+      message: `${row.name} is built but the recorder under diag/ emits no such name`,
     });
   }
   for (const hook of derived.filter((each) => !context.names.has(each))) {
@@ -688,9 +850,7 @@ function checkRows(map: MapRead, source: Source, mapFile: string, problems: Prob
       });
     }
   }
-  const literals = new Set(
-    [...source.files].filter(([path]) => path.startsWith('diag/')).flatMap(([, file]) => [...file.literals]),
-  );
+  const emitted = recorderNames(source.files);
   const names = new Set(firstLine.keys());
   for (const row of map.rows) {
     if (row.anchor?.kind === 'code' && row.status !== undefined) {
@@ -699,7 +859,7 @@ function checkRows(map: MapRead, source: Source, mapFile: string, problems: Prob
       checkRecorderRow(
         row,
         row.anchor.kind === 'derived' ? row.anchor.hooks : [],
-        { source, literals, names },
+        { source, emitted, names },
         mapFile,
         problems,
       );

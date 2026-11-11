@@ -26,7 +26,7 @@ Options:
   --pipelining <n>   requests in flight per connection, 1 to 100 (default 1;
                      10 gives the fastify.dev profile, which gets no verdict)
   --warm-up <s>      discarded warm-up seconds per route, 1 to 600 (default 3)
-  --duration <s>     measured seconds per route, 1 to 600 (default 5)
+  --duration <s>     measured seconds per route, 1 to 600 (default 10)
   --rounds <n>       measured rounds per server and route, 1 to 50 (default 3)
   --servers <list>   darkstart,fastify,node-http,hono,express,light
                      (default darkstart,fastify,node-http)

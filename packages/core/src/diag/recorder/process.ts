@@ -43,7 +43,7 @@ const watch: {
   observer: null,
 };
 
-function gcKind(entry: PerformanceEntry): string {
+export function gcKind(entry: PerformanceEntry): string {
   const detail: unknown = Reflect.get(entry, 'detail');
   const kind: unknown = typeof detail === 'object' && detail !== null ? Reflect.get(detail, 'kind') : undefined;
   return (typeof kind === 'number' ? GC_KINDS.get(kind) : undefined) ?? 'other';
