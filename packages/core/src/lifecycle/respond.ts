@@ -1,8 +1,9 @@
 // Does:  Serializes the handler's reply for its declared status, runs the onSend hooks and writes it.
 // Holds: Only the serializer's text is written; a schema mismatch becomes the fixed 500 and no hook replaces it.
 
-import { contain, end, event, header, next, payload, start, wrote } from '#diag';
+import { contain, end, event, next, payload, start, wrote } from '#diag';
 import type { Serializer } from '../compile/types.ts';
+import { setAuthorHeaders } from './author-header.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { ResponseContextRecord, runStage } from './hooks.ts';
@@ -97,10 +98,7 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
     }
     serializer = declared;
     if (reply.headers !== undefined) {
-      for (const [name, value] of Object.entries(reply.headers)) {
-        header(name, value);
-        res.setHeader(name, value);
-      }
+      setAuthorHeaders(res, reply.headers);
     }
   } catch (error) {
     fail(exchange, error, true);

@@ -16,6 +16,7 @@ const scripts = [
   'json-depth.ts',
   'onsend-observe.ts',
   'client-response-limit.ts',
+  'reserved-headers.ts',
 ];
 
 let failed = 0;

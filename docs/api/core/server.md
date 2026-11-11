@@ -32,6 +32,20 @@ export interface RouteInfo {
 
 Source: `packages/core/src/contract/types.ts:105`
 
+## AuthorHeaderName
+
+A header name an author may set: the name itself, or a message type naming it when it is a `ReservedHeaderName`.
+
+```ts
+export type AuthorHeaderName<N extends string> = N extends unknown
+  ? Lowercase<N> extends ReservedHeaderName
+    ? `${N} is reserved for the engine`
+    : N
+  : never;
+```
+
+Source: `packages/core/src/server/types.ts:71`
+
 ## CompletedContext
 
 What an `onResponse` hook receives once the response is done or its connection closed.
@@ -54,7 +68,7 @@ export interface CompletedContext {
 | `status`    | The status written.                                                  |
 | `completed` | Whether the whole response was written before the connection closed. |
 
-Source: `packages/core/src/server/types.ts:176`
+Source: `packages/core/src/server/types.ts:206`
 
 ## ErrorContext
 
@@ -78,7 +92,7 @@ export interface ErrorContext {
 | `headers` | The raw request headers.                                        |
 | `signal`  | Aborted when the connection closes or the request is destroyed. |
 
-Source: `packages/core/src/server/types.ts:190`
+Source: `packages/core/src/server/types.ts:220`
 
 ## ErrorHandler
 
@@ -90,7 +104,7 @@ The nearest scope's handler runs first and a value it throws goes to the parent'
 export type ErrorHandler = (error: unknown, context: ErrorContext) => HttpError | Promise<HttpError>;
 ```
 
-Source: `packages/core/src/server/types.ts:233`
+Source: `packages/core/src/server/types.ts:263`
 
 ## Handler
 
@@ -104,7 +118,7 @@ export type Handler<C extends ContractRoutes, K extends keyof C> = (
 ) => RouteReply<C[K]> | Promise<RouteReply<C[K]>>;
 ```
 
-Source: `packages/core/src/server/types.ts:94`
+Source: `packages/core/src/server/types.ts:124`
 
 ## Handlers
 
@@ -114,7 +128,7 @@ One handler per route name of a contract.
 export type Handlers<C extends ContractRoutes> = { readonly [K in keyof C]: Handler<C, K> };
 ```
 
-Source: `packages/core/src/server/types.ts:99`
+Source: `packages/core/src/server/types.ts:129`
 
 ## HookName
 
@@ -124,7 +138,7 @@ The hook names `addHook` accepts.
 export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'onError';
 ```
 
-Source: `packages/core/src/server/types.ts:236`
+Source: `packages/core/src/server/types.ts:266`
 
 ## ListeningAddress
 
@@ -144,7 +158,7 @@ export interface ListeningAddress {
 | `port` | The bound port.                                                           |
 | `url`  | The base URL, as in `http://127.0.0.1:3000`; an IPv6 host is in brackets. |
 
-Source: `packages/core/src/server/types.ts:291`
+Source: `packages/core/src/server/types.ts:321`
 
 ## ListenOptions
 
@@ -162,7 +176,7 @@ export interface ListenOptions {
 | `port` | The TCP port, from 0 to 65535; 0 picks a free one.                     |
 | `host` | The address to bind; an empty string is refused (default `127.0.0.1`). |
 
-Source: `packages/core/src/server/types.ts:280`
+Source: `packages/core/src/server/types.ts:310`
 
 ## OnErrorHook
 
@@ -174,7 +188,7 @@ It cannot change the reply; a throw is written to stderr.
 export type OnErrorHook = (context: ErrorContext, error: unknown) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:227`
+Source: `packages/core/src/server/types.ts:257`
 
 ## OnRequestHook
 
@@ -186,7 +200,7 @@ A hook run after routing and before the body is read.
 export type OnRequestHook = (context: RequestContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:207`
+Source: `packages/core/src/server/types.ts:237`
 
 ## OnResponseHook
 
@@ -198,7 +212,7 @@ A throw is written to stderr and changes nothing; it does not run after a hook r
 export type OnResponseHook = (context: CompletedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:222`
+Source: `packages/core/src/server/types.ts:252`
 
 ## OnSendHook
 
@@ -210,19 +224,21 @@ Its return value is ignored; a throw goes to the error path.
 export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:217`
+Source: `packages/core/src/server/types.ts:247`
 
 ## OutgoingHeaders
 
 Response headers to set, by name.
 
+The engine owns `transfer-encoding`, `content-length`, `connection`, `keep-alive`, `proxy-connection`, `te`, `trailer` and `upgrade`: a lower-case key among them fails to compile, and one in any letter case at runtime is answered with the fixed 500.
+
 ```ts
-export interface OutgoingHeaders {
-  readonly [name: string]: string | number | readonly string[];
-}
+export type OutgoingHeaders = { readonly [name: string]: string | number | readonly string[] } & {
+  readonly [K in ReservedHeaderName]?: never;
+};
 ```
 
-Source: `packages/core/src/server/types.ts:60`
+Source: `packages/core/src/server/types.ts:81`
 
 ## Plugin
 
@@ -232,7 +248,7 @@ A function that declares routes, hooks and plugins on the child scope it is give
 export type Plugin = (scope: Scope) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:271`
+Source: `packages/core/src/server/types.ts:301`
 
 ## PreHandlerHook
 
@@ -244,7 +260,7 @@ It never runs for a refused request; `context.send` replies and skips the handle
 export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:212`
+Source: `packages/core/src/server/types.ts:242`
 
 ## RawHeaders
 
@@ -270,13 +286,13 @@ export interface RawReply {
 }
 ```
 
-| Field     | Summary                                                       |
-| --------- | ------------------------------------------------------------- |
-| `status`  | The HTTP status.                                              |
-| `headers` | Headers to set on the reply.                                  |
-| `payload` | The body, written as given; without it the reply has no body. |
+| Field     | Summary                                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------- |
+| `status`  | The HTTP status.                                                                                                     |
+| `headers` | Headers to set on the reply; a reserved name of `OutgoingHeaders` makes `send` throw `Error` before anything is set. |
+| `payload` | The body, written as given; without it the reply has no body.                                                        |
 
-Source: `packages/core/src/server/types.ts:111`
+Source: `packages/core/src/server/types.ts:141`
 
 ## RegisterOptions
 
@@ -292,7 +308,25 @@ export interface RegisterOptions {
 | ------ | ------------------------------------------------------------------------------------------------------ |
 | `name` | The plugin's name in boot errors (default the function's name, or `plugin #<n>` for an anonymous one). |
 
-Source: `packages/core/src/server/types.ts:274`
+Source: `packages/core/src/server/types.ts:304`
+
+## ReservedHeaderName
+
+A response header name the engine owns: a framing or connection field no author may set.
+
+```ts
+export type ReservedHeaderName =
+  | 'transfer-encoding'
+  | 'content-length'
+  | 'connection'
+  | 'keep-alive'
+  | 'proxy-connection'
+  | 'te'
+  | 'trailer'
+  | 'upgrade';
+```
+
+Source: `packages/core/src/server/types.ts:60`
 
 ## RequestContext
 
@@ -305,7 +339,7 @@ export interface RequestContext {
   readonly path: string;
   readonly headers: RawHeaders;
   readonly signal: AbortSignal;
-  setHeader(name: string, value: string | number | readonly string[]): void;
+  setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
   send(reply: RawReply): void;
 }
 ```
@@ -320,7 +354,7 @@ export interface RequestContext {
 | `setHeader` | Sets a header on the response.                                  |
 | `send`      | Replies at once; later hooks and the handler do not run.        |
 
-Source: `packages/core/src/server/types.ts:121`
+Source: `packages/core/src/server/types.ts:151`
 
 ## ResponseContext
 
@@ -334,7 +368,7 @@ export interface ResponseContext {
   readonly headers: RawHeaders;
   readonly signal: AbortSignal;
   readonly status: number;
-  setHeader(name: string, value: string | number | readonly string[]): void;
+  setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
 }
 ```
 
@@ -348,7 +382,7 @@ export interface ResponseContext {
 | `status`    | The status being written.                                       |
 | `setHeader` | Sets a header on the response.                                  |
 
-Source: `packages/core/src/server/types.ts:155`
+Source: `packages/core/src/server/types.ts:185`
 
 ## RouteReply
 
@@ -359,12 +393,21 @@ Keys the response schema does not declare are not written; on an error response 
 ```ts
 export type RouteReply<R extends RouteDefinition> = {
   [S in keyof R['responses']]: R['responses'][S] extends Schema
-    ? { readonly status: S; readonly body: Wire<R['responses'][S]>; readonly headers?: OutgoingHeaders }
-    : { readonly status: S; readonly headers?: OutgoingHeaders };
+    ? {
+        readonly status: S;
+        readonly body: Wire<R['responses'][S]>;
+        /** Headers to set on the reply; a reserved name of `OutgoingHeaders` is answered with the fixed 500. */
+        readonly headers?: OutgoingHeaders;
+      }
+    : {
+        readonly status: S;
+        /** Headers to set on the reply; a reserved name of `OutgoingHeaders` is answered with the fixed 500. */
+        readonly headers?: OutgoingHeaders;
+      };
 }[keyof R['responses']];
 ```
 
-Source: `packages/core/src/server/types.ts:84`
+Source: `packages/core/src/server/types.ts:105`
 
 ## RouteRequest
 
@@ -390,7 +433,7 @@ export interface RouteRequest<R extends RouteDefinition> {
 | `body`    | The parsed and validated body, with `secret` values wrapped in `Secret`.                          |
 | `signal`  | Aborted when the connection closes or the request is destroyed, to stop work no client waits for. |
 
-Source: `packages/core/src/server/types.ts:65`
+Source: `packages/core/src/server/types.ts:86`
 
 ## RoutesOptions
 
@@ -406,7 +449,7 @@ export interface RoutesOptions<C extends ContractRoutes> {
 | ------------ | ----------------------------------------------------------------------------- |
 | `bodyLimits` | Body limits in bytes by route name, each replacing `bodyLimit` for its route. |
 
-Source: `packages/core/src/server/types.ts:102`
+Source: `packages/core/src/server/types.ts:132`
 
 ## Scope
 
@@ -438,7 +481,7 @@ export interface Scope {
 | `setErrorHandler` | Sets this scope's error handler.                                                                              |
 | `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                   |
 
-Source: `packages/core/src/server/types.ts:242`
+Source: `packages/core/src/server/types.ts:272`
 
 ## Server
 
@@ -456,7 +499,7 @@ export interface Server extends Scope {
 | `listen` | Runs the plugins, checks and compiles every route, then listens; resolves with the bound address. |
 | `close`  | Stops accepting connections and resolves once every open one has closed.                          |
 
-Source: `packages/core/src/server/types.ts:301`
+Source: `packages/core/src/server/types.ts:331`
 
 ## ServerOptions
 
@@ -508,7 +551,7 @@ export interface ValidatedContext extends RequestContext {
 | `query`  | The validated query parameters. |
 | `body`   | The validated body.             |
 
-Source: `packages/core/src/server/types.ts:145`
+Source: `packages/core/src/server/types.ts:175`
 
 ## createServer
 
@@ -526,4 +569,4 @@ await server.listen({ port: 0 });
 await server.close();
 ```
 
-Source: `packages/core/src/server/server.ts:50`
+Source: `packages/core/src/server/server.ts:52`

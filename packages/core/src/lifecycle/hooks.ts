@@ -2,7 +2,7 @@
 // Holds: After a hook sends a reply, no later hook of the stage and no later stage runs.
 
 import type { IncomingMessage } from 'node:http';
-import { contain, end, event, header, leave, resume, type Slot, track, wrote } from '#diag';
+import { contain, end, event, leave, resume, type Slot, track, wrote } from '#diag';
 import type { RouteInfo } from '../contract/types.ts';
 import type {
   CompletedContext,
@@ -14,6 +14,7 @@ import type {
   ResponseContext,
   ValidatedContext,
 } from '../server/types.ts';
+import { setAuthorHeader, setAuthorHeaders } from './author-header.ts';
 import type { Exchange } from './exchange.ts';
 import { describeThrown, writeStderrLine } from './stderr.ts';
 
@@ -29,13 +30,10 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
     writeStderrLine(method, exchange.path, res.statusCode, exchange.route.info.name, ALREADY_SENT);
     throw error;
   }
-  end(exchange.stage);
   if (reply.headers !== undefined) {
-    for (const [name, value] of Object.entries(reply.headers)) {
-      header(name, value);
-      res.setHeader(name, value);
-    }
+    setAuthorHeaders(res, reply.headers);
   }
+  end(exchange.stage);
   if (exchange.closeConnection || exchange.runtime.isClosing()) {
     res.setHeader('connection', 'close');
   }
@@ -82,8 +80,7 @@ export class RequestContextRecord extends ErrorContextRecord implements RequestC
     super(exchange);
     const { res } = exchange;
     this.setHeader = (name, value) => {
-      header(name, value);
-      res.setHeader(name, value);
+      setAuthorHeader(res, name, value);
     };
     this.send = (reply) => {
       sendReply(exchange, reply);
@@ -113,8 +110,7 @@ export class ResponseContextRecord extends ErrorContextRecord implements Respons
     const { res } = exchange;
     this.status = status;
     this.setHeader = (name, value) => {
-      header(name, value);
-      res.setHeader(name, value);
+      setAuthorHeader(res, name, value);
     };
   }
 }

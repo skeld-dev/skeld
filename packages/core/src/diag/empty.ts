@@ -76,6 +76,7 @@ export type EventName =
   | 'err.serialize'
   | 'err.already_sent'
   | 'err.headers_sent'
+  | 'err.reserved_header'
   | 'close.forced'
   | 'client.error';
 export type LimitName =

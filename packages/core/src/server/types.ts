@@ -56,10 +56,31 @@ export interface RawHeaders {
   readonly [name: string]: string | readonly string[] | undefined;
 }
 
-/** Response headers to set, by name. */
-export interface OutgoingHeaders {
-  readonly [name: string]: string | number | readonly string[];
-}
+/** A response header name the engine owns: a framing or connection field no author may set. */
+export type ReservedHeaderName =
+  | 'transfer-encoding'
+  | 'content-length'
+  | 'connection'
+  | 'keep-alive'
+  | 'proxy-connection'
+  | 'te'
+  | 'trailer'
+  | 'upgrade';
+
+/** A header name an author may set: the name itself, or a message type naming it when it is a `ReservedHeaderName`. */
+export type AuthorHeaderName<N extends string> = N extends unknown
+  ? Lowercase<N> extends ReservedHeaderName
+    ? `${N} is reserved for the engine`
+    : N
+  : never;
+
+/**
+ * Response headers to set, by name.
+ * The engine owns `transfer-encoding`, `content-length`, `connection`, `keep-alive`, `proxy-connection`, `te`, `trailer` and `upgrade`: a lower-case key among them fails to compile, and one in any letter case at runtime is answered with the fixed 500.
+ */
+export type OutgoingHeaders = { readonly [name: string]: string | number | readonly string[] } & {
+  readonly [K in ReservedHeaderName]?: never;
+};
 
 /** What a handler receives: the route and its request parts, validated and typed by the contract. */
 export interface RouteRequest<R extends RouteDefinition> {
@@ -83,8 +104,17 @@ export interface RouteRequest<R extends RouteDefinition> {
  */
 export type RouteReply<R extends RouteDefinition> = {
   [S in keyof R['responses']]: R['responses'][S] extends Schema
-    ? { readonly status: S; readonly body: Wire<R['responses'][S]>; readonly headers?: OutgoingHeaders }
-    : { readonly status: S; readonly headers?: OutgoingHeaders };
+    ? {
+        readonly status: S;
+        readonly body: Wire<R['responses'][S]>;
+        /** Headers to set on the reply; a reserved name of `OutgoingHeaders` is answered with the fixed 500. */
+        readonly headers?: OutgoingHeaders;
+      }
+    : {
+        readonly status: S;
+        /** Headers to set on the reply; a reserved name of `OutgoingHeaders` is answered with the fixed 500. */
+        readonly headers?: OutgoingHeaders;
+      };
 }[keyof R['responses']];
 
 /**
@@ -111,7 +141,7 @@ export interface RoutesOptions<C extends ContractRoutes> {
 export interface RawReply {
   /** The HTTP status. */
   readonly status: number;
-  /** Headers to set on the reply. */
+  /** Headers to set on the reply; a reserved name of `OutgoingHeaders` makes `send` throw `Error` before anything is set. */
   readonly headers?: OutgoingHeaders;
   /** The body, written as given; without it the reply has no body. */
   readonly payload?: string | Uint8Array;
@@ -131,9 +161,9 @@ export interface RequestContext {
   readonly signal: AbortSignal;
   /**
    * Sets a header on the response.
-   * On an error response the engine writes, only the CORS response headers and `vary` are kept.
+   * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; on an error response the engine writes, only the CORS response headers and `vary` are kept.
    */
-  setHeader(name: string, value: string | number | readonly string[]): void;
+  setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
   /**
    * Replies at once; later hooks and the handler do not run.
    * A second reply throws `Error` `Response already sent`; `onResponse` hooks do not run for a hook's reply.
@@ -167,9 +197,9 @@ export interface ResponseContext {
   readonly status: number;
   /**
    * Sets a header on the response.
-   * On an error response the engine writes, only the CORS response headers and `vary` are kept.
+   * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; on an error response the engine writes, only the CORS response headers and `vary` are kept.
    */
-  setHeader(name: string, value: string | number | readonly string[]): void;
+  setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
 }
 
 /** What an `onResponse` hook receives once the response is done or its connection closed. */

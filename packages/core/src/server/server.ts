@@ -13,6 +13,7 @@ import type { HttpServerHandle, ListeningAddress, ListenOptions, Server, ServerO
 
 export type { Empty, RouteInfo } from '../contract/types.ts';
 export type {
+  AuthorHeaderName,
   CompletedContext,
   ErrorContext,
   ErrorHandler,
@@ -31,6 +32,7 @@ export type {
   RawHeaders,
   RawReply,
   RegisterOptions,
+  ReservedHeaderName,
   RequestContext,
   ResponseContext,
   RouteReply,
