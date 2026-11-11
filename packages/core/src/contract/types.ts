@@ -91,6 +91,7 @@ export type EngineErrorCode =
   | 'PAYLOAD_TOO_LARGE'
   | 'URI_TOO_LONG'
   | 'UNSUPPORTED_MEDIA_TYPE'
+  | 'TIMEOUT'
   | 'INTERNAL'
   | 'NETWORK'
   | 'INVALID_RESPONSE'

@@ -71,9 +71,16 @@ export function preRoute(
         params: found.params,
         diag,
         stage,
+        child: 0,
         state: 'running',
         closeConnection: false,
         lateSendError: null,
+        waiting: null,
+        cancelRead: null,
+        deadline: 0,
+        abort: null,
+        signal: null,
+        clientAddress: null,
       };
     case 'not-found':
       count('refuse.not_found', method);

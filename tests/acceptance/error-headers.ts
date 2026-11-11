@@ -12,7 +12,17 @@ const statement =
   'an engine-written 400, 413 and 500 keep the hook access-control-allow-origin and vary, carry no set-cookie, cache-control or custom header and no name outside the seven kept names, with a current date; the 200, a declared 404 and a context.send 401 carry every header set for them';
 const origin = 'https://app.example';
 const hookDate = 'Thu, 01 Jan 1970 00:00:00 GMT';
-const keptNames = new Set(['content-type', 'content-length', 'date', 'connection', 'keep-alive']);
+const keptNames = new Set([
+  'content-type',
+  'content-length',
+  'date',
+  'connection',
+  'keep-alive',
+  'x-content-type-options',
+  'content-security-policy',
+  'x-frame-options',
+  'cache-control',
+]);
 const keptByHook = new Map([
   ['access-control-allow-origin', origin],
   ['vary', 'origin'],

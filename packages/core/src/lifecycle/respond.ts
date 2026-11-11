@@ -1,14 +1,16 @@
 // Does:  Serializes the handler's reply for its declared status, runs the onSend hooks and writes it.
 // Holds: Only the serializer's text is written; a schema mismatch becomes the fixed 500 and no hook replaces it.
 
+import type { OutgoingHttpHeaders } from 'node:http';
 import { contain, end, event, next, payload, start, wrote } from '#diag';
 import type { Serializer } from '../compile/types.ts';
 import { setAuthorHeaders } from './author-header.ts';
+import { settle } from './deadline.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { ResponseContextRecord, runStage } from './hooks.ts';
 import type { RuntimeReply } from './types.ts';
-import { writeJson } from './wire.ts';
+import { addSecurityHeaders, writeJson } from './wire.ts';
 
 const NO_CONTENT = 204;
 const NOT_MODIFIED = 304;
@@ -24,13 +26,14 @@ function writePayload(exchange: Exchange, status: number, serialized: string): v
   }
   exchange.stage = next(exchange.stage, 'req.respond.write');
   try {
-    writeJson(exchange.res, exchange.method, status, serialized, exchange.runtime.isClosing());
+    const { runtime } = exchange;
+    writeJson(exchange.res, exchange.method, status, serialized, runtime.isClosing(), runtime.securityHeaders);
   } catch (error) {
     fail(exchange, error, true);
     return;
   }
   end(exchange.stage);
-  exchange.state = 'written';
+  settle(exchange, 'written');
 }
 
 function writeEmpty(exchange: Exchange, status: number): void {
@@ -46,11 +49,15 @@ function writeEmpty(exchange: Exchange, status: number): void {
   if (status !== NO_CONTENT && status !== NOT_MODIFIED) {
     res.setHeader('content-length', 0);
   }
-  res.writeHead(status);
+  const head: OutgoingHttpHeaders = {};
+  if (exchange.runtime.securityHeaders) {
+    addSecurityHeaders(res, head);
+  }
+  res.writeHead(status, head);
   res.end();
   end(exchange.stage);
   wrote(status, null, null);
-  exchange.state = 'written';
+  settle(exchange, 'written');
 }
 
 // Does:  Shows the serialized text to the onSend hooks, then writes it; whatever a hook returns is ignored.

@@ -1,16 +1,19 @@
-// Does:  Turns anything thrown or refused into the one error shape, through the onError hooks and error handlers.
-// Holds: A value that is not an HttpError with a status is answered with the fixed 500 body, never its own text.
+// Does:  Turns anything thrown or refused into the one error shape via onError hooks and handlers; answers timeouts.
+// Holds: A non-HttpError is answered with the fixed 500 body; after a timeout no further hook or handler is called.
 
-import { contain, count, destroyed, end, event, leave, next, resume, start } from '#diag';
+import { contain, count, destroyed, end, event, leave, next, resume, start, type Token } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { ErrorBody } from '../contract/types.ts';
 import type { ErrorContext } from '../server/types.ts';
+import { stageBodyRefusal } from './body-refusal.ts';
+import { settle, timeoutReason } from './deadline.ts';
 import type { Exchange } from './exchange.ts';
 import { ErrorContextRecord, runObservers } from './hooks.ts';
 import { describeThrown, writeStderrLine } from './stderr.ts';
 import { INTERNAL_BODY, writeErrorBody } from './wire.ts';
 
 const ERROR_BODY_MISMATCH = 'error body does not match the error schema; the fixed 500 body was written';
+const TIMEOUT_BODY: ErrorBody = { status: 503, code: 'TIMEOUT', message: 'Request timed out' };
 
 // Does:  Reads a thrown value into an error body: the fixed 500 for a non-HttpError, null when reading it throws.
 function readThrown(value: unknown): ErrorBody | null {
@@ -37,6 +40,19 @@ function toErrorBody(value: unknown): ErrorBody | null {
   }
   count('err.http_error', body.code);
   return body;
+}
+
+// Does:  Keeps a child span of the error stage on the exchange, so a timeout can close it in order.
+function holdChild(exchange: Exchange, token: Token): Token {
+  exchange.child = token;
+  return token;
+}
+
+function closeChild(exchange: Exchange, token: Token): void {
+  if (exchange.child === token) {
+    end(token);
+    exchange.child = 0;
+  }
 }
 
 function report(exchange: Exchange, status: number, message: string): void {
@@ -70,7 +86,7 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
       report(exchange, body.status, describeThrown(outcome));
     }
   }
-  exchange.state = 'written';
+  settle(exchange, 'written');
   end(exchange.stage);
   const matched = writeErrorBody(exchange.runtime, exchange.res, exchange.method, body, exchange.closeConnection);
   if (read === null || !matched) {
@@ -81,7 +97,7 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
 // Does:  Passes the error through the error handlers in order; a handler that throws hands its error to the next.
 function classify(exchange: Exchange, context: ErrorContext, index: number, current: unknown, pending: Pending): void {
   const handler = exchange.route.errorHandlers[index];
-  if (handler === undefined) {
+  if (handler === undefined || exchange.state !== 'running') {
     answer(exchange, current, pending);
     return;
   }
@@ -89,7 +105,7 @@ function classify(exchange: Exchange, context: ErrorContext, index: number, curr
     pending.thrown.push(error);
     classify(exchange, context, index + 1, error, pending);
   };
-  const span = start('err.handler', index);
+  const span = holdChild(exchange, start('err.handler', index));
   let settled: HttpError | null;
   let later: Promise<HttpError> | null;
   try {
@@ -97,27 +113,28 @@ function classify(exchange: Exchange, context: ErrorContext, index: number, curr
     later = result instanceof Promise ? result : null;
     settled = result instanceof Promise ? null : result;
   } catch (error) {
-    end(span);
+    closeChild(exchange, span);
     rethrown(error);
     return;
   }
   if (later !== null) {
+    exchange.runtime.deadlines.wait(exchange);
     later.then(
       (value: HttpError) => {
         resume(exchange.diag);
-        end(span);
+        closeChild(exchange, span);
         answer(exchange, value, pending);
         leave(exchange.diag);
       },
       (error: unknown) => {
         resume(exchange.diag);
-        end(span);
+        closeChild(exchange, span);
         rethrown(error);
         leave(exchange.diag);
       },
     );
   } else {
-    end(span);
+    closeChild(exchange, span);
     answer(exchange, settled, pending);
   }
 }
@@ -126,7 +143,7 @@ function enterErrorPath(exchange: Exchange, error: unknown, thrown: boolean): vo
   const { res } = exchange;
   // Why: Headers are already on the wire, so no error body can follow; the socket is destroyed instead.
   if (res.headersSent) {
-    exchange.state = 'written';
+    settle(exchange, 'written');
     event('err.headers_sent');
     end(exchange.stage);
     res.destroy();
@@ -139,14 +156,16 @@ function enterErrorPath(exchange: Exchange, error: unknown, thrown: boolean): vo
   const context = new ErrorContextRecord(exchange);
   contain('error', context);
   const hookFailures: string[] = [];
-  const observers = start('err.hook.on_error');
+  const observers = holdChild(exchange, start('err.hook.on_error'));
   runObservers(
     exchange.diag,
     exchange.route.hooks.onError,
     (hook) => hook(context, error),
     (hookError) => hookFailures.push(`onError hook threw: ${describeThrown(hookError)}`),
+    () => exchange.runtime.deadlines.wait(exchange),
+    () => exchange.state !== 'running',
     () => {
-      end(observers);
+      closeChild(exchange, observers);
       classify(exchange, context, 0, error, { thrown: thrown ? [error] : [], hookFailures });
     },
   );
@@ -163,4 +182,35 @@ export function fail(exchange: Exchange, error: unknown, thrown: boolean): void 
   if (error !== exchange.lateSendError && thrown && !exchange.route.hasOnError) {
     report(exchange, exchange.res.statusCode, describeThrown(error));
   }
+}
+
+// Does:  Answers a request past its time limit with 503 and closes the connection; no onError hook or handler runs.
+// Holds: Called only for a running request; afterwards its signal is aborted and any later reply is dropped.
+export function expire(exchange: Exchange): void {
+  const { req, res, route } = exchange;
+  resume(exchange.diag);
+  exchange.state = 'timed-out';
+  exchange.abort?.abort(timeoutReason());
+  event('refuse.handler_timeout', route.info.name);
+  const { cancelRead } = exchange;
+  if (cancelRead !== null) {
+    exchange.cancelRead = null;
+    cancelRead();
+  }
+  end(exchange.child);
+  exchange.child = 0;
+  end(exchange.stage);
+  report(exchange, TIMEOUT_BODY.status, `request timed out after ${route.timeoutMs} ms`);
+  if (res.headersSent) {
+    res.destroy();
+    destroyed();
+  } else {
+    // Why: A body still arriving would reset the connection under the response unless its close is staged.
+    if (route.readsBody && !req.complete) {
+      stageBodyRefusal(req);
+    }
+    exchange.closeConnection = true;
+    writeErrorBody(exchange.runtime, res, exchange.method, TIMEOUT_BODY, true);
+  }
+  leave(exchange.diag);
 }

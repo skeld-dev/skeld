@@ -17,6 +17,9 @@ const scripts = [
   'onsend-observe.ts',
   'client-response-limit.ts',
   'reserved-headers.ts',
+  'handler-timeout.ts',
+  'client-address.ts',
+  'security-headers.ts',
 ];
 
 let failed = 0;

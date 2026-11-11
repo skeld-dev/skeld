@@ -1,6 +1,7 @@
 // Does:  Declares the shapes the lifecycle shares: the handler's request and reply, hook chains and route runtime.
-// Holds: A route's runtime and its hook chains are frozen when listen builds them; no request can change them.
+// Holds: A route's runtime and hook chains are frozen at listen; a request changes only the route's waiting queue.
 
+import type { BlockList } from 'node:net';
 import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { Router } from '../router/types.ts';
 import type { RequestValidators, ResponseSerializers, Serializer } from '../compile/types.ts';
@@ -13,6 +14,8 @@ import type {
   OutgoingHeaders,
   PreHandlerHook,
 } from '../server/types.ts';
+import type { Deadlines } from './deadline.ts';
+import type { Exchange } from './exchange.ts';
 
 export interface RuntimeRequest {
   readonly route: RouteInfo;
@@ -47,6 +50,8 @@ export interface RouteRuntime {
   readonly serializers: ResponseSerializers;
   readonly bodyLimit: number;
   readonly readsBody: boolean;
+  readonly timeoutMs: number;
+  readonly waiting: Set<Exchange>;
   readonly hooks: HookChains;
   readonly errorHandlers: readonly ErrorHandler[];
   readonly hasOnError: boolean;
@@ -58,4 +63,7 @@ export interface EngineRuntime {
   readonly maxParamLength: number;
   readonly errorSerializer: Serializer;
   readonly isClosing: () => boolean;
+  readonly deadlines: Deadlines;
+  readonly trustProxy: BlockList | null;
+  readonly securityHeaders: boolean;
 }

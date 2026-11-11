@@ -1,5 +1,5 @@
 // Does:  Reads a request's body bytes into text, enforcing the size limit while the bytes arrive.
-// Holds: No more than the limit is ever buffered; done is called once, after the listeners are removed.
+// Holds: No more than the limit is ever buffered; done is called at most once, after the listeners are removed.
 
 import { current, end, event, leave, limit, resume, start } from '#diag';
 import type { IncomingMessage } from 'node:http';
@@ -15,13 +15,14 @@ function decodeUtf8(bytes: Buffer): string {
     : bytes.toString('utf8');
 }
 
-// Does:  Starts the read: returns a result at once for a body refused or gone, or null and reports through done.
+// Does:  Starts the read: returns a result at once for a body refused or gone, or a cancel and reports through done.
+// Holds: After cancel, done is never called and the read's span is closed.
 export function readBody(
   req: IncomingMessage,
   bodyLimit: number,
   contentLength: number | null,
   done: (result: BodyReadResult) => void,
-): BodyReadResult | null {
+): BodyReadResult | (() => void) {
   if (contentLength !== null && contentLength > bodyLimit) {
     limit('limit.body_bytes', contentLength, bodyLimit);
     event('refuse.body_limit', 'declared');
@@ -80,5 +81,5 @@ export function readBody(
   req.on('data', onData);
   req.on('end', onEnd);
   req.on('close', onClose);
-  return null;
+  return detach;
 }

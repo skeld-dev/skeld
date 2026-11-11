@@ -22,7 +22,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:100`
+Source: `packages/core/src/contract/types.ts:101`
 
 ## EngineErrorCode
 
@@ -36,6 +36,7 @@ export type EngineErrorCode =
   | 'PAYLOAD_TOO_LARGE'
   | 'URI_TOO_LONG'
   | 'UNSUPPORTED_MEDIA_TYPE'
+  | 'TIMEOUT'
   | 'INTERNAL'
   | 'NETWORK'
   | 'INVALID_RESPONSE'

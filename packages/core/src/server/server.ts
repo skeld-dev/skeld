@@ -3,10 +3,11 @@
 
 import { end, open, start } from '#diag';
 import { handleRequest } from '../lifecycle/handle-request.ts';
+import type { EngineRuntime } from '../lifecycle/types.ts';
 import { BootError } from './boot-error.ts';
 import { bootPlugins } from './boot.ts';
 import { createHttpServer } from './listen.ts';
-import { resolveListenOptions, resolveServerOptions } from './options.ts';
+import { resolveListenOptions, resolveServerOptions, resolveTrustProxy } from './options.ts';
 import { buildRuntime } from './runtime.ts';
 import { createScope, createScopeState } from './scope.ts';
 import type { HttpServerHandle, ListeningAddress, ListenOptions, Server, ServerOptions } from './types.ts';
@@ -46,16 +47,18 @@ export type {
 
 /**
  * Creates a server, the root scope of a service; nothing listens until `listen`.
- * Throws BootError `INVALID_OPTION` for an option that is not a positive integer or a `headersTimeout` above `requestTimeout`.
+ * Throws BootError `INVALID_OPTION` for an option out of range, a `headersTimeout` above `requestTimeout` or a bad `trustProxy`.
  * @example const server = createServer({ bodyLimit: 65_536 }); await server.listen({ port: 0 }); await server.close();
  */
 export function createServer(options: ServerOptions = {}): Server {
   const resolved = resolveServerOptions(options);
+  const trustProxy = resolveTrustProxy(options.trustProxy);
   const root = createScopeState('root', null);
   let listenCalled = false;
   let closing = false;
   let closed: Promise<void> | null = null;
   let handle: HttpServerHandle | null = null;
+  let runtime: EngineRuntime | null = null;
 
   async function listen(listenOptions: ListenOptions): Promise<ListeningAddress> {
     if (closing) {
@@ -75,19 +78,24 @@ export function createServer(options: ServerOptions = {}): Server {
     } finally {
       end(plugins);
     }
-    const runtime = buildRuntime(root, resolved, () => closing);
+    const built = buildRuntime(root, resolved, trustProxy, () => closing);
+    runtime = built;
     // Why: close() may have been called while the plugins were booting.
     if (closing) {
       throw new BootError('SERVER_CLOSED', 'listen() was called after close()', null, null);
     }
-    handle = createHttpServer(resolved, (req, res) => handleRequest(runtime, req, res));
+    handle = createHttpServer(resolved, (req, res) => handleRequest(built, req, res));
     return handle.listen(target.host, target.port);
+  }
+
+  function stopDeadlines(): void {
+    runtime?.deadlines.stop();
   }
 
   function close(): Promise<void> {
     if (closed === null) {
       closing = true;
-      closed = handle === null ? Promise.resolve() : handle.close(resolved.closeTimeoutMs);
+      closed = handle === null ? Promise.resolve() : handle.close(resolved.closeTimeoutMs).then(stopDeadlines);
     }
     return closed;
   }

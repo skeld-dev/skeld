@@ -1,9 +1,12 @@
 // Does:  Builds the engine runtime at listen: schema checks, validators, serializers, limits and the router.
 // Holds: Schemas are compiled here and nowhere else, from the declaration only, and the result is frozen.
 
+import type { BlockList } from 'node:net';
 import { declare, end, mark, start } from '#diag';
 import { parsePath } from '../contract/path.ts';
 import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
+import { createDeadlines, type Deadlines } from '../lifecycle/deadline.ts';
+import { expire } from '../lifecycle/error-path.ts';
 import type { EngineRuntime, HookChains, RouteRuntime } from '../lifecycle/types.ts';
 import { createRouter } from '../router/router.ts';
 import type { Router } from '../router/types.ts';
@@ -78,6 +81,7 @@ function toRouteRuntime(
   hooks: HookChains,
   errorHandlers: readonly ErrorHandler[],
   options: ResolvedServerOptions,
+  deadlines: Deadlines,
 ): RouteRuntime {
   const { info, definition } = route;
   const plugin = pluginName(state);
@@ -109,6 +113,7 @@ function toRouteRuntime(
   const bodyLimit = effectiveBodyLimit(route.bodyLimit ?? options.bodyLimit, definition);
   end(bodyCap);
   mark();
+  const timeoutMs = route.timeoutMs ?? options.handlerTimeoutMs;
   return Object.freeze({
     info: Object.freeze(info),
     definition,
@@ -117,6 +122,8 @@ function toRouteRuntime(
     serializers,
     bodyLimit,
     readsBody: definition.body !== undefined,
+    timeoutMs,
+    waiting: deadlines.queue(timeoutMs),
     hooks,
     errorHandlers,
     hasOnError: hooks.onError.length > 0,
@@ -130,11 +137,12 @@ function addScope(
   parentHooks: HookChains,
   parentErrorHandlers: readonly ErrorHandler[],
   options: ResolvedServerOptions,
+  deadlines: Deadlines,
 ): void {
   const hooks = extendChains(parentHooks, state);
   const errorHandlers = extendErrorHandlers(parentErrorHandlers, state);
   for (const route of state.routes) {
-    const runtime = toRouteRuntime(route, state, hooks, errorHandlers, options);
+    const runtime = toRouteRuntime(route, state, hooks, errorHandlers, options, deadlines);
     const { info } = route;
     const added = router.add(info.method, info.path, parsePath(info.path), runtime);
     if (added.kind === 'duplicate') {
@@ -151,13 +159,14 @@ function addScope(
     end(declared);
   }
   for (const child of state.children) {
-    addScope(router, child.state, hooks, errorHandlers, options);
+    addScope(router, child.state, hooks, errorHandlers, options, deadlines);
   }
 }
 
 export function buildRuntime(
   root: ScopeState,
   options: ResolvedServerOptions,
+  trustProxy: BlockList | null,
   isClosing: () => boolean,
 ): EngineRuntime {
   const span = start('boot.runtime');
@@ -169,7 +178,8 @@ export function buildRuntime(
       throw new BootError('CODEGEN_UNAVAILABLE', CODEGEN_UNAVAILABLE_MESSAGE, null, null, { cause: unavailable });
     }
     const router = createRouter<RouteRuntime>();
-    addScope(router, root, NO_HOOKS, [], options);
+    const deadlines = createDeadlines(expire);
+    addScope(router, root, NO_HOOKS, [], options, deadlines);
     const errorSerializerSpan = start('boot.error_serializer');
     mark();
     const errorSerializer = getErrorBodySerializer();
@@ -180,6 +190,9 @@ export function buildRuntime(
       maxParamLength: options.maxParamLength,
       errorSerializer,
       isClosing,
+      deadlines,
+      trustProxy,
+      securityHeaders: options.securityHeaders,
     });
   } finally {
     end(span);

@@ -71,6 +71,7 @@ export type EventName =
   | 'refuse.forbidden_key'
   | 'refuse.validation'
   | 'refuse.body_aborted'
+  | 'refuse.handler_timeout'
   | 'err.internal'
   | 'err.undeclared_status'
   | 'err.serialize'
@@ -85,7 +86,8 @@ export type LimitName =
   | 'limit.body_bytes'
   | 'limit.param_length'
   | 'limit.validation_details'
-  | 'limit.raw_errors';
+  | 'limit.raw_errors'
+  | 'limit.forwarded_hops';
 export type ContextKind = 'handler' | 'request' | 'validated' | 'response' | 'error' | 'completed';
 export type HeaderValue = number | string | readonly string[];
 

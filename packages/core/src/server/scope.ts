@@ -5,6 +5,7 @@ import { checkContract } from '../contract/checks.ts';
 import type { ContractRoutes, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { RuntimeHandler } from '../lifecycle/types.ts';
 import { BootError } from './boot-error.ts';
+import { MAX_TIMER_MS } from './options.ts';
 import type {
   ErrorHandler,
   HookName,
@@ -32,6 +33,7 @@ export interface RouteRecord {
   readonly definition: RouteDefinition;
   readonly handler: RuntimeHandler;
   readonly bodyLimit: number | null;
+  readonly timeoutMs: number | null;
 }
 
 export interface ChildScope {
@@ -103,18 +105,49 @@ function routeBodyLimit(info: RouteInfo, definition: RouteDefinition, limit: num
   return limit;
 }
 
+function routeTimeout(info: RouteInfo, limit: number | undefined): number | null {
+  if (limit === undefined) {
+    return null;
+  }
+  if (!Number.isSafeInteger(limit) || limit <= 0 || limit > MAX_TIMER_MS) {
+    throw new BootError(
+      'INVALID_OPTION',
+      `Invalid route option handlerTimeouts.${info.name}: must be a positive integer up to ${MAX_TIMER_MS}, got ${limit}`,
+      info,
+      null,
+    );
+  }
+  return limit;
+}
+
+interface RouteLimits {
+  readonly [name: string]: number | undefined;
+}
+
 function toRouteRecords(
   contract: ContractRoutes,
   handlers: ErasedHandlers,
-  bodyLimits: { readonly [name: string]: number | undefined },
+  bodyLimits: RouteLimits,
+  timeouts: RouteLimits,
 ): RouteRecord[] {
+  for (const name of Object.keys(timeouts)) {
+    if (!Object.hasOwn(contract, name)) {
+      throw new BootError('INVALID_OPTION', `Invalid route option handlerTimeouts.${name}: no such route`, null, null);
+    }
+  }
   return Object.entries(contract).map(([name, definition]) => {
     const info: RouteInfo = { name, method: definition.method, path: definition.path };
     const handler = handlers[name];
     if (handler === undefined) {
       throw new TypeError(`Route ${name} (${definition.method} ${definition.path}): has no handler`);
     }
-    return { info, definition, handler, bodyLimit: routeBodyLimit(info, definition, bodyLimits[name]) };
+    return {
+      info,
+      definition,
+      handler,
+      bodyLimit: routeBodyLimit(info, definition, bodyLimits[name]),
+      timeoutMs: routeTimeout(info, timeouts[name]),
+    };
   });
 }
 
@@ -126,7 +159,7 @@ export function createScope(state: ScopeState): Scope {
       checkContract(contract);
       // biome-ignore lint/nursery/noUnsafeTypeAssertion: the one erasure point; Handlers<C> is typed per route, the runtime reads handlers by name
       const erased = handlers as unknown as ErasedHandlers;
-      state.routes.push(...toRouteRecords(contract, erased, options?.bodyLimits ?? {}));
+      state.routes.push(...toRouteRecords(contract, erased, options?.bodyLimits ?? {}, options?.handlerTimeouts ?? {}));
     },
     addHook<K extends HookName>(name: K, hook: HookTypes[K]): void {
       assertOpen(state, 'addHook');

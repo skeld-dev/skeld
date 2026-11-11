@@ -149,6 +149,18 @@ A schema with `sensitivity: 'secret'` (a password, a token, a key) hands the han
 
 An object response drops any key the handler returns that its schema does not declare. A union response (`200: t.union([...])`) does not: the value is matched member by member and object members are closed, so a value with an undeclared key matches no member, and the request is answered with the fixed 500 body below and one stderr line. A handler whose response is a union returns only the declared keys, for example by picking them out of a database row.
 
+## Timeouts, client address and headers
+
+`handlerTimeoutMs` in the server options (default 30,000) bounds each request from its route match to its response: `onRequest` hooks, the body read, `preHandler` hooks, the handler and `onSend` hooks. Past it the request is answered 503 `TIMEOUT` with `connection: close`, `request.signal` (and every hook context's `signal`) is aborted, and whatever the handler returns later is dropped. No `onError` hook or error handler is started for a timeout, and an error path the timeout interrupts calls no further hook or handler; one stderr line records it. The check runs every tenth of the shortest limit, and never more often than every 10 ms, so a timeout is answered at most a tenth of its limit or 10 ms late, whichever is greater. Each limit is at most 2,147,483,647 ms, Node's timer maximum, as are `pluginTimeoutMs` and `closeTimeoutMs`. `handlerTimeouts` in the options of `routes` sets a route's own limit, in either direction:
+
+```ts
+server.routes(contract, handlers, { handlerTimeouts: { hello: 2_000 } });
+```
+
+`request.clientAddress` and `clientAddress` on every hook context is the socket's peer address. Behind a proxy, list the proxy's addresses or CIDR ranges in `trustProxy` (default none): when the peer is on the list, `X-Forwarded-For` is read right to left, trusted entries are skipped, and the first address that is not trusted is the client. An entry that is not a plain IP address ends the walk at the last address read, at most 32 entries are read, and a peer not on the list is used as it is whatever the header says. `createServer` refuses with `INVALID_OPTION` a malformed entry, an entry with a zone id, and a zero-length prefix such as `0.0.0.0/0`, which would trust every peer and so hand the client's own leftmost entry the address.
+
+Every response the engine writes carries `x-content-type-options: nosniff`, `content-security-policy: frame-ancestors 'none'`, `x-frame-options: DENY` and `cache-control: no-store`, unless the handler or a hook set that header itself, in which case its value is sent. An error the engine writes clears the author's headers first, so it always carries all four. `securityHeaders: false` sends none of them. The 400, 408 and 431 that Node writes itself below the engine carry none.
+
 ## Errors
 
 Every error the engine sends has one JSON shape, `{ status, code, message, details? }`. A request that fails its schema gets a 400 with one detail per failure (the wire body is one line; it is formatted here):
@@ -170,7 +182,7 @@ No message holds a value the client sent. A JSON body that holds an own `__proto
 
 An unknown path gets `{"status":404,"code":"NOT_FOUND","message":"Route GET /nope not found"}`. A handler sends its own error by throwing `new HttpError(status, code, message)` from `@darkstart/core/http-error`. Anything else a handler throws becomes `{"status":500,"code":"INTERNAL","message":"Internal Server Error"}`; the thrown message goes to stderr as one `darkstart: <method> <path> <status> <route>: <message>` line when no `onError` hook is registered, never to the client.
 
-The engine's codes are `BAD_REQUEST`, `VALIDATION`, `NOT_FOUND`, `PAYLOAD_TOO_LARGE`, `URI_TOO_LONG`, `UNSUPPORTED_MEDIA_TYPE` and `INTERNAL`. The client rejects with an `HttpError` whose `status` is `null` and whose `code` is `NETWORK` (no response), `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`. `INVALID_RESPONSE` means, for a status the contract declares with a schema, a body that is missing, not JSON or does not pass the schema, with details under `/body`; for any other status, a JSON body that does not parse. `RESPONSE_TOO_LARGE` means the body passed the call's limit, counted in decoded bytes as it arrives and checked first against `Content-Length`: for a declared status, twice the largest JSON encoding its schema admits plus 1,024 bytes, and 1,048,576 bytes for an `unbounded` or `open` schema or any other status. `maxResponseBytes` in the client options replaces every limit.
+The engine's codes are `BAD_REQUEST`, `VALIDATION`, `NOT_FOUND`, `PAYLOAD_TOO_LARGE`, `URI_TOO_LONG`, `UNSUPPORTED_MEDIA_TYPE`, `TIMEOUT` and `INTERNAL`. The client rejects with an `HttpError` whose `status` is `null` and whose `code` is `NETWORK` (no response), `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`. `INVALID_RESPONSE` means, for a status the contract declares with a schema, a body that is missing, not JSON or does not pass the schema, with details under `/body`; for any other status, a JSON body that does not parse. `RESPONSE_TOO_LARGE` means the body passed the call's limit, counted in decoded bytes as it arrives and checked first against `Content-Length`: for a declared status, twice the largest JSON encoding its schema admits plus 1,024 bytes, and 1,048,576 bytes for an `unbounded` or `open` schema or any other status. `maxResponseBytes` in the client options replaces every limit.
 
 ## License
 

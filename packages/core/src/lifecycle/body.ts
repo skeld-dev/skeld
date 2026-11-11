@@ -64,13 +64,13 @@ export function declaresOverLimit(req: IncomingMessage, limit: number): boolean 
   return declared !== undefined && Number.parseInt(declared, 10) > limit;
 }
 
-// Does:  Reads the body when there is one: returns the outcome now, or null and reports it later through done.
-// Holds: Either an outcome is returned or done is called once, never both.
+// Does:  Reads the body when there is one: returns the outcome now, or a cancel and reports it later through done.
+// Holds: Either an outcome is returned or done is called at most once, never both; never after cancel.
 export function readRouteBody(
   req: IncomingMessage,
   limit: number,
   done: (outcome: BodyOutcome) => void,
-): BodyOutcome | null {
+): BodyOutcome | (() => void) {
   const declared = req.headers['content-length'];
   const contentLength = declared === undefined ? null : Number.parseInt(declared, 10);
   // Why: A request with neither Content-Length nor Transfer-Encoding has no body (RFC 9112 section 6).
@@ -107,5 +107,5 @@ export function readRouteBody(
     }
     done(outcome);
   });
-  return early === null ? null : decode(early, type, limit);
+  return typeof early === 'function' ? early : decode(early, type, limit);
 }

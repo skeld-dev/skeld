@@ -6,7 +6,7 @@ import type { ContractRoutes, Empty, RouteDefinition, RouteInfo } from '../contr
 import type { Infer, Schema, Wire } from '../schema/types.ts';
 
 /**
- * The options of `createServer`; each one is a positive integer.
+ * The options of `createServer`; each number is a positive integer.
  * `createServer` throws BootError `INVALID_OPTION` for any other value, or for a `headersTimeout` above `requestTimeout`.
  */
 export interface ServerOptions {
@@ -18,11 +18,11 @@ export interface ServerOptions {
   /** Longest path parameter accepted, in bytes as received; a longer one is refused with 414 (default 100). */
   readonly maxParamLength?: number;
   /**
-   * Time each plugin has to settle at `listen`, in milliseconds (default 10 000).
+   * Time each plugin has to settle at `listen`, in milliseconds, at most 2 147 483 647 (default 10 000).
    * Past it `listen` rejects with BootError `PLUGIN_TIMEOUT`.
    */
   readonly pluginTimeoutMs?: number;
-  /** Time `close` waits for open connections, in milliseconds, before closing them forcibly (default 10 000). */
+  /** Time `close` waits for open connections before closing them, in ms, at most 2 147 483 647 (default 10 000). */
   readonly closeTimeoutMs?: number;
   /** Time an idle keep-alive connection stays open, in milliseconds (default 72 000). */
   readonly keepAliveTimeout?: number;
@@ -38,6 +38,21 @@ export interface ServerOptions {
   readonly headersTimeout?: number;
   /** Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB). */
   readonly maxHeaderSize?: number;
+  /**
+   * Time a request has from its route match to its response, in ms, at most 2 147 483 647 (default 30 000).
+   * Past it: 503 `TIMEOUT`, connection closed, at most a tenth of the limit or 10 ms late, whichever is greater.
+   */
+  readonly handlerTimeoutMs?: number;
+  /**
+   * Proxy addresses and CIDR ranges whose `X-Forwarded-For` sets `clientAddress` (default none).
+   * A malformed entry, a zone id or a zero-length prefix (`0.0.0.0/0`) is refused with BootError `INVALID_OPTION`.
+   */
+  readonly trustProxy?: readonly string[];
+  /**
+   * Whether responses carry `nosniff`, a frame ban and `cache-control: no-store` unless set (default true).
+   * A header the application set on the response is kept; an error the engine writes always carries all four.
+   */
+  readonly securityHeaders?: boolean;
 }
 
 export interface ResolvedServerOptions {
@@ -49,6 +64,8 @@ export interface ResolvedServerOptions {
   readonly requestTimeout: number;
   readonly headersTimeout: number;
   readonly maxHeaderSize: number;
+  readonly handlerTimeoutMs: number;
+  readonly securityHeaders: boolean;
 }
 
 /** Request headers by lower-case name, as the HTTP parser gives them. */
@@ -94,8 +111,10 @@ export interface RouteRequest<R extends RouteDefinition> {
   readonly headers: R extends { readonly headers: infer S extends Schema } ? Infer<S> : RawHeaders;
   /** The parsed and validated body, with `secret` values wrapped in `Secret`. */
   readonly body: R extends { readonly body: infer S extends Schema } ? Infer<S> : undefined;
-  /** Aborted when the connection closes or the request is destroyed, to stop work no client waits for. */
+  /** Aborted when the connection closes or the request times out, to stop work no client waits for. */
   readonly signal: AbortSignal;
+  /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
+  readonly clientAddress: string;
 }
 
 /**
@@ -135,6 +154,11 @@ export interface RoutesOptions<C extends ContractRoutes> {
    * `routes` throws BootError `INVALID_OPTION` for a value that is not a positive integer or a route that declares no body.
    */
   readonly bodyLimits?: { readonly [K in keyof C]?: number };
+  /**
+   * Time limits in milliseconds by route name, each replacing `handlerTimeoutMs` for its route.
+   * `routes` throws BootError `INVALID_OPTION` for a value not from 1 to 2 147 483 647 or a name not in the contract.
+   */
+  readonly handlerTimeouts?: { readonly [K in keyof C]?: number };
 }
 
 /** A reply a hook sends with `context.send`. */
@@ -157,8 +181,10 @@ export interface RequestContext {
   readonly path: string;
   /** The raw request headers. */
   readonly headers: RawHeaders;
-  /** Aborted when the connection closes or the request is destroyed. */
+  /** Aborted when the connection closes or the request times out. */
   readonly signal: AbortSignal;
+  /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
+  readonly clientAddress: string;
   /**
    * Sets a header on the response.
    * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; on an error response the engine writes, only the CORS response headers and `vary` are kept.
@@ -166,7 +192,7 @@ export interface RequestContext {
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
   /**
    * Replies at once; later hooks and the handler do not run.
-   * A second reply throws `Error` `Response already sent`; `onResponse` hooks do not run for a hook's reply.
+   * A second reply throws `Error` `Response already sent`, one after a timeout is dropped; `onResponse` skips a hook's reply.
    */
   send(reply: RawReply): void;
 }
@@ -191,8 +217,10 @@ export interface ResponseContext {
   readonly path: string;
   /** The raw request headers. */
   readonly headers: RawHeaders;
-  /** Aborted when the connection closes or the request is destroyed. */
+  /** Aborted when the connection closes or the request times out. */
   readonly signal: AbortSignal;
+  /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
+  readonly clientAddress: string;
   /** The status being written. */
   readonly status: number;
   /**
@@ -214,6 +242,8 @@ export interface CompletedContext {
   readonly status: number;
   /** Whether the whole response was written before the connection closed. */
   readonly completed: boolean;
+  /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
+  readonly clientAddress: string;
 }
 
 /** What an `onError` hook and an error handler receive. */
@@ -226,8 +256,10 @@ export interface ErrorContext {
   readonly path: string;
   /** The raw request headers. */
   readonly headers: RawHeaders;
-  /** Aborted when the connection closes or the request is destroyed. */
+  /** Aborted when the connection closes or the request times out. */
   readonly signal: AbortSignal;
+  /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
+  readonly clientAddress: string;
 }
 
 /**
