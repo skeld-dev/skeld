@@ -32,8 +32,15 @@ function escapeLine(text: string): string {
   return sliceFrom === 0 ? text : escaped + text.slice(sliceFrom);
 }
 
+const UNREADABLE = 'a thrown value whose message could not be read';
+
 export function describeThrown(value: unknown): string {
-  return value instanceof Error ? value.message : String(value);
+  try {
+    return value instanceof Error ? value.message : String(value);
+  } catch {
+    // An accessor `message` or a throwing `toString` on a thrown value must not escape the error path.
+    return UNREADABLE;
+  }
 }
 
 export function writeStderrLine(

@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { begin, contain, destroyed, end, event, leave, next, resume, routed, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { RouteInfo } from '../contract/types.ts';
-import { type BodyOutcome, readRouteBody } from './body.ts';
+import { type BodyOutcome, declaresOverLimit, readRouteBody } from './body.ts';
 import { stageBodyRefusal, stopRefusedPipeline } from './body-refusal.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
@@ -102,8 +102,8 @@ function bodyRead(exchange: Exchange, outcome: BodyOutcome): void {
       validateStage(exchange, outcome.value);
       return;
     case 'refused':
-      exchange.closeConnection = outcome.close;
-      if (outcome.close) {
+      if (outcome.close && !exchange.closeConnection) {
+        exchange.closeConnection = true;
         stageBodyRefusal(exchange.req);
       }
       fail(exchange, outcome.error, false);
@@ -156,6 +156,11 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
     readStage(exchange);
     leave(diag);
     return;
+  }
+  const { route } = exchange;
+  if (route.readsBody && declaresOverLimit(req, route.bodyLimit)) {
+    exchange.closeConnection = true;
+    stageBodyRefusal(req);
   }
   exchange.stage = next(exchange.stage, 'req.hook.on_request');
   const context = new RequestContextRecord(exchange);

@@ -32,7 +32,7 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
       res.setHeader(name, value);
     }
   }
-  if (exchange.runtime.isClosing()) {
+  if (exchange.closeConnection || exchange.runtime.isClosing()) {
     res.setHeader('connection', 'close');
   }
   const { payload } = reply;

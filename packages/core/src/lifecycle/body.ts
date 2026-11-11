@@ -49,6 +49,11 @@ function decode(result: BodyReadResult, type: string, limit: number): BodyOutcom
   }
 }
 
+export function declaresOverLimit(req: IncomingMessage, limit: number): boolean {
+  const declared = req.headers['content-length'];
+  return declared !== undefined && Number.parseInt(declared, 10) > limit;
+}
+
 export function readRouteBody(
   req: IncomingMessage,
   limit: number,

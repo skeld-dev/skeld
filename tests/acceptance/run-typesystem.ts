@@ -1,6 +1,16 @@
 import { spawnSync } from 'node:child_process';
 
-const scripts = ['sensitive-leak.ts', 'derived-cap.ts', 'hostile-body.ts', 'body-refusal.ts', 'derived-class.ts'];
+const scripts = [
+  'sensitive-leak.ts',
+  'derived-cap.ts',
+  'hostile-body.ts',
+  'body-refusal.ts',
+  'derived-class.ts',
+  'response-contract.ts',
+  'error-headers.ts',
+  'timeouts.ts',
+  'pipeline-refusal.ts',
+];
 
 let failed = 0;
 for (const script of scripts) {

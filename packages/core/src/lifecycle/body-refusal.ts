@@ -21,6 +21,9 @@ export function stopRefusedPipeline(req: IncomingMessage): boolean {
 
 export function stageBodyRefusal(req: IncomingMessage): void {
   const { socket } = req;
+  if (refused.has(socket)) {
+    return;
+  }
   const original = socket.destroySoon;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let span: ReturnType<typeof track> | null = null;

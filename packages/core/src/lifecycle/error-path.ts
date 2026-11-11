@@ -9,14 +9,30 @@ import { INTERNAL_BODY, writeErrorBody } from './wire.ts';
 
 const ERROR_BODY_MISMATCH = 'error body does not match the error schema; the fixed 500 body was written';
 
-function toErrorBody(value: unknown): ErrorBody {
-  if (!(value instanceof HttpError) || value.status === null) {
-    event('err.internal');
-    return INTERNAL_BODY;
+function readThrown(value: unknown): ErrorBody | null {
+  try {
+    if (!(value instanceof HttpError)) {
+      return INTERNAL_BODY;
+    }
+    const { status, code, message, details } = value;
+    if (status === null) {
+      return INTERNAL_BODY;
+    }
+    return details === null ? { status, code, message } : { status, code, message, details };
+  } catch {
+    // A thrown value's fields can be accessors or a proxy its author made; one that throws must not escape the error path.
+    return null;
   }
-  const { status, code, message, details } = value;
-  count('err.http_error', code);
-  return details === null ? { status, code, message } : { status, code, message, details };
+}
+
+function toErrorBody(value: unknown): ErrorBody | null {
+  const body = readThrown(value);
+  if (body === null || body === INTERNAL_BODY) {
+    event('err.internal');
+    return body;
+  }
+  count('err.http_error', body.code);
+  return body;
 }
 
 function report(exchange: Exchange, status: number, message: string): void {
@@ -35,7 +51,8 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
     }
     return;
   }
-  const body = toErrorBody(outcome);
+  const read = toErrorBody(outcome);
+  const body = read ?? INTERNAL_BODY;
   for (const message of pending.hookFailures) {
     report(exchange, body.status, message);
   }
@@ -49,7 +66,8 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
   }
   exchange.state = 'written';
   end(exchange.stage);
-  if (!writeErrorBody(exchange.runtime, exchange.res, exchange.method, body, exchange.closeConnection)) {
+  const matched = writeErrorBody(exchange.runtime, exchange.res, exchange.method, body, exchange.closeConnection);
+  if (read === null || !matched) {
     report(exchange, INTERNAL_BODY.status, ERROR_BODY_MISMATCH);
   }
 }
@@ -65,16 +83,19 @@ function classify(exchange: Exchange, context: ErrorContext, index: number, curr
     classify(exchange, context, index + 1, error, pending);
   };
   const span = start('err.handler', index);
-  let result: HttpError | Promise<HttpError>;
+  let settled: HttpError | null;
+  let later: Promise<HttpError> | null;
   try {
-    result = handler(current, context);
+    const result = handler(current, context);
+    later = result instanceof Promise ? result : null;
+    settled = result instanceof Promise ? null : result;
   } catch (error) {
     end(span);
     rethrown(error);
     return;
   }
-  if (result instanceof Promise) {
-    result.then(
+  if (later !== null) {
+    later.then(
       (value: HttpError) => {
         resume(exchange.diag);
         end(span);
@@ -90,7 +111,7 @@ function classify(exchange: Exchange, context: ErrorContext, index: number, curr
     );
   } else {
     end(span);
-    answer(exchange, result, pending);
+    answer(exchange, settled, pending);
   }
 }
 
