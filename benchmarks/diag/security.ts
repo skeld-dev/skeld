@@ -1,3 +1,6 @@
+// Does:  Decides the security result of a diag run from the recorder's folders and the scenario.
+// Holds: Any leak or containment finding fails the pass; a clean pass has none.
+
 import { basename } from 'node:path';
 import type { RecorderFolder } from './diag-files.ts';
 import { type DiagProcess, findingText } from './readout.ts';

@@ -1,3 +1,6 @@
+// Does:  Defines createServer: the root scope, listen and close.
+// Holds: listen runs at most once, and a server that was closed never starts listening.
+
 import { end, open, start } from '#diag';
 import { handleRequest } from '../lifecycle/handle-request.ts';
 import { BootError } from './boot-error.ts';
@@ -61,6 +64,7 @@ export function createServer(options: ServerOptions = {}): Server {
     }
     const target = resolveListenOptions(listenOptions);
     listenCalled = true;
+    // Why: The root scope is sealed at listen; its plugins still register, each on its own scope.
     root.sealed = true;
     open(resolved);
     const plugins = start('boot.plugins');
@@ -70,6 +74,7 @@ export function createServer(options: ServerOptions = {}): Server {
       end(plugins);
     }
     const runtime = buildRuntime(root, resolved, () => closing);
+    // Why: close() may have been called while the plugins were booting.
     if (closing) {
       throw new BootError('SERVER_CLOSED', 'listen() was called after close()', null, null);
     }

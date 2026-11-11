@@ -1,3 +1,6 @@
+// Does:  Writes one snapshot line per interval: spans, counts, limits, events and gauges.
+// Holds: Taking a snapshot resets the per-window figures and keeps the run-wide ones.
+
 import { nowNs, toMicros } from './clock.ts';
 import { countTotals } from './counts.ts';
 import { listenerGauge } from './contain.ts';

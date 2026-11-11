@@ -1,3 +1,6 @@
+// Does:  Declares what compilation produces: the per-part validators and the per-status serializers.
+// Holds: A serializer's write returns JSON text or the index of the refusing location, never a thrown mismatch.
+
 import type { ErrorDetail } from '../contract/types.ts';
 
 export type PartName = 'params' | 'query' | 'headers' | 'body';

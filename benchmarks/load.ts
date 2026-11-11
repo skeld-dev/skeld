@@ -1,3 +1,6 @@
+// Does:  Starts autocannon against one route with the protocol's connections, workers and pipelining.
+// Holds: Every server receives the same request for a route; only the port differs.
+
 import { createRequire } from 'node:module';
 import { echoRequestHeaders } from './preflight.ts';
 import type { RouteId } from './types.ts';

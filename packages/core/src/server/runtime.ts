@@ -1,3 +1,6 @@
+// Does:  Builds the engine runtime at listen: schema checks, validators, serializers, limits and the router.
+// Holds: Schemas are compiled here and nowhere else, from the declaration only, and the result is frozen.
+
 import { declare, end, mark, start } from '#diag';
 import { parsePath } from '../contract/path.ts';
 import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
@@ -35,6 +38,7 @@ function refuseSchemaFindings(info: RouteInfo, plugin: string | null, definition
   throw new BootError(finding.code, message, info, plugin);
 }
 
+// Does:  Returns the smaller of the configured limit and the cap derived from the route's body schema.
 function effectiveBodyLimit(configured: number, definition: RouteDefinition): number {
   return definition.body === undefined ? configured : Math.min(configured, derivedBodyCap(definition.body));
 }
@@ -51,6 +55,7 @@ function compiled<T>(info: RouteInfo, plugin: string | null, compile: () => T): 
   }
 }
 
+// Why: A parent scope's hooks run before its children's, and a scope never sees a sibling's hooks.
 function extendChains(parent: HookChains, state: ScopeState): HookChains {
   const own = state.hooks;
   return Object.freeze({
@@ -62,6 +67,7 @@ function extendChains(parent: HookChains, state: ScopeState): HookChains {
   });
 }
 
+// Why: The nearest scope's error handler is tried first, then its ancestors'.
 function extendErrorHandlers(parent: readonly ErrorHandler[], state: ScopeState): readonly ErrorHandler[] {
   return Object.freeze(state.errorHandler === null ? parent : [state.errorHandler, ...parent]);
 }
@@ -157,6 +163,7 @@ export function buildRuntime(
   const span = start('boot.runtime');
   mark();
   try {
+    // Why: One probe before any route, so a runtime that forbids code generation fails with one clear boot error.
     const unavailable = probeCodegen();
     if (unavailable !== null) {
       throw new BootError('CODEGEN_UNAVAILABLE', CODEGEN_UNAVAILABLE_MESSAGE, null, null, { cause: unavailable });

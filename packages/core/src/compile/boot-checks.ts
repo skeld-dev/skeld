@@ -1,3 +1,6 @@
+// Does:  Inspects every schema of a route at boot and reports the first finding.
+// Holds: Parts are inspected in one fixed order (params, query, headers, body, responses by status).
+
 import type { RouteDefinition } from '../contract/types.ts';
 import { inspectSchema } from '../schema/inspect.ts';
 import type { Finding, Schema } from '../schema/types.ts';

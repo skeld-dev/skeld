@@ -1,3 +1,6 @@
+// Does:  Describes the builds a diag run starts (normal, diag, scenario) and proves each one really started.
+// Holds: A diag target must leave its recorder files within the proof window, or the run stops.
+
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';

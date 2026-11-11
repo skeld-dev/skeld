@@ -1,3 +1,6 @@
+// Does:  Defines toJsonSchema, the public JSON Schema export.
+// Holds: The document always declares the 2020-12 dialect.
+
 import { exportNode } from './export.ts';
 import type { JsonSchema, Schema } from './types.ts';
 

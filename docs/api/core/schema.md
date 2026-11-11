@@ -16,7 +16,7 @@ export function string<S extends Sensitivity | undefined = undefined>(
 t.string({ maxLength: 36 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:41`
+Source: `packages/core/src/schema/schema.ts:45`
 
 ## t.integer
 
@@ -34,7 +34,7 @@ export function integer<S extends Sensitivity | undefined = undefined>(
 t.integer({ minimum: 1, maximum: 100 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:62`
+Source: `packages/core/src/schema/schema.ts:66`
 
 ## t.number
 
@@ -52,7 +52,7 @@ export function number<S extends Sensitivity | undefined = undefined>(
 t.number({ minimum: 0 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:79`
+Source: `packages/core/src/schema/schema.ts:83`
 
 ## t.boolean
 
@@ -68,7 +68,7 @@ export function boolean<S extends Sensitivity | undefined = undefined>(
 t.boolean();
 ```
 
-Source: `packages/core/src/schema/schema.ts:95`
+Source: `packages/core/src/schema/schema.ts:99`
 
 ## t.null
 
@@ -84,7 +84,7 @@ function nullSchema<S extends Sensitivity | undefined = undefined>(
 t.null();
 ```
 
-Source: `packages/core/src/schema/schema.ts:106`
+Source: `packages/core/src/schema/schema.ts:110`
 
 ## t.literal
 
@@ -100,7 +100,7 @@ export function literal<const V extends LiteralValue>(value: V): LiteralSchema<V
 t.literal('admin');
 ```
 
-Source: `packages/core/src/schema/schema.ts:118`
+Source: `packages/core/src/schema/schema.ts:122`
 
 ## t.object
 
@@ -119,7 +119,7 @@ export function object<P extends Properties, S extends Sensitivity | undefined =
 t.object({ id: t.string({ maxLength: 36 }), age: t.optional(t.integer()) });
 ```
 
-Source: `packages/core/src/schema/schema.ts:136`
+Source: `packages/core/src/schema/schema.ts:140`
 
 ## t.array
 
@@ -138,7 +138,7 @@ export function array<I extends Schema, S extends Sensitivity | undefined = unde
 t.array(t.string({ maxLength: 32 }), { maxItems: 10 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:157`
+Source: `packages/core/src/schema/schema.ts:161`
 
 ## t.record
 
@@ -158,7 +158,7 @@ export function record<V extends Schema, S extends Sensitivity | undefined = und
 t.record(t.string({ maxLength: 16 }), t.integer(), { maxProperties: 50 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:186`
+Source: `packages/core/src/schema/schema.ts:190`
 
 ## t.union
 
@@ -177,7 +177,7 @@ export function union<const M extends readonly Schema[], S extends Sensitivity |
 t.union([t.literal('card'), t.literal('cash')]);
 ```
 
-Source: `packages/core/src/schema/schema.ts:222`
+Source: `packages/core/src/schema/schema.ts:226`
 
 ## t.optional
 
@@ -193,7 +193,7 @@ export function optional<S extends Schema>(inner: S): OptionalSchema<S>;
 t.object({ note: t.optional(t.string({ maxLength: 200 })) });
 ```
 
-Source: `packages/core/src/schema/schema.ts:248`
+Source: `packages/core/src/schema/schema.ts:252`
 
 ## t.exposed
 
@@ -209,7 +209,7 @@ export function exposed<T, W>(inner: Schema<Secret<T>, W>, reason: string): Expo
 t.exposed(t.string({ maxLength: 64, sensitivity: 'secret' }), 'returned once at creation');
 ```
 
-Source: `packages/core/src/schema/schema.ts:264`
+Source: `packages/core/src/schema/schema.ts:268`
 
 ## t.pick
 
@@ -228,7 +228,7 @@ export function pick<P extends Properties, S extends Sensitivity | undefined, co
 t.pick(t.object({ id: t.integer(), name: t.string({ maxLength: 64 }) }), ['name']);
 ```
 
-Source: `packages/core/src/schema/schema.ts:305`
+Source: `packages/core/src/schema/schema.ts:309`
 
 ## t.omit
 
@@ -247,7 +247,7 @@ export function omit<P extends Properties, S extends Sensitivity | undefined, co
 t.omit(t.object({ id: t.integer(), name: t.string({ maxLength: 64 }) }), ['id']);
 ```
 
-Source: `packages/core/src/schema/schema.ts:320`
+Source: `packages/core/src/schema/schema.ts:324`
 
 ## t.partial
 
@@ -266,7 +266,7 @@ export function partial<P extends Properties, S extends Sensitivity | undefined>
 t.partial(t.object({ name: t.string({ maxLength: 64 }) }), { minProperties: 1 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:335`
+Source: `packages/core/src/schema/schema.ts:339`
 
 ## t.extend
 
@@ -285,7 +285,7 @@ export function extend<P extends Properties, S extends Sensitivity | undefined, 
 t.extend(t.object({ id: t.integer() }), { active: t.boolean() });
 ```
 
-Source: `packages/core/src/schema/schema.ts:355`
+Source: `packages/core/src/schema/schema.ts:359`
 
 ## Secret
 
@@ -306,7 +306,7 @@ export class Secret<T> {
 String(new Secret('hunter2'));
 ```
 
-Source: `packages/core/src/schema/secret.ts:8`
+Source: `packages/core/src/schema/secret.ts:11`
 
 ## ArrayOptions
 
@@ -335,7 +335,7 @@ export type ArrayOptions = (
 | `minItems`    | Fewest items; above `maxItems` it makes `listen` refuse the route (`INVALID_BOUND`). |
 | `sensitivity` | The array's data class, which covers every item.                                     |
 
-Source: `packages/core/src/schema/types.ts:112`
+Source: `packages/core/src/schema/types.ts:115`
 
 ## ArraySchema
 
@@ -361,7 +361,7 @@ export interface ArraySchema<I extends Schema = Schema, T = I['~static'][]> exte
 | `unbounded`   | Why the array has no item bound.                     |
 | `sensitivity` | The data class the schema was declared with, if any. |
 
-Source: `packages/core/src/schema/types.ts:281`
+Source: `packages/core/src/schema/types.ts:284`
 
 ## BooleanSchema
 
@@ -379,7 +379,7 @@ export interface BooleanSchema<T = boolean> extends Schema<T, boolean> {
 | `kind`        | The schema's kind.                                   |
 | `sensitivity` | The data class the schema was declared with, if any. |
 
-Source: `packages/core/src/schema/types.ts:257`
+Source: `packages/core/src/schema/types.ts:260`
 
 ## ExposedSchema
 
@@ -399,7 +399,7 @@ export interface ExposedSchema<W> extends Schema<W, W> {
 | `inner`  | The `secret` schema it wraps.                                    |
 | `reason` | Why the value may leave in a response, exported as `x-exposure`. |
 
-Source: `packages/core/src/schema/types.ts:353`
+Source: `packages/core/src/schema/types.ts:356`
 
 ## Infer
 
@@ -409,7 +409,7 @@ The type validation hands a handler for a schema, with `secret` values as `Secre
 export type Infer<S extends Schema> = S['~static'];
 ```
 
-Source: `packages/core/src/schema/types.ts:66`
+Source: `packages/core/src/schema/types.ts:69`
 
 ## IntegerSchema
 
@@ -431,7 +431,7 @@ export interface IntegerSchema<T = number> extends Schema<T, number> {
 | `maximum`     | Largest value accepted, inclusive.                   |
 | `sensitivity` | The data class the schema was declared with, if any. |
 
-Source: `packages/core/src/schema/types.ts:233`
+Source: `packages/core/src/schema/types.ts:236`
 
 ## Issue
 
@@ -449,7 +449,7 @@ export interface Issue {
 | `message` | What is wrong; it never holds the received value.                    |
 | `path`    | Property names and array indexes from the root to the failing value. |
 
-Source: `packages/core/src/schema/types.ts:25`
+Source: `packages/core/src/schema/types.ts:28`
 
 ## JsonSchema
 
@@ -461,7 +461,7 @@ export interface JsonSchema {
 }
 ```
 
-Source: `packages/core/src/schema/types.ts:363`
+Source: `packages/core/src/schema/types.ts:366`
 
 ## Kind
 
@@ -483,7 +483,7 @@ export type Kind =
   | 'exposed';
 ```
 
-Source: `packages/core/src/schema/types.ts:4`
+Source: `packages/core/src/schema/types.ts:7`
 
 ## LiteralSchema
 
@@ -501,7 +501,7 @@ export interface LiteralSchema<V extends LiteralValue = LiteralValue> extends Sc
 | `kind`  | The schema's kind.      |
 | `value` | The one value accepted. |
 
-Source: `packages/core/src/schema/types.ts:273`
+Source: `packages/core/src/schema/types.ts:276`
 
 ## LiteralValue
 
@@ -511,7 +511,7 @@ The values `t.literal` accepts; a number must be finite.
 export type LiteralValue = string | number | boolean;
 ```
 
-Source: `packages/core/src/schema/types.ts:199`
+Source: `packages/core/src/schema/types.ts:202`
 
 ## NodeOptions
 
@@ -527,7 +527,7 @@ export interface NodeOptions {
 | ------------- | ----------------------- |
 | `sensitivity` | The value's data class. |
 
-Source: `packages/core/src/schema/types.ts:75`
+Source: `packages/core/src/schema/types.ts:78`
 
 ## NullSchema
 
@@ -545,7 +545,7 @@ export interface NullSchema<T = null> extends Schema<T, null> {
 | `kind`        | The schema's kind.                                   |
 | `sensitivity` | The data class the schema was declared with, if any. |
 
-Source: `packages/core/src/schema/types.ts:265`
+Source: `packages/core/src/schema/types.ts:268`
 
 ## NumberOptions
 
@@ -565,7 +565,7 @@ export interface NumberOptions {
 | `maximum`     | Largest value accepted, inclusive; below `minimum` it makes `listen` refuse the route (`INVALID_BOUND`).          |
 | `sensitivity` | The value's data class.                                                                                           |
 
-Source: `packages/core/src/schema/types.ts:166`
+Source: `packages/core/src/schema/types.ts:169`
 
 ## NumberSchema
 
@@ -587,7 +587,7 @@ export interface NumberSchema<T = number> extends Schema<T, number> {
 | `maximum`     | Largest value accepted, inclusive.                   |
 | `sensitivity` | The data class the schema was declared with, if any. |
 
-Source: `packages/core/src/schema/types.ts:245`
+Source: `packages/core/src/schema/types.ts:248`
 
 ## ObjectOptions
 
@@ -605,7 +605,7 @@ export interface ObjectOptions {
 | `open`        | Why the object accepts undeclared keys, which are dropped before the handler sees the value. |
 | `sensitivity` | The object's data class, which protects every property inside it.                            |
 
-Source: `packages/core/src/schema/types.ts:179`
+Source: `packages/core/src/schema/types.ts:182`
 
 ## ObjectSchema
 
@@ -630,7 +630,7 @@ export interface ObjectSchema<P extends Properties = Properties, S extends Sensi
 | `minProperties` | Fewest declared properties that must be present.              |
 | `sensitivity`   | The data class the schema was declared with, if any.          |
 
-Source: `packages/core/src/schema/types.ts:330`
+Source: `packages/core/src/schema/types.ts:333`
 
 ## ObjectStatic
 
@@ -642,7 +642,7 @@ export type ObjectStatic<P extends Properties> = { [K in Exclude<keyof P, Option
 };
 ```
 
-Source: `packages/core/src/schema/types.ts:209`
+Source: `packages/core/src/schema/types.ts:212`
 
 ## ObjectWire
 
@@ -654,7 +654,7 @@ export type ObjectWire<P extends Properties> = { [K in Exclude<keyof P, Optional
 };
 ```
 
-Source: `packages/core/src/schema/types.ts:214`
+Source: `packages/core/src/schema/types.ts:217`
 
 ## OptionalSchema
 
@@ -672,7 +672,7 @@ export interface OptionalSchema<S extends Schema = Schema> extends Schema<S['~st
 | `kind`  | The schema's kind.                    |
 | `inner` | The schema of the value when present. |
 
-Source: `packages/core/src/schema/types.ts:345`
+Source: `packages/core/src/schema/types.ts:348`
 
 ## PartialOptions
 
@@ -688,7 +688,7 @@ export interface PartialOptions {
 | --------------- | ------------------------------------------------------------------------------------------------------------ |
 | `minProperties` | Fewest declared properties that must be present, to refuse an empty PATCH body; undeclared keys never count. |
 
-Source: `packages/core/src/schema/types.ts:193`
+Source: `packages/core/src/schema/types.ts:196`
 
 ## PartialProperties
 
@@ -700,7 +700,7 @@ export type PartialProperties<P extends Properties> = {
 };
 ```
 
-Source: `packages/core/src/schema/types.ts:325`
+Source: `packages/core/src/schema/types.ts:328`
 
 ## Properties
 
@@ -712,7 +712,7 @@ export interface Properties {
 }
 ```
 
-Source: `packages/core/src/schema/types.ts:202`
+Source: `packages/core/src/schema/types.ts:205`
 
 ## RecordOptions
 
@@ -739,7 +739,7 @@ export type RecordOptions = (
 | `unbounded`     | Why the record has no key bound, exported as `x-unbounded`.                     |
 | `sensitivity`   | The record's data class, which covers its keys and values.                      |
 
-Source: `packages/core/src/schema/types.ts:140`
+Source: `packages/core/src/schema/types.ts:143`
 
 ## RecordSchema
 
@@ -766,7 +766,7 @@ export interface RecordSchema<V extends Schema = Schema, T = Record<string, V['~
 | `unbounded`     | Why the record has no key bound.                          |
 | `sensitivity`   | The data class the schema was declared with, if any.      |
 
-Source: `packages/core/src/schema/types.ts:297`
+Source: `packages/core/src/schema/types.ts:300`
 
 ## Schema
 
@@ -790,7 +790,7 @@ export interface Schema<T = unknown, W = unknown> {
 | `~wire`     | The type of the JSON value on the wire; type-only, absent at run time.                  |
 | `~standard` | The Standard Schema v1 interface, so tools that read Standard Schema accept the schema. |
 
-Source: `packages/core/src/schema/types.ts:54`
+Source: `packages/core/src/schema/types.ts:57`
 
 ## Sealed
 
@@ -800,7 +800,7 @@ The value type a data class gives: wrapped in `Secret` for `secret`, plain other
 export type Sealed<T, S> = [S] extends ['secret'] ? Secret<T> : T;
 ```
 
-Source: `packages/core/src/schema/types.ts:72`
+Source: `packages/core/src/schema/types.ts:75`
 
 ## Sensitivity
 
@@ -812,7 +812,7 @@ An error under a marked value reports one issue at its path and names no key or 
 export type Sensitivity = 'secret' | 'personal';
 ```
 
-Source: `packages/core/src/schema/types.ts:22`
+Source: `packages/core/src/schema/types.ts:25`
 
 ## StandardProps
 
@@ -834,7 +834,7 @@ export interface StandardProps<I, O> {
 | `validate` | Checks a value synchronously: `{ value }` with `secret` values wrapped, or `{ issues }`. |
 | `types`    | The input and output types, for type inference only; absent at run time.                 |
 
-Source: `packages/core/src/schema/types.ts:36`
+Source: `packages/core/src/schema/types.ts:39`
 
 ## StringOptions
 
@@ -863,7 +863,7 @@ export type StringOptions = (
 | `minLength`   | Fewest UTF-16 code units; above `maxLength` it makes `listen` refuse the route (`INVALID_BOUND`). |
 | `sensitivity` | The value's data class.                                                                           |
 
-Source: `packages/core/src/schema/types.ts:84`
+Source: `packages/core/src/schema/types.ts:87`
 
 ## StringSchema
 
@@ -887,7 +887,7 @@ export interface StringSchema<T = string> extends Schema<T, string> {
 | `unbounded`   | Why the string has no length bound.                  |
 | `sensitivity` | The data class the schema was declared with, if any. |
 
-Source: `packages/core/src/schema/types.ts:219`
+Source: `packages/core/src/schema/types.ts:222`
 
 ## UnionSchema
 
@@ -908,7 +908,7 @@ export interface UnionSchema<M extends readonly Schema[] = readonly Schema[], T 
 | `members`     | The member schemas, tried in declaration order.      |
 | `sensitivity` | The data class the schema was declared with, if any. |
 
-Source: `packages/core/src/schema/types.ts:314`
+Source: `packages/core/src/schema/types.ts:317`
 
 ## Wire
 
@@ -918,4 +918,4 @@ The JSON type of a schema on the wire, with `secret` values raw.
 export type Wire<S extends Schema> = S['~wire'];
 ```
 
-Source: `packages/core/src/schema/types.ts:69`
+Source: `packages/core/src/schema/types.ts:72`

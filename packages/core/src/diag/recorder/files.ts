@@ -1,3 +1,6 @@
+// Does:  Claims the diag folder and writes the run, snapshot and journal files.
+// Holds: A folder held by a live process is refused; after one failed write the recorder writes nothing more.
+
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { refuse } from './config.ts';
@@ -47,6 +50,7 @@ function isAlive(pid: number): boolean {
     if (code === 'ESRCH') {
       return false;
     }
+    // Why: EPERM means the process exists but belongs to another user, so it counts as alive.
     if (code === 'EPERM') {
       return true;
     }
@@ -86,6 +90,7 @@ export function claimFolder(dir: string, header: string): void {
     journal: join(dir, JOURNAL_FILE),
   };
   try {
+    // Why: Exclusive create, so two processes cannot both claim an empty folder.
     writeFileSync(paths.run, header, { flag: 'wx' });
   } catch (error) {
     if (errorCode(error) !== 'EEXIST') {

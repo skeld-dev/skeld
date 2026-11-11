@@ -1,3 +1,6 @@
+// Does:  Reduces the measured samples to a median and range per server and route, with ratios to Fastify.
+// Holds: A group's CPU figure is null unless every one of its rounds has one.
+
 import type { BenchSample, BenchSpread, BenchSummary, BuildId, RouteId, ServerId } from './types.ts';
 
 export function median(values: readonly number[]): number {

@@ -1,3 +1,6 @@
+// Does:  Proves that a request with two Host fields is answered 400 with connection: close.
+// Holds: No hook and no handler runs for the refused request.
+
 import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';

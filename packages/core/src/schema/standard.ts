@@ -1,3 +1,6 @@
+// Does:  Builds the Standard Schema entry a node exposes as ~standard.
+// Holds: validate returns issues for a refused value or the finished value for an accepted one, never both.
+
 import { compileCheck } from './check.ts';
 import { explain } from './explain.ts';
 import { compileFinish } from './finish.ts';
@@ -15,6 +18,7 @@ function buildStandard(schema: Schema): StandardProps<unknown, unknown> {
     validate: (value: unknown) => {
       if (!check(value)) {
         const issues = explain(schema, value, 100);
+        // Why: A value the check refused always yields at least one issue, even when the explanation finds none.
         return { issues: issues.length > 0 ? issues : [{ message: isNotAllowed, path: [] }] };
       }
       return { value: finish === null ? value : finish(value) };

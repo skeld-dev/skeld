@@ -1,3 +1,6 @@
+// Does:  Holds every validation message the engine can produce.
+// Holds: A message is built from the declaration alone and never contains a value a client sent.
+
 import type { LiteralValue } from './types.ts';
 
 export type ExpectedType = 'string' | 'integer' | 'number' | 'boolean' | 'null' | 'object' | 'array';

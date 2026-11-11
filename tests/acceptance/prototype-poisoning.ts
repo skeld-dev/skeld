@@ -1,3 +1,6 @@
+// Does:  Proves that a JSON body with an own __proto__ or constructor.prototype key is answered 400.
+// Holds: The handler never runs for such a body.
+
 import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';

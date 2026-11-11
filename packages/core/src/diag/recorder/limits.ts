@@ -1,3 +1,6 @@
+// Does:  Tracks how close each limit comes to being used up, and raises an alarm near the top.
+// Holds: An alarm is raised once at 95 % of a limit and re-armed only after the ratio falls below 80 %.
+
 import { type Counter, keyedCounter } from './counts.ts';
 import { raise } from './events.ts';
 

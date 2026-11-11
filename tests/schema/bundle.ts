@@ -1,3 +1,6 @@
+// Does:  Measures the client bundle of the diverse fixture against Valibot and Zod Mini.
+// Holds: A bundle that refuses a valid sample or accepts an invalid one is not compared.
+
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

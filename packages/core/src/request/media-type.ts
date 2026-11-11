@@ -1,6 +1,10 @@
+// Does:  Extracts the media type from a Content-Type header, ignoring its parameters.
+// Holds: The type returned is lowercase and made of token characters only; parameters never reach the caller.
+
 import { end, start } from '#diag';
 import type { MediaTypeResult } from './types.ts';
 
+// Why: type/subtype in RFC 9110 token characters (section 5.6.2), with optional whitespace around it.
 const MEDIA_TYPE = /^[ \t]*([\w!#$%&'*+.^`|~-]+\/[\w!#$%&'*+.^`|~-]+)[ \t]*$/;
 
 export function parseMediaType(header: string | undefined): MediaTypeResult {

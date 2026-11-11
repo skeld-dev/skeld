@@ -1,3 +1,6 @@
+// Does:  Runs the registered plugins depth-first in registration order, each under a time limit.
+// Holds: A scope is sealed once its plugin settles, fails or times out; nothing registers on it afterwards.
+
 import { end, start } from '#diag';
 import { BootError } from './boot-error.ts';
 import { causeMessage } from './cause-message.ts';
@@ -10,6 +13,7 @@ async function runPlugin(child: ChildScope, timeoutMs: number): Promise<void> {
   const timer = setTimeout(() => expiry.resolve('timed-out'), timeoutMs);
   let outcome: 'settled' | 'timed-out';
   try {
+    // Why: Promise.try turns a plugin that throws synchronously into a rejection the same catch handles.
     const settled = Promise.try(child.plugin, createScope(child.state)).then(() => 'settled' as const);
     outcome = await Promise.race([settled, expiry.promise]);
   } catch (cause) {

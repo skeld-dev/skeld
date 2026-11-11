@@ -1,3 +1,6 @@
+// Does:  Holds one route tree per HTTP method; adds routes at boot and finds them per request.
+// Holds: A method and path pair is added at most once; a duplicate is reported, never overwritten.
+
 import { end, start } from '#diag';
 import { matchPath } from './match.ts';
 import { splitPath } from './path-decode.ts';
@@ -9,6 +12,7 @@ interface MethodTable<T> {
 }
 
 export function createRouter<T>(): Router<T> {
+  // Why: No prototype, so a method string from a request can never find an inherited member.
   const trees: MethodTable<T> = Object.create(null);
   return {
     add(method, _path, segments, value) {
@@ -26,6 +30,7 @@ export function createRouter<T>(): Router<T> {
       return { kind: 'added' };
     },
     find(method, rawPath, maxParamLength) {
+      // Why: Only origin-form targets are routed; asterisk-form and authority-form find nothing.
       if (!rawPath.startsWith('/')) {
         return { kind: 'not-found' };
       }

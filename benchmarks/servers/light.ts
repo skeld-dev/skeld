@@ -1,3 +1,6 @@
+// Does:  Serves the hello and echo routes with lightstart, for comparison.
+// Holds: It serves the same two routes with the same bodies as every other server here.
+
 import { App, type Context, json } from '@lightstart/server';
 import { type NodeServer, serve } from '@lightstart/server/node';
 import { host } from '../values.ts';

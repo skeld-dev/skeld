@@ -13,7 +13,7 @@ export type CallInput<R extends RouteDefinition> = (R extends { readonly params:
   (R extends { readonly body: infer S extends Schema } ? { readonly body: Wire<S> } : unknown);
 ```
 
-Source: `packages/core/src/client/types.ts:419`
+Source: `packages/core/src/client/types.ts:422`
 
 ## CallResult
 
@@ -43,7 +43,7 @@ export type CallResult<R extends RouteDefinition> =
 | `headers` | The response headers.                                                                          |
 | `body`    | The response body; for a status the contract does not declare, unchecked JSON, text or `null`. |
 
-Source: `packages/core/src/client/types.ts:430`
+Source: `packages/core/src/client/types.ts:433`
 
 ## Client
 
@@ -53,7 +53,7 @@ A typed client: one `RouteCall` per route name of the contract.
 export type Client<C extends ContractRoutes> = { readonly [K in keyof C]: RouteCall<C[K]> };
 ```
 
-Source: `packages/core/src/client/types.ts:460`
+Source: `packages/core/src/client/types.ts:463`
 
 ## ClientOptions
 
@@ -71,7 +71,7 @@ export interface ClientOptions {
 | `baseUrl` | The service's origin and base path: an absolute http or https URL with no query or fragment. |
 | `fetch`   | The function that sends each request (default `globalThis.fetch`).                           |
 
-Source: `packages/core/src/client/types.ts:5`
+Source: `packages/core/src/client/types.ts:8`
 
 ## FetchStatus
 
@@ -481,7 +481,7 @@ export type FetchStatus =
   | 599;
 ```
 
-Source: `packages/core/src/client/types.ts:16`
+Source: `packages/core/src/client/types.ts:19`
 
 ## RouteCall
 
@@ -499,7 +499,7 @@ export type RouteCall<R extends RouteDefinition> = R extends
   : (input?: Empty) => Promise<CallResult<R>>;
 ```
 
-Source: `packages/core/src/client/types.ts:451`
+Source: `packages/core/src/client/types.ts:454`
 
 ## createClient
 
@@ -517,4 +517,4 @@ createClient(defineContract({ health: { method: 'GET', path: '/health', response
 });
 ```
 
-Source: `packages/core/src/client/client.ts:180`
+Source: `packages/core/src/client/client.ts:187`

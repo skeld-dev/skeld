@@ -1,3 +1,6 @@
+// Does:  Exports a schema node as a JSON Schema node.
+// Holds: A secret node is marked writeOnly with x-sensitivity; a closed object exports additionalProperties: false.
+
 import { isModelSchema } from './node.ts';
 import type { JsonSchema, ObjectSchema, Schema, Sensitivity } from './types.ts';
 
@@ -33,6 +36,7 @@ function exportObject(schema: ObjectSchema): JsonSchema {
 
 export function exportNode(schema: Schema): JsonSchema {
   if (!isModelSchema(schema)) {
+    // Why: A node this model did not make exports as the schema that nothing satisfies.
     return { not: {} };
   }
   switch (schema.kind) {
@@ -87,6 +91,7 @@ export function exportNode(schema: Schema): JsonSchema {
       return exportNode(schema.inner);
     case 'exposed':
       return Object.fromEntries([
+        // Why: An exposed secret may be read in a response, so it loses writeOnly and records its reason.
         ...Object.entries(exportNode(schema.inner)).filter(([keyword]) => keyword !== 'writeOnly'),
         ['x-exposure', schema.reason],
       ]);

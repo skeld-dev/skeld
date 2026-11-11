@@ -14,7 +14,7 @@ export function toJsonSchema(schema: Schema): JsonSchema;
 toJsonSchema(t.string({ maxLength: 36 }));
 ```
 
-Source: `packages/core/src/schema/json-schema.ts:9`
+Source: `packages/core/src/schema/json-schema.ts:12`
 
 ## JsonSchema
 
@@ -26,4 +26,4 @@ export interface JsonSchema {
 }
 ```
 
-Source: `packages/core/src/schema/types.ts:363`
+Source: `packages/core/src/schema/types.ts:366`

@@ -1,3 +1,6 @@
+// Does:  Formats everything the benchmark prints to the terminal.
+// Holds: It only formats; no figure is computed or decided here.
+
 import { relative } from 'node:path';
 import { generatorBottleneckText } from './verdict.ts';
 import type {

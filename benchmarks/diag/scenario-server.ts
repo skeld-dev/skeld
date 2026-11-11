@@ -1,3 +1,6 @@
+// Does:  Serves the scenario routes the security pass drives, with an option to plant known leaks.
+// Holds: Leaks exist only when planting is asked for; the clean pass runs the same routes without them.
+
 import { defineContract } from '@darkstart/core/contract';
 import * as t from '@darkstart/core/schema';
 import type { Scope } from '@darkstart/core/server';

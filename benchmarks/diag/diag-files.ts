@@ -1,3 +1,6 @@
+// Does:  Reads and checks the three files a recorder writes: run, snapshots and journal.
+// Holds: The files are untrusted input: every read is size-bounded and every field checked before use.
+
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { join } from 'node:path';
 import { BenchError, errorCode } from '../bench-error.ts';

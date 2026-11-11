@@ -1,3 +1,6 @@
+// Does:  Declares the client's public types: options, call inputs and results.
+// Holds: A call's input and result types are derived from its route's schemas, never written by hand.
+
 import type { ContractRoutes, Empty, RouteDefinition } from '../contract/types.ts';
 import type { Schema, Wire } from '../schema/types.ts';
 

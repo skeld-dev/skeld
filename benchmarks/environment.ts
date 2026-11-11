@@ -1,3 +1,6 @@
+// Does:  Captures the machine and installed software, and builds the environment each child runs in.
+// Holds: A child never inherits a DARKSTART_DIAG_ variable, and a --conditions in NODE_OPTIONS refuses the run.
+
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { cpus, loadavg, release, totalmem, type } from 'node:os';

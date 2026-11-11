@@ -1,3 +1,6 @@
+// Does:  Measures the generated serializer against fast-json-stringify on seven response shapes.
+// Holds: A serializer that writes nothing aborts the run, so a broken engine cannot post a fast figure.
+
 import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { loadavg } from 'node:os';

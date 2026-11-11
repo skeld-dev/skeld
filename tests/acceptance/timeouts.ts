@@ -1,3 +1,6 @@
+// Does:  Proves that a stalled request line and a stalled body are answered 408 within the checking interval.
+// Holds: Measured with short timeouts and with the defaults, each answer inside a wall-clock window.
+
 import http from 'node:http';
 import { syncBuiltinESMExports } from 'node:module';
 import net from 'node:net';

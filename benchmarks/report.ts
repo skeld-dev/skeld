@@ -1,3 +1,6 @@
+// Does:  Writes a run's results as JSON and as the Markdown report.
+// Holds: Both files are written from the same run object, so the report cannot disagree with the data.
+
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { routeCommandLine } from './load.ts';

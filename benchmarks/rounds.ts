@@ -1,3 +1,6 @@
+// Does:  Runs the schedule: for each visit, start the server, warm up, measure and stop.
+// Holds: One server runs at a time; an interrupt ends the schedule after the current step.
+
 import { BenchError } from './bench-error.ts';
 import { preflightRoutes } from './check.ts';
 import { classifyBound, startCpuSample } from './cpu.ts';

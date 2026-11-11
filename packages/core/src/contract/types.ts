@@ -1,3 +1,6 @@
+// Does:  Declares the contract's shapes: routes, response schemas, the error body and the engine's error codes.
+// Holds: The error body is exactly status, code, message and optional details; nothing else is ever on the wire.
+
 import type { ObjectSchema, Schema } from '../schema/types.ts';
 
 /** The HTTP methods a route can declare. */

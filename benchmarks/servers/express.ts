@@ -1,3 +1,6 @@
+// Does:  Serves the hello and echo routes with Express, for comparison.
+// Holds: It serves the same two routes with the same bodies as every other server here.
+
 import express from 'express';
 import { host } from '../values.ts';
 import { announceReady, failToStart, parsePort } from './server-command.ts';

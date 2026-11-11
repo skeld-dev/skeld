@@ -1,3 +1,6 @@
+// Does:  Drives the security scenario against the scenario server and reads what the recorder saw.
+// Holds: A step's figures are the difference between the snapshots taken before and after that step alone.
+
 import { Agent, request } from 'node:http';
 import { connect } from 'node:net';
 import { basename } from 'node:path';

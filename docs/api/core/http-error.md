@@ -16,7 +16,7 @@ export interface HttpErrorOptions {
 | `details` | The details written in the error body's `details`.                       |
 | `cause`   | The underlying cause, kept on the error and never written to the client. |
 
-Source: `packages/core/src/contract/types.ts:61`
+Source: `packages/core/src/contract/types.ts:64`
 
 ## HttpError
 
@@ -38,4 +38,4 @@ export class HttpError extends Error {
 new HttpError(404, 'NOT_FOUND', 'No such user');
 ```
 
-Source: `packages/core/src/contract/http-error.ts:16`
+Source: `packages/core/src/contract/http-error.ts:19`

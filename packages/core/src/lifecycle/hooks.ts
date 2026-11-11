@@ -1,3 +1,6 @@
+// Does:  Runs hook chains for a stage and builds the context records each kind of hook receives.
+// Holds: After a hook sends a reply, no later hook of the stage and no later stage runs.
+
 import type { IncomingMessage } from 'node:http';
 import { contain, end, event, header, leave, resume, type Slot, track, wrote } from '#diag';
 import type { RouteInfo } from '../contract/types.ts';
@@ -16,6 +19,7 @@ import { describeThrown, writeStderrLine } from './stderr.ts';
 
 const ALREADY_SENT = 'Response already sent';
 
+// Does:  Writes a reply a hook sends in place of the handler's; a second send throws and is reported once.
 function sendReply(exchange: Exchange, reply: RawReply): void {
   const { res, method } = exchange;
   if (exchange.state !== 'running') {
@@ -115,6 +119,8 @@ export class ResponseContextRecord extends ErrorContextRecord implements Respons
   }
 }
 
+// Does:  Calls the hooks in order, awaiting each; the first throw or rejection goes to fault and ends the stage.
+// Holds: next runs only when every hook returned and none sent a reply.
 export function runStage<H>(
   exchange: Exchange,
   hooks: readonly H[],
@@ -158,6 +164,7 @@ export function runStage<H>(
   step(0);
 }
 
+// Does:  Calls every hook in order even when one throws; each failure is reported and the rest still run.
 export function runObservers<H>(
   slot: Slot,
   hooks: readonly H[],
@@ -200,6 +207,7 @@ export function runObservers<H>(
   step(0);
 }
 
+// Does:  Runs the onResponse hooks when the response closes, telling them whether it finished.
 export function watchCompletion(exchange: Exchange, hooks: readonly OnResponseHook[]): void {
   const { res } = exchange;
   let finished = false;

@@ -1,3 +1,6 @@
+// Does:  Runs the type-system acceptance scripts in turn and reports how many passed.
+// Holds: It exits non-zero unless every script passed; each script runs in its own process.
+
 import { spawnSync } from 'node:child_process';
 
 const scripts = [

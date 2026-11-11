@@ -1,3 +1,6 @@
+// Does:  Serves the hello and echo routes with DarkStart: the server under test.
+// Holds: It serves the same two routes with the same bodies as every other server here.
+
 import { defineContract } from '@darkstart/core/contract';
 import * as t from '@darkstart/core/schema';
 import { createServer } from '@darkstart/core/server';

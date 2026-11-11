@@ -1,3 +1,6 @@
+// Does:  Serves the hello and echo routes with bare node:http, the ceiling no framework on Node can beat.
+// Holds: It serves the same two routes with the same bodies as every other server here.
+
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { host } from '../values.ts';
 import { announceReady, failToStart, parsePort } from './server-command.ts';

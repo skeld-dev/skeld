@@ -1,3 +1,6 @@
+// Does:  Emits the JavaScript source of the response serializer, which tests each value as it writes it.
+// Holds: A value the check would refuse is never written; the function returns the index of the refusing location.
+
 import { isModelSchema } from '../schema/node.ts';
 import { toPointer } from '../schema/pointer.ts';
 import type { ArraySchema, ObjectSchema, RecordSchema, Schema, UnionSchema } from '../schema/types.ts';
@@ -13,6 +16,7 @@ interface Emission {
   readonly refusals: string[];
 }
 
+// Does:  Where a node writes: its sink variable, whether objects must be exact, where a failure jumps, its path.
 interface Place {
   readonly sink: string;
   readonly exact: boolean;
@@ -20,16 +24,19 @@ interface Place {
   readonly path: readonly string[];
 }
 
+// Does:  Text owed before the next write: a run-time expression first, then constant text folded into one append.
 interface Lead {
   readonly before: string | null;
   readonly text: string;
 }
 
+// Does:  The code for one node and the constant text it still owes to whatever is written next.
 interface Emitted {
   readonly code: string;
   readonly owed: string;
 }
 
+// Does:  How far an object has got: whether a key was certainly written, or the variable that holds its comma.
 interface Opening {
   readonly comma: string | null;
   readonly certain: boolean;
@@ -77,6 +84,8 @@ function separator(lead: Lead, opening: string, comma: string): string {
   return `let ${comma} = ${start}${JSON.stringify(lead.text + opening)};\n`;
 }
 
+// Does:  Returns the statement a refusal runs: a jump out of a union member, or a return of the location's index.
+// Holds: A location is a path of declared names and '*' only, never a value, a record key or an array index.
 function failAt(place: Place, emission: Emission): string {
   if (place.escape !== null) {
     return place.escape;
@@ -143,6 +152,7 @@ function emitObject(node: ObjectSchema, value: string, place: Place, lead: Lead,
   const counted = exact || node.minProperties !== undefined;
   const present = counted && required < entries.length ? fresh('p', names) : null;
   const [first] = entries;
+  // Why: When the first key is optional, whether a comma is owed is known only at run time, so a variable carries it.
   const comma = first !== undefined && optionalInner(first[1]) !== null ? fresh('c', names) : null;
   let opening: Opening = {
     comma,
@@ -178,6 +188,7 @@ function emitArray(node: ArraySchema, value: string, place: Place, lead: Lead, e
   const item = fresh('v', names);
   const comma = fresh('c', names);
   const bounds = test([above(length, node.maxItems), below(length, node.minItems)], fail);
+  // Why: length is read once and the bounds tested before the loop, so an over-long array is refused before any write.
   const head = `${test([`!Array.isArray(${value})`], fail)}const ${length} = ${value}.length;\n${bounds}`;
   const written = emitNode(node.items, item, within(place, ANY_ENTRY), { before: comma, text: '' }, emission);
   const next = `${comma} = ${JSON.stringify(`${written.owed},`)};\n`;
@@ -199,6 +210,7 @@ function emitRecord(node: RecordSchema, value: string, place: Place, lead: Lead,
   const item = fresh('v', names);
   const comma = fresh('c', names);
   const count = `${keys}.length`;
+  // Why: Object.keys lists own enumerable string keys once, so an inherited key is never written.
   const head = `${test(objectTest(value), fail)}const ${keys} = Object.keys(${value});\n${test([above(count, node.maxProperties)], fail)}`;
   const keyed: Lead = { before: `${comma} + "\\"" + escaped(${key})`, text: '":' };
   const written = emitNode(node.value, item, within(place, ANY_ENTRY), keyed, emission);
@@ -212,6 +224,7 @@ function emitRecord(node: RecordSchema, value: string, place: Place, lead: Lead,
   return { code: head + separator(lead, '{', comma) + loop + last, owed: '}' };
 }
 
+// Does:  Emits one attempt per member into its own string; the first to complete is appended, the others discarded.
 function emitUnion(node: UnionSchema, value: string, place: Place, lead: Lead, emission: Emission): Emitted {
   const { names } = emission;
   const end = fresh('L', names);
@@ -219,6 +232,7 @@ function emitUnion(node: UnionSchema, value: string, place: Place, lead: Lead, e
   for (const member of node.members) {
     const label = fresh('L', names);
     const text = fresh('s', names);
+    // Why: A member must match exactly here, or an object with extra keys would be written as the wrong member.
     const attempt: Place = { sink: text, exact: true, escape: `break ${label};`, path: place.path };
     const written = emitNode(member, value, attempt, NOTHING, emission);
     const matched = write(place.sink, [lead.before, constant(lead.text), text, constant(written.owed)]);
@@ -270,6 +284,7 @@ function emitNode(node: Schema, value: string, place: Place, lead: Lead, emissio
   }
 }
 
+// Does:  Returns the source of a factory that takes the escaper and returns the serializer, with its locations.
 export function emitSerializer(schema: Schema): SerializerSource {
   const emission: Emission = { names: { next: 0 }, refusals: [] };
   const place: Place = { sink: 'j', exact: false, escape: null, path: [] };

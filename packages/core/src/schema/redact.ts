@@ -1,3 +1,6 @@
+// Does:  Replaces the secret and personal parts of a value with markers, for logs.
+// Holds: A value under a sensitive node is never returned; a union value matching no member takes its strongest marker.
+
 import { compileCheck } from './check.ts';
 import { isModelSchema } from './node.ts';
 import type { ObjectSchema, Schema, Sensitivity } from './types.ts';
@@ -47,6 +50,7 @@ function reached(schema: Schema): Sensitivity | undefined {
 function redactObject(schema: ObjectSchema, value: Readonly<Record<string, unknown>>): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => {
+      // Why: An undeclared key is kept as it is; the schema says nothing about it.
       const property = Object.hasOwn(schema.properties, key) ? schema.properties[key] : undefined;
       return [key, property === undefined || item === undefined ? item : redact(property, item)];
     }),
@@ -60,6 +64,7 @@ function redactObject(schema: ObjectSchema, value: Readonly<Record<string, unkno
  */
 export function redact(schema: Schema, value: unknown): unknown {
   if (!isModelSchema(schema)) {
+    // Why: Without a schema to say what is safe, the whole value is treated as secret.
     return marker('secret');
   }
   const sensitivity = 'sensitivity' in schema ? schema.sensitivity : undefined;

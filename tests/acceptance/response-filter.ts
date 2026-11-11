@@ -1,3 +1,6 @@
+// Does:  Proves that keys a handler returns beyond its response schema never reach the wire.
+// Holds: The response body holds exactly the declared keys.
+
 import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';

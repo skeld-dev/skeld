@@ -1,3 +1,6 @@
+// Does:  Declares the node prototype and the tests that recognise a schema node.
+// Holds: isNode is true only for an object whose prototype is the one shared node prototype.
+
 import type {
   ArraySchema,
   BooleanSchema,

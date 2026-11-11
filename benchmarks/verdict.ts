@@ -1,3 +1,6 @@
+// Does:  Decides the verdict: keep, below the line, or not assessed with the reason.
+// Holds: A run that deviates from the protocol, was interrupted or was generator-bound is never assessed.
+
 import { defaultServerIds, routeIds } from './options.ts';
 import type { BenchSample, BenchSummary, BenchVerdict, RouteId, RunOptions } from './types.ts';
 import {

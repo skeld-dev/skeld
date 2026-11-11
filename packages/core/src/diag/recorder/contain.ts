@@ -1,3 +1,6 @@
+// Does:  Checks that a context given to user code holds no raw request, response or socket, and watches listeners.
+// Holds: A context whose own property is a raw Node object raises contain.raw_request, which fails the run.
+
 import { IncomingMessage, type Server, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
 import type { ContextKind } from '../empty.ts';
@@ -27,6 +30,7 @@ const reachesRaw = (held: unknown): boolean =>
 export function checkContain(kind: ContextKind, value: object): void {
   contextCounter(kind).total += 1;
   const record = state.current;
+  // Why: The property walk runs on sampled requests only; the per-kind counter above runs on every one.
   if (record === null || !record.step) {
     return;
   }

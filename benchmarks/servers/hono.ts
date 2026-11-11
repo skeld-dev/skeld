@@ -1,3 +1,6 @@
+// Does:  Serves the hello and echo routes with Hono, for comparison.
+// Holds: It serves the same two routes with the same bodies as every other server here.
+
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { host } from '../values.ts';

@@ -1,3 +1,6 @@
+// Does:  Proves that malformed percent-encoding in the request path is answered 400.
+// Holds: No hook and no handler runs for the refused request.
+
 import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';
 import { createServer } from '@darkstart/core/server';

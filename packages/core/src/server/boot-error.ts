@@ -1,3 +1,6 @@
+// Does:  Defines BootError and the codes for everything that can refuse a server before it listens.
+// Holds: Every boot refusal carries one of the listed codes, and the route or plugin it concerns when there is one.
+
 import type { RouteInfo } from '../contract/types.ts';
 
 /**

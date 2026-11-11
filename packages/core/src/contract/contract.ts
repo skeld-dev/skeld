@@ -1,3 +1,6 @@
+// Does:  Defines defineContract and the schema of the one error body.
+// Holds: A contract returned by defineContract has passed every contract check.
+
 import { array, integer, object, optional, string } from '../schema/schema.ts';
 import { checkContract } from './checks.ts';
 import type { ContractRoutes } from './types.ts';
@@ -13,6 +16,7 @@ export type {
   RouteDefinition,
 } from './types.ts';
 
+// Why: The error body's strings come from the service itself, so they are declared unbounded with this reason.
 const WRITTEN_BY_SERVICE = 'written by the service, not by a client';
 
 /**

@@ -1,3 +1,6 @@
+// Does:  Defines createClient: one typed call per route, built from the same contract the server uses.
+// Holds: A declared response body is checked against its schema before the caller sees it.
+
 import { end, event, track } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { ContractRoutes, ErrorDetail, RouteDefinition } from '../contract/types.ts';
@@ -36,6 +39,7 @@ interface RuntimeClient {
   readonly [name: string]: (input?: CallParts) => Promise<ReceivedResult>;
 }
 
+// Does:  Returns the base as origin and path with no trailing slash; anything but a clean http(s) URL is refused.
 function parseBaseUrl(baseUrl: string | URL): string {
   const text = String(baseUrl);
   const url = URL.parse(text);
@@ -83,6 +87,7 @@ function compileResponseValidators(route: RouteDefinition): ReadonlyMap<number, 
     const status = Number(key);
     const schema = route.responses[status];
     if (schema !== null && schema !== undefined) {
+      // Why: The closure check, not the generated one, so the client runs where code generation is forbidden.
       validators.set(status, { schema, check: compileCheck(schema), finish: compileFinish(schema, 'raw') });
     }
   }
@@ -130,6 +135,7 @@ function createCall(
     const call = track('client.call', name);
     try {
       const url = buildUrl(input?.params, input?.query);
+      // Why: Error messages name the method, origin and path only; a query may hold a secret.
       const target = `${route.method} ${url.origin}${url.pathname}`;
       const headers = buildHeaders(route, input?.headers);
       const init: RequestInit =
@@ -156,6 +162,7 @@ function createCall(
         const body = validateResponse(validator, target, response.status, read);
         return { status: response.status, headers: response.headers, body };
       }
+      // Why: An undeclared status has no schema; only a body that claims to be JSON and is not is refused.
       if (read.kind === 'invalid-json') {
         event('client.error', 'INVALID_RESPONSE');
         throw new HttpError(
@@ -178,7 +185,7 @@ function createCall(
  * @example createClient(defineContract({ health: { method: 'GET', path: '/health', responses: { 204: null } } }), { baseUrl: 'http://127.0.0.1:3000' })
  */
 export function createClient<const C extends ContractRoutes>(contract: C, options: ClientOptions): Client<C>;
-// The one erasure point: a mapped Client<C> cannot be built by a loop, so this overload pairs it with RuntimeClient.
+// Why: The one erasure point: a mapped Client<C> cannot be built by a loop, so this overload adds RuntimeClient.
 export function createClient<const C extends ContractRoutes>(
   contract: C,
   options: ClientOptions,

@@ -1,3 +1,6 @@
+// Does:  Proves that the closure check and the client work where code generation from strings is forbidden.
+// Holds: Run under --disallow-code-generation-from-strings; listen itself must reject with CODEGEN_UNAVAILABLE.
+
 import { createClient } from '@darkstart/core/client';
 import { defineContract } from '@darkstart/core/contract';
 import * as t from '@darkstart/core/schema';

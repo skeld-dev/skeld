@@ -1,3 +1,6 @@
+// Does:  Records security and failure events: a count for every one and a rate-limited journal line.
+// Holds: At most 10 journal lines per event name per window; a leak or containment event marks the run as failing.
+
 interface EventState {
   readonly name: string;
   readonly failsRun: boolean;
@@ -15,7 +18,7 @@ export interface EventFigures {
   readonly run_suppressed: number;
 }
 
-// C-51: at most 10 journal lines per event name per one-second window.
+// Why: A flood of one event must not fill the journal; its count still records every occurrence.
 const LINES_PER_WINDOW = 10;
 const SUBJECT_LENGTH = 64;
 

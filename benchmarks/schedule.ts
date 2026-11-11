@@ -1,3 +1,6 @@
+// Does:  Builds the list of visits: every entrant once per round, in an order rotated each round.
+// Holds: Each entrant is measured once per round, and no entrant keeps the same position every round.
+
 import type { BuildId, RunOptions, ServerId, Visit } from './types.ts';
 
 interface Entrant {

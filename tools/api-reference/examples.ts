@@ -1,3 +1,6 @@
+// Does:  Compiles and runs the @example line of every public symbol, from source.
+// Holds: An example that fails to compile, fails to run or runs past 10 s is a finding, never a skip.
+
 import { spawn } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
@@ -56,6 +59,7 @@ interface Run {
 const tsc = join(root, 'node_modules/.bin/tsc');
 const examplesDir = join(root, 'examples');
 const diagnosticPattern = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
+// Why: An example is one line; one that has not exited by now is hung, not slow.
 const exampleLimitMs = 10_000;
 const timeoutText = 'did not exit within 10 s';
 

@@ -1,3 +1,6 @@
+// Does:  Proves that a request pipelined behind an over-limit one never reaches its handler.
+// Holds: It holds whether the onRequest hook passes, throws or sends, with the hook delayed by 50 ms.
+
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';

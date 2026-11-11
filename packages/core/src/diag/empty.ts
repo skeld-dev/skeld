@@ -1,3 +1,6 @@
+// Does:  Declares every diagnostic hook and gives each an empty implementation for the shipped build.
+// Holds: Every hook here does nothing and returns at once; the shipped build never loads the recorder.
+
 import type { IncomingMessage, OutgoingHttpHeaders, Server, ServerResponse } from 'node:http';
 import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { ResolvedServerOptions } from '../server/types.ts';

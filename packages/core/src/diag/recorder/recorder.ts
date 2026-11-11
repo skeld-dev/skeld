@@ -1,3 +1,6 @@
+// Does:  Implements every diagnostic hook for the diag build and owns the run's start and end.
+// Holds: It exports exactly the hooks empty.ts declares, with the same signatures.
+
 import type { ResolvedServerOptions } from '../../server/types.ts';
 import type {
   Begin,
@@ -135,6 +138,7 @@ export const open: Open = (options) => {
   run.openNs = nowNs();
   bootFigures.startedAt = Date.now();
   claimFolder(settings.dir, runFile(options));
+  // Why: A process that exits without close() still gets its final snapshot.
   process.on('exit', writeFinal);
   openBoot();
 };
@@ -152,6 +156,7 @@ export const listening: Listening = (server) => {
   watchServer(server);
   startProcessWatch();
   run.timer = setInterval(() => writeSnapshot(false), SNAPSHOT_INTERVAL_MS);
+  // Why: The snapshot timer must not keep the process alive.
   run.timer.unref();
   if (run.options !== null) {
     writeRunFile(runFile(run.options));

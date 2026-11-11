@@ -1,3 +1,6 @@
+// Does:  Explains why a value fails its schema, as a capped list of issues with their paths.
+// Holds: It never records more than the cap, and under a sensitive node it reports one issue at that node only.
+
 import { compileCheck, declaredProperties, isObjectValue, lowerBound, readDeclared, upperBound } from './check.ts';
 import {
   arrayLength,
@@ -53,6 +56,7 @@ function explainString(walk: Walk, schema: StringSchema, value: unknown): void {
   }
   const most = upperBound(schema.maxLength);
   const least = lowerBound(schema.minLength);
+  // Why: Written as a negated <= so that a bound that is NaN reports instead of passing.
   if (!(value.length <= most)) {
     report(walk, stringLength('most', schema.maxLength ?? most));
   }
@@ -141,6 +145,7 @@ function explainArray(walk: Walk, schema: ArraySchema, value: unknown): void {
   }
 }
 
+// Why: The count issue goes first, so it survives when the cap truncates the issues of the entries.
 function placeCountFirst(walk: Walk, start: number, message: string): void {
   walk.issues.splice(start, 0, { message, path: [...walk.path] });
   walk.issues.splice(walk.cap);
@@ -160,6 +165,7 @@ function explainRecord(walk: Walk, schema: RecordSchema, value: unknown): void {
     visited += 1;
     over ||= visited > most;
     if (isFull(walk)) {
+      // Why: Once the cap is full the walk goes on only to learn whether the key count is over its bound.
       if (over || most === Number.POSITIVE_INFINITY) {
         break;
       }
@@ -175,6 +181,7 @@ function explainRecord(walk: Walk, schema: RecordSchema, value: unknown): void {
   }
 }
 
+// Does:  Explains against each member and keeps the shortest explanation that does not fail at the union itself.
 function explainUnion(walk: Walk, schema: UnionSchema, value: unknown): void {
   const depth = walk.path.length;
   let chosen: readonly Issue[] | null = null;
@@ -230,6 +237,7 @@ function explainKind(walk: Walk, schema: ModelSchema, value: unknown): void {
   }
 }
 
+// Does:  Reports one issue at a secret or personal node and never descends into what the client sent there.
 function explainClassified(walk: Walk, schema: ModelSchema, value: unknown): void {
   const trial: Walk = { issues: [], cap: 1, path: walk.path };
   explainKind(trial, schema, value);
@@ -242,6 +250,7 @@ function explainValue(walk: Walk, schema: Schema, value: unknown): void {
     report(walk, isNotAllowed);
     return;
   }
+  // Why: Only a subtree the check refuses is explained; one that passes is skipped whole.
   if (isFull(walk) || compileCheck(schema)(value)) {
     return;
   }

@@ -1,3 +1,6 @@
+// Does:  Builds the run header: recorder marker, commit, Node version, options, capacity and routes.
+// Holds: The commit is read from .git files directly; no process is spawned, and no repository is not an error.
+
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

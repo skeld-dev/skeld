@@ -1,3 +1,6 @@
+// Does:  Checks the instrumentation map against the engine's source: every row has its hook and every hook its row.
+// Holds: The source is read with TypeScript's scanner as text; nothing from packages/core is imported or run.
+
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, posix, relative, resolve } from 'node:path';
 import type { SyntaxKind } from 'typescript/unstable/ast';

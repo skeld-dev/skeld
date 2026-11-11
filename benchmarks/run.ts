@@ -1,3 +1,6 @@
+// Does:  Runs the benchmark from the command line: options, lock, checks, rounds, verdict and files.
+// Holds: The lock is held for the whole run and released on every exit path the process controls.
+
 import { randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';

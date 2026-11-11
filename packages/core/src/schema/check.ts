@@ -1,3 +1,6 @@
+// Does:  Builds the closure check for a schema: the validator that generates no code.
+// Holds: It accepts exactly the values the generated check accepts; neither may change without the other.
+
 import { isModelSchema, type ModelSchema } from './node.ts';
 import type {
   ArraySchema,
@@ -30,14 +33,17 @@ interface MemberLink {
   readonly next: MemberLink | null;
 }
 
+// Why: A node is compiled once; shared nodes and repeated calls reuse its check.
 const checks = new WeakMap<Schema, Check>();
 
+// Why: A node this model did not make, or one whose bound is not a number, can never be satisfied.
 const never: Check = () => false;
 
 export function isObjectValue(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Does:  Normalises a declared upper bound: absent means no limit, and a value that is not a number becomes NaN.
 export function upperBound(bound: number | undefined): number {
   if (bound === undefined || bound === Number.POSITIVE_INFINITY) {
     return Number.POSITIVE_INFINITY;
@@ -59,6 +65,7 @@ export function declaredProperties(schema: ObjectSchema): readonly DeclaredPrope
   });
 }
 
+// Does:  Reads a declared property, treating an inherited member of the same name as absent.
 export function readDeclared(value: Readonly<Record<string, unknown>>, property: DeclaredProperty): unknown {
   return property.inherited && !Object.hasOwn(value, property.key) ? undefined : value[property.key];
 }
@@ -92,6 +99,7 @@ function literalCheck(schema: LiteralSchema): Check {
   return (value) => value === expected;
 }
 
+// Does:  Checks the declared properties and returns how many are present, or -1 as soon as one fails.
 function presentCount(first: PropertyLink | null, value: Readonly<Record<string, unknown>>): number {
   let present = 0;
   for (let link = first; link !== null; link = link.next) {

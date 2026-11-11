@@ -1,3 +1,6 @@
+// Does:  Accumulates span figures per name and key: counts, time, CPU and percentiles.
+// Holds: Every stage and step series appears in each snapshot, even when it has no samples.
+
 import { createHistogram, type RecordableHistogram } from 'node:perf_hooks';
 import type { StageName, StepName } from '../empty.ts';
 import { toMicros } from './clock.ts';
@@ -64,16 +67,16 @@ const SAMPLED_TRACKS: ReadonlySet<string> = new Set(['client.url', 'client.heade
 const STEP_NAMES: ReadonlySet<string> = new Set<string>([...STEPS, 'req.validate.part', ...SAMPLED_TRACKS]);
 const ALWAYS_PRESENT: ReadonlySet<string> = new Set<string>([...STAGES, ...STEPS]);
 
-// Span histograms hold 1 ns to 1 h at two significant figures; three figures make reset() cost about 35 µs each.
+// Why: Two significant figures over 1 ns to 1 h; three figures make reset() cost about 35 µs each.
 const HISTOGRAM_RANGE = { lowest: 1, highest: 3_600_000_000_000, figures: 2 };
-// Self-wall values held per series between snapshots before they are recorded into its histogram.
+// Why: Values are buffered and reach the histogram in batches; a boot series may never need a histogram.
 const PENDING_MAX = 1024;
 
 const allSeries: Series[] = [];
 const entries = new Map<string, NameEntry>();
 const window = { syncSelfNs: 0, sampledN: 0, sampledInclNs: 0 };
 
-// createHistogram costs 40 to 65 µs; a boot series holds one value per route, so it gets one only if its buffer fills.
+// Why: createHistogram costs 40 to 65 µs, so a boot series gets one only if its buffer fills.
 const isBoot = (name: string): boolean => name.startsWith('boot.');
 
 function createSeries(label: string, name: string, always: boolean): Series {

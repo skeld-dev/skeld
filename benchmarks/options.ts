@@ -1,3 +1,6 @@
+// Does:  Parses and checks the benchmark's command-line options.
+// Holds: A value outside its range is a usage error with exit 2; nothing starts on a bad option.
+
 import { BenchError } from './bench-error.ts';
 import type { RouteId, RunOptions, ServerId } from './types.ts';
 import {

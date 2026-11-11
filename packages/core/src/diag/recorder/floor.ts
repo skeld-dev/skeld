@@ -1,3 +1,6 @@
+// Does:  Counts what happens below the engine: accepted sockets, requests Node answered itself, and drops.
+// Holds: It only observes diagnostics channels and server events; it never reads or writes a socket's data.
+
 import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import type { Server } from 'node:http';
 import { Socket } from 'node:net';
@@ -98,6 +101,7 @@ export function unwatchFloor(): void {
 
 export function settleFloor(begun: number): number {
   if (floor.server !== null) {
+    // Why: A request Node started that the engine never began and Node did not drop was answered by Node itself.
     nodeAnswered.total = floor.starts - begun - droppedRequest.total;
   }
   return floor.socketsOpen;

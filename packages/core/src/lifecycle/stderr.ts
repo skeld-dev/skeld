@@ -1,3 +1,6 @@
+// Does:  Writes one operator-facing line per engine failure to stderr.
+// Holds: Control characters in request-derived text are escaped, so one failure is always one line.
+
 import { end, start, stderr } from '#diag';
 
 const NEWLINE = 0x0a;
@@ -38,7 +41,7 @@ export function describeThrown(value: unknown): string {
   try {
     return value instanceof Error ? value.message : String(value);
   } catch {
-    // An accessor `message` or a throwing `toString` on a thrown value must not escape the error path.
+    // Why: An accessor `message` or a throwing `toString` on a thrown value must not escape the error path.
     return UNREADABLE;
   }
 }

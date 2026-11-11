@@ -19,7 +19,7 @@ export class Secret<T> {
 String(new Secret('hunter2'));
 ```
 
-Source: `packages/core/src/schema/secret.ts:8`
+Source: `packages/core/src/schema/secret.ts:11`
 
 ## expose
 
@@ -35,4 +35,4 @@ export function expose<T>(secret: Secret<T>): T;
 expose(new Secret('hunter2'));
 ```
 
-Source: `packages/core/src/schema/secret.ts:37`
+Source: `packages/core/src/schema/secret.ts:41`

@@ -1,3 +1,6 @@
+// Does:  Checks request framing, splits the target and finds the route, before any hook runs.
+// Holds: A framing fault is answered 400 and the connection is closed.
+
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { count, destroyed, end, event, next, type Slot, start } from '#diag';
 import type { EngineErrorCode } from '../contract/types.ts';
@@ -25,6 +28,7 @@ function refuse(
   return null;
 }
 
+// Does:  Returns the exchange for a routed request, or null once the refusal has been written.
 export function preRoute(
   runtime: EngineRuntime,
   req: IncomingMessage,
@@ -33,6 +37,7 @@ export function preRoute(
 ): Exchange | null {
   let stage = start('req.preroute');
   const { method, url } = req;
+  // Why: node:http types method and url as optional; without them there is nothing to route, so the socket goes.
   if (method === undefined || url === undefined) {
     end(stage);
     res.destroy();
@@ -51,6 +56,7 @@ export function preRoute(
   const { path, query } = splitTarget(url);
   end(target);
   stage = next(stage, 'req.route.find');
+  // Why: HEAD is served by the GET route; the body is dropped where the response is written.
   const found = runtime.router.find(method === 'HEAD' ? 'GET' : method, path, runtime.maxParamLength);
   switch (found.kind) {
     case 'found':

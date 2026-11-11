@@ -1,3 +1,6 @@
+// Does:  Holds what every benchmark server shares: the port option, the ready line and the start failure.
+// Holds: A server announces ready with one JSON line on stdout, and only after it is listening.
+
 import { host, standalonePort } from '../values.ts';
 
 const portPattern = /^\d+$/;

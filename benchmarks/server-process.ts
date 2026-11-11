@@ -1,3 +1,6 @@
+// Does:  Starts a server as a child process, waits for its ready line and stops it.
+// Holds: A child that does not announce ready in time fails the start, with the tail of its stderr.
+
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { join } from 'node:path';

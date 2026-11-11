@@ -1,3 +1,6 @@
+// Does:  Turns anything thrown or refused into the one error shape, through the onError hooks and error handlers.
+// Holds: A value that is not an HttpError with a status is answered with the fixed 500 body, never its own text.
+
 import { contain, count, destroyed, end, event, leave, next, resume, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { ErrorBody } from '../contract/types.ts';
@@ -9,6 +12,7 @@ import { INTERNAL_BODY, writeErrorBody } from './wire.ts';
 
 const ERROR_BODY_MISMATCH = 'error body does not match the error schema; the fixed 500 body was written';
 
+// Does:  Reads a thrown value into an error body: the fixed 500 for a non-HttpError, null when reading it throws.
 function readThrown(value: unknown): ErrorBody | null {
   try {
     if (!(value instanceof HttpError)) {
@@ -20,7 +24,7 @@ function readThrown(value: unknown): ErrorBody | null {
     }
     return details === null ? { status, code, message } : { status, code, message, details };
   } catch {
-    // A thrown value's fields can be accessors or a proxy its author made; one that throws must not escape the error path.
+    // Why: A thrown value's fields can be accessors or a proxy; one that throws must not escape the error path.
     return null;
   }
 }
@@ -44,6 +48,8 @@ interface Pending {
   readonly hookFailures: readonly string[];
 }
 
+// Does:  Writes the error response once, and puts on stderr what the wire never carries.
+// Holds: Nothing is written when a response was already sent; only the hook failures are reported.
 function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
   if (exchange.state !== 'running') {
     for (const message of pending.hookFailures) {
@@ -72,6 +78,7 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
   }
 }
 
+// Does:  Passes the error through the error handlers in order; a handler that throws hands its error to the next.
 function classify(exchange: Exchange, context: ErrorContext, index: number, current: unknown, pending: Pending): void {
   const handler = exchange.route.errorHandlers[index];
   if (handler === undefined) {
@@ -117,6 +124,7 @@ function classify(exchange: Exchange, context: ErrorContext, index: number, curr
 
 function enterErrorPath(exchange: Exchange, error: unknown, thrown: boolean): void {
   const { res } = exchange;
+  // Why: Headers are already on the wire, so no error body can follow; the socket is destroyed instead.
   if (res.headersSent) {
     exchange.state = 'written';
     event('err.headers_sent');
@@ -144,12 +152,14 @@ function enterErrorPath(exchange: Exchange, error: unknown, thrown: boolean): vo
   );
 }
 
+// Does:  Enters the error path for a request still running; after a response it only reports the late throw.
 export function fail(exchange: Exchange, error: unknown, thrown: boolean): void {
   if (exchange.state === 'running') {
     exchange.stage = next(exchange.stage, 'err.path');
     enterErrorPath(exchange, error, thrown);
     return;
   }
+  // Why: A late send already wrote its own stderr line; reporting the same error again would duplicate it.
   if (error !== exchange.lateSendError && thrown && !exchange.route.hasOnError) {
     report(exchange, exchange.res.statusCode, describeThrown(error));
   }

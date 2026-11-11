@@ -1,9 +1,14 @@
+// Does:  Computes the largest number of bytes a schema's densest JSON encoding can take.
+// Holds: An unbounded or open node is infinite, so a route that contains one gets no derived cap.
+
 import { isModelSchema } from './node.ts';
 import type { ObjectSchema, Schema } from './types.ts';
 
+// Why: The longest finite number JavaScript prints is 24 characters; 32 leaves a margin.
 const numberBytes = 32;
 
 function stringBytes(maxLength: number): number {
+  // Why: Two quotes, and up to six bytes per UTF-16 unit when every unit is written as a \uXXXX escape.
   return 2 + 6 * maxLength;
 }
 
@@ -16,7 +21,7 @@ function utf8Length(text: string): number {
     } else if (unit < 0x800) {
       length += 2;
     } else if (unit >= 0xd800 && unit <= 0xdbff) {
-      // JSON.stringify escapes a lone surrogate, so a high surrogate here always opens a pair.
+      // Why: JSON.stringify escapes a lone surrogate, so a high surrogate here always opens a pair.
       length += 4;
       index++;
     } else {

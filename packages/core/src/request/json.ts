@@ -1,3 +1,6 @@
+// Does:  Parses a JSON body and refuses the keys that could reach a prototype.
+// Holds: A value with an own __proto__ key, or a constructor holding a prototype, is never returned.
+
 import { end, key, start } from '#diag';
 import type { JsonParseResult } from './types.ts';
 
@@ -14,6 +17,7 @@ export function parseJsonBody(text: string): JsonParseResult {
     throw error;
   }
   end(span);
+  // Why: A substring test on the text spares the tree walk for every body that cannot hold such a key.
   if (!mayHoldForbiddenKey(text)) {
     return { kind: 'ok', value };
   }
@@ -21,7 +25,7 @@ export function parseJsonBody(text: string): JsonParseResult {
   return forbidden === null ? { kind: 'ok', value } : { kind: 'forbidden-key', key: forbidden };
 }
 
-// A key spelled with \u escapes reaches JSON.parse as the plain name, so any escape forces the walk.
+// Why: A key spelled with \u escapes reaches JSON.parse as the plain name, so any escape forces the walk.
 function mayHoldForbiddenKey(text: string): boolean {
   return text.includes('__proto__') || text.includes('constructor') || text.includes('\\u');
 }
@@ -31,6 +35,7 @@ function findForbiddenKey(root: unknown): '__proto__' | 'constructor.prototype' 
     return null;
   }
   const span = start('req.body.forbidden_key');
+  // Why: An explicit stack, not recursion, so a deeply nested body cannot overflow the call stack.
   const pending: object[] = [root];
   for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
     for (const [name, value] of Object.entries(node)) {

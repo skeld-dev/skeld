@@ -1,3 +1,6 @@
+// Does:  Serves the hello and echo routes with Fastify, the server the verdict compares against.
+// Holds: It serves the same two routes with the same bodies as every other server here.
+
 import fastify from 'fastify';
 import { host } from '../values.ts';
 import { announceReady, failToStart, parsePort } from './server-command.ts';

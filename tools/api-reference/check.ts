@@ -1,3 +1,6 @@
+// Does:  Runs the API-doc check: every public symbol documented in at most three lines, with its example run.
+// Holds: Exit 0 only when no symbol has a finding; the first line of each block must equal the compiler's hover text.
+
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { checkExamples, type Finding, ruleOrder } from './examples.ts';

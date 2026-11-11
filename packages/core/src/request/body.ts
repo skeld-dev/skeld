@@ -1,3 +1,6 @@
+// Does:  Reads a request's body bytes into text, enforcing the size limit while the bytes arrive.
+// Holds: No more than the limit is ever buffered; done is called once, after the listeners are removed.
+
 import { current, end, event, leave, limit, resume, start } from '#diag';
 import type { IncomingMessage } from 'node:http';
 import type { BodyReadResult } from './types.ts';
@@ -5,13 +8,14 @@ import type { BodyReadResult } from './types.ts';
 const TOO_LARGE: BodyReadResult = { kind: 'too-large' };
 const ABORTED: BodyReadResult = { kind: 'aborted' };
 
-// TextDecoder strips a leading UTF-8 BOM and Buffer#toString does not; both replace invalid bytes alike.
+// Why: Matches TextDecoder, which strips a leading UTF-8 BOM; Buffer#toString alone would keep it.
 function decodeUtf8(bytes: Buffer): string {
   return bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
     ? bytes.toString('utf8', 3)
     : bytes.toString('utf8');
 }
 
+// Does:  Starts the read: returns a result at once for a body refused or gone, or null and reports through done.
 export function readBody(
   req: IncomingMessage,
   bodyLimit: number,
@@ -28,6 +32,7 @@ export function readBody(
   }
   const slot = current();
   const span = start('req.body.read');
+  // Why: Most bodies arrive in one chunk; keeping it apart avoids an array and a Buffer.concat.
   let first: Buffer | null = null;
   let rest: Buffer[] | null = null;
   let received = 0;
@@ -64,7 +69,7 @@ export function readBody(
     done({ kind: 'ok', text: bytes === null ? '' : decodeUtf8(bytes) });
     leave(slot);
   };
-  // IncomingMessage emits 'error' only to existing listeners and always follows it with 'close' (_http_incoming.js onError).
+  // Why: IncomingMessage always follows 'error' with 'close', so one close listener covers both (_http_incoming.js).
   const onClose = (): void => {
     resume(slot);
     detach();

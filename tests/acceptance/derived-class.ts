@@ -1,3 +1,6 @@
+// Does:  Proves that bounds, closure and sensitivity survive derivation with partial, pick, omit and extend.
+// Holds: A handler that must not run is watched, so a request accepted by mistake fails the script.
+
 import { randomBytes } from 'node:crypto';
 import { BootError } from '@darkstart/core/boot-error';
 import { defineContract } from '@darkstart/core/contract';

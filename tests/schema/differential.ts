@@ -1,3 +1,6 @@
+// Does:  Proves that the generated check and the closure check agree on verdicts and on failure paths.
+// Holds: Zero mismatches is the only passing result.
+
 // biome-ignore lint/correctness/noUnresolvedImports: the seam carries only the darkstart-source condition, which Biome's resolver does not set (ADR-028)
 import { generateCheck } from '@darkstart/core/generated-check';
 import * as t from '@darkstart/core/schema';

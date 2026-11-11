@@ -1,3 +1,6 @@
+// Does:  Checks that the README's Example section shows the hello example exactly as the files have it.
+// Holds: Any line that differs between a README block and its source file fails the check with exit 1.
+
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 

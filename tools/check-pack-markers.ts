@@ -1,3 +1,6 @@
+// Does:  Checks that the packed tarball of the core package carries no diagnostic recorder.
+// Holds: The tarball is unpacked in memory under a byte and an entry limit; nothing from it is written or run.
+
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -14,6 +17,7 @@ interface Entry {
 type Unpacked = { readonly entries: readonly Entry[] } | { readonly refused: string };
 
 const marker = 'darkstart:diag-recorder';
+// Why: The tarball is untrusted input to this tool, so its unpacked size and entry count are bounded.
 const unpackedLimit = 64 * 1024 * 1024;
 const entryLimit = 10_000;
 const block = 512;

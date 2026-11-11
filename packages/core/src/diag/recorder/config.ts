@@ -1,3 +1,6 @@
+// Does:  Reads the recorder's settings from the DARKSTART_DIAG_* environment variables.
+// Holds: A setting that is present and malformed refuses the boot; the canary's value is never echoed, only its length.
+
 import { BootError } from '../../server/boot-error.ts';
 import type { ResolvedServerOptions } from '../../server/types.ts';
 

@@ -1,3 +1,6 @@
+// Does:  Checks what leaves the process: response schema, internal text, header injection, content type, the canary.
+// Holds: A finding raises a leak event that fails the run; the checks only read what is written, never change it.
+
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import type { RouteDefinition, RouteInfo } from '../../contract/types.ts';
@@ -55,6 +58,7 @@ function unwrapped(schema: Schema): ModelSchema | null {
   return null;
 }
 
+// Does:  Trims an issue path to its declared part, so a reported subject never names a key a client chose.
 function declaredSegments(schema: Schema, path: readonly (string | number)[]): (string | number)[] {
   const kept: (string | number)[] = [];
   let current = schema;
@@ -103,6 +107,7 @@ export function checkPayload(status: number, serialized: string, final: string |
     record.replaced = true;
   }
   const { route } = record;
+  // Why: A replaced payload is always checked against its schema; an untouched one only on sampled requests.
   if (route === null || record.schemaChecked || !(replaced || record.step)) {
     return;
   }
@@ -133,6 +138,7 @@ export function checkHeader(name: string, value: HeaderValue): void {
 
 function internalText(text: string, url: string): string | null {
   const frame = STACK_FRAME.exec(text);
+  // Why: Text the client itself sent in the URL is an echo, not a leak.
   if (frame !== null && !url.includes(frame[0])) {
     return 'stack_frame';
   }

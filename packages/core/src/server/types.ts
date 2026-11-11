@@ -1,3 +1,6 @@
+// Does:  Declares the server's public types: options, handler and hook signatures, contexts and scopes.
+// Holds: A handler's request and reply types are derived from its route's schemas, never written by hand.
+
 import type { HttpError } from '../contract/http-error.ts';
 import type { ContractRoutes, Empty, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { Infer, Schema, Wire } from '../schema/types.ts';

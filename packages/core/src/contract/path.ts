@@ -1,3 +1,6 @@
+// Does:  Turns a declared route path into its segments: static, parameter or wildcard.
+// Holds: The path has already passed the contract check; '/' is no segments, any other path one per slash.
+
 import type { PathSegment } from './types.ts';
 
 function toSegment(text: string): PathSegment {

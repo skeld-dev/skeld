@@ -1,3 +1,6 @@
+// Does:  Proves that only the paths listed in the package's exports map can be imported.
+// Holds: An unlisted path and the bare package name both fail with ERR_PACKAGE_PATH_NOT_EXPORTED.
+
 import { existsSync } from 'node:fs';
 import { check, conclude } from './support.ts';
 

@@ -1,3 +1,6 @@
+// Does:  Builds the projection of params, query and headers: declared keys only, strings converted where declared.
+// Holds: Only declared own keys are kept; a string that is not an exact literal of the declared type stays a string.
+
 import { isModelSchema } from '../schema/node.ts';
 import type { ObjectSchema, Schema } from '../schema/types.ts';
 
@@ -10,7 +13,7 @@ interface ProjectedKey {
 }
 
 const INTEGER_LITERAL = /^-?(0|[1-9][0-9]*)$/;
-// RFC 8259 §6 number grammar.
+// Why: The JSON number grammar (RFC 8259 section 6); Number() alone would also accept hex, spaces and Infinity.
 const NUMBER_LITERAL = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$/;
 
 function toInteger(text: string): number | null {
@@ -18,6 +21,7 @@ function toInteger(text: string): number | null {
     return null;
   }
   const value = Number(text);
+  // Why: Beyond the safe range Number() rounds, so the value checked would not be the value sent.
   return Number.isSafeInteger(value) ? value : null;
 }
 
@@ -97,6 +101,7 @@ function propertyConverter(schema: Schema): PropertyConverter | null {
   }
   const leaf = leafConverter(schema.items);
   return (value) => {
+    // Why: A query key sent once arrives as a string; an array schema receives it as a one-item array.
     const items = typeof value === 'string' ? [value] : value;
     if (leaf === null || !Array.isArray(items)) {
       return items;
@@ -109,6 +114,7 @@ function isKeyedPart(value: unknown): value is Readonly<Record<string, unknown>>
   return typeof value === 'object' && value !== null;
 }
 
+// Does:  Returns the function that copies a part's declared keys into a prototype-less object, converting as it goes.
 export function compileProjection(schema: ObjectSchema): (raw: unknown) => unknown {
   const plan: readonly ProjectedKey[] = Object.entries(schema.properties).map(([key, property]) => ({
     key,
@@ -120,6 +126,7 @@ export function compileProjection(schema: ObjectSchema): (raw: unknown) => unkno
     }
     const projected: Record<string, unknown> = Object.create(null);
     for (const { key, convert } of plan) {
+      // Why: Own keys only, so a declared name such as toString never reads an inherited member.
       if (!Object.hasOwn(raw, key)) {
         continue;
       }

@@ -1,3 +1,6 @@
+// Does:  Compiles the emitted check and serializer source into functions, at the one code-generation site.
+// Holds: Only source emitted from the declaration is compiled here; nothing from a request ever reaches it.
+
 import type { Check, Schema } from '../schema/types.ts';
 import { emitCheck } from './emit.ts';
 import { emitSerializer } from './emit-serializer.ts';
@@ -29,9 +32,11 @@ export function generateCheck(schema: Schema): Check {
 
 export function generateSerializer(schema: Schema): Serializer {
   const { source, refusals } = emitSerializer(schema);
+  // Why: The emitted source is a factory that takes the escaper, so the serializer closes over it and needs no global.
   return Object.freeze({ write: compile(source, isMakeWrite)(escaped), refusals: Object.freeze([...refusals]) });
 }
 
+// Does:  Tells whether code generation is allowed: the EvalError when the runtime forbids it, null when it works.
 export function probeCodegen(): EvalError | null {
   try {
     compile('function probe() {\nreturn true;\n}', isCheck);

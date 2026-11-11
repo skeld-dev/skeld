@@ -1,3 +1,6 @@
+// Does:  Declares the router's interface and the outcomes of adding and finding a route.
+// Holds: A path that cannot be routed is a result (not found, malformed, too long), never an exception.
+
 import type { HttpMethod, PathSegment } from '../contract/types.ts';
 
 export interface RouteParams {

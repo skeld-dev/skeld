@@ -1,3 +1,6 @@
+// Does:  Writes JSON bodies and the engine's own error bodies to the response.
+// Holds: An engine-written error carries no author-set header except the CORS response headers and vary.
+
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { end, start, wrote } from '#diag';
 import type { ErrorBody } from '../contract/types.ts';
@@ -7,8 +10,10 @@ const JSON_CONTENT_TYPE = 'application/json; charset=utf-8';
 
 export const INTERNAL_BODY: ErrorBody = { status: 500, code: 'INTERNAL', message: 'Internal Server Error' };
 
+// Why: Serialized once at load, so the last-resort body needs no serializer and cannot fail.
 const INTERNAL_TEXT = JSON.stringify(INTERNAL_BODY);
 
+// Why: Without its CORS headers a browser hides the error response from the page that made the call.
 const KEPT_ON_ERROR: ReadonlySet<string> = new Set([
   'access-control-allow-origin',
   'access-control-allow-credentials',
@@ -34,6 +39,7 @@ export function writeJson(
     headers.connection = 'close';
   }
   res.writeHead(status, headers);
+  // Why: A HEAD response declares the length of the body it does not send.
   if (method === 'HEAD') {
     res.end();
     wrote(status, headers, null);
@@ -48,11 +54,12 @@ function errorText(runtime: EngineRuntime, body: ErrorBody): string | null {
     const written = runtime.errorSerializer.write(body);
     return typeof written === 'string' ? written : null;
   } catch {
-    // An HttpError's details come from the author; a throwing getter there must not leave the request unanswered.
+    // Why: An HttpError's details come from the author; a throwing getter must not leave the request unanswered.
     return null;
   }
 }
 
+// Does:  Writes an error body, falling back to the fixed 500 text; false means the body did not fit the schema.
 export function writeErrorBody(
   runtime: EngineRuntime,
   res: ServerResponse,
@@ -63,12 +70,13 @@ export function writeErrorBody(
   const span = start('err.write');
   const text = errorText(runtime, body);
   const closing = close || runtime.isClosing();
+  // Why: A header set before the failure (a cookie, a cache directive) must not ride out on the error.
   for (const name of res.getHeaderNames()) {
     if (!KEPT_ON_ERROR.has(name)) {
       res.removeHeader(name);
     }
   }
-  // removeHeader('date') turns sendDate off, which would leave the error without Node's Date.
+  // Why: removeHeader('date') turns sendDate off, which would leave the error without Node's Date header.
   res.sendDate = true;
   if (text === null) {
     writeJson(res, method, INTERNAL_BODY.status, INTERNAL_TEXT, closing);

@@ -1,3 +1,6 @@
+// Does:  Walks a package's exports map with the compiler and lists every public symbol with its doc block.
+// Holds: A symbol is public only if a subpath of the exports map reaches it; nothing is found by folder or by name.
+
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { Node, SourceFile } from 'typescript/unstable/ast';

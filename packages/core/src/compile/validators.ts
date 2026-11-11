@@ -1,3 +1,6 @@
+// Does:  Compiles a route's request validators: the generated check, the projection and the failure details.
+// Holds: A value is explained only after the check refused it, and with at most 101 issues.
+
 import { end, limit, start } from '#diag';
 import type { ErrorDetail, RouteDefinition } from '../contract/types.ts';
 import { explain } from '../schema/explain.ts';
@@ -16,11 +19,12 @@ interface CompiledSchema {
   readonly finish: Finish | null;
 }
 
-// C-13 writes 100 entries; the 101st tells the lifecycle that more failed.
+// Why: The 400 shows 100 details; one more tells the lifecycle that further failures exist.
 const MAX_DETAILS = 101;
 
 const absentBody: PartOutcome = { kind: 'failed', details: [{ path: '/body', message: isRequired }] };
 
+// Why: A schema node reused across routes is compiled once.
 const checks = new WeakMap<Schema, Check>();
 
 function collectIssues(schema: Schema, value: unknown): readonly Issue[] {
@@ -35,6 +39,7 @@ function collectIssues(schema: Schema, value: unknown): readonly Issue[] {
 }
 
 function validate(part: PartName, compiled: CompiledSchema, value: unknown): PartOutcome {
+  // Why: The generated check is the fast path; the slower explain walk runs only for a value already refused.
   if (compiled.check(value)) {
     return { kind: 'ok', value: compiled.finish === null ? value : compiled.finish(value) };
   }
@@ -61,6 +66,7 @@ function compileSchema(schema: Schema): CompiledSchema {
 
 function keyedValidator(part: PartName, schema: ObjectSchema): PartValidator {
   const compiled = compileSchema(schema);
+  // Why: Undeclared query and header keys are dropped before the closed-object check, which would refuse them.
   const project = compileProjection(schema);
   return { run: (raw) => validate(part, compiled, project(raw)) };
 }
@@ -81,6 +87,7 @@ function compilePart<S extends Schema>(
   try {
     return compile(schema);
   } catch (cause) {
+    // Why: An EvalError means the runtime forbids code generation, which listen reports as its own boot error.
     if (cause instanceof EvalError) {
       throw cause;
     }

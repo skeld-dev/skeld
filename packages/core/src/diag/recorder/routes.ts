@@ -1,3 +1,6 @@
+// Does:  Keeps one record per route: its request counter, slowest request and response checks.
+// Holds: A route name maps to one record for the life of the process.
+
 import type { RouteInfo } from '../../contract/types.ts';
 import type { Check, Schema } from '../../schema/types.ts';
 import { type Counter, keyedCounter } from './counts.ts';
@@ -18,6 +21,7 @@ export interface RouteRecord {
 
 const byName = new Map<string, RouteRecord>();
 
+// Why: Consecutive requests usually hit the same route, so the last record is tried before the map.
 const lastHit: { info: RouteInfo | null; record: RouteRecord | null } = { info: null, record: null };
 
 export const routeList: RouteRecord[] = [];

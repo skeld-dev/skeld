@@ -1,3 +1,6 @@
+// Does:  Resolves and checks the server and listen options against their defaults.
+// Holds: Every resolved limit is a positive safe integer, and headersTimeout never exceeds requestTimeout.
+
 import { end, start } from '#diag';
 import { BootError } from './boot-error.ts';
 import type { ListenOptions, ResolvedServerOptions, ServerOptions } from './types.ts';
@@ -13,6 +16,7 @@ const DEFAULTS: ResolvedServerOptions = {
   maxHeaderSize: 16_384,
 };
 
+// Why: Loopback unless the author names a host, so a new service is never exposed by default.
 const DEFAULT_HOST = '127.0.0.1';
 const MAX_PORT = 65_535;
 

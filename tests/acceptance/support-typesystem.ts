@@ -1,3 +1,6 @@
+// Does:  Starts a server child for the type-system scripts and gives them raw-socket helpers.
+// Holds: A child that reports no port within 20 s fails the script instead of hanging it.
+
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';

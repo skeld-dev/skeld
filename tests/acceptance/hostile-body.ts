@@ -1,3 +1,6 @@
+// Does:  Proves that four hostile 1 MiB bodies are each refused, and prints how long each refusal takes.
+// Holds: Statuses and bodies decide the result; the timings are printed and judged elsewhere.
+
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defineContract } from '@darkstart/core/contract';

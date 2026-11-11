@@ -24,7 +24,7 @@ export type BootErrorCode =
   | 'CODEGEN_UNAVAILABLE';
 ```
 
-Source: `packages/core/src/server/boot-error.ts:7`
+Source: `packages/core/src/server/boot-error.ts:10`
 
 ## BootError
 
@@ -48,4 +48,4 @@ export class BootError extends Error {
 }
 ```
 
-Source: `packages/core/src/server/boot-error.ts:27`
+Source: `packages/core/src/server/boot-error.ts:30`

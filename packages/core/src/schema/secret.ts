@@ -1,3 +1,6 @@
+// Does:  Defines Secret, the wrapper that keeps a secret value out of logs, JSON and string conversion.
+// Holds: The value is a private field read only through expose(); every conversion yields '[secret]'.
+
 let read: <T>(secret: Secret<T>) => T;
 
 /**
@@ -12,6 +15,7 @@ export class Secret<T> {
     this.#value = value;
   }
 
+  // Why: The static block hands the private field's reader to expose() without any public accessor.
   static {
     read = (secret) => secret.#value;
   }

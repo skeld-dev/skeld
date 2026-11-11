@@ -1,3 +1,6 @@
+// Does:  Proves that a secret or personal value a client sends never appears in a 400, a 500 or stderr.
+// Holds: Random tokens are sent as the values, so any echo of one is detected.
+
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { defineContract } from '@darkstart/core/contract';

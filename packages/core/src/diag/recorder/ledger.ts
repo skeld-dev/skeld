@@ -1,3 +1,6 @@
+// Does:  Attributes boot time, allocation and garbage collection to the boot stage that was running.
+// Holds: It records during boot only; once the server is listening, a mark does nothing.
+
 import { type PerformanceEntry, PerformanceObserver } from 'node:perf_hooks';
 import { GCProfiler, type GCProfilerResult, getHeapSpaceStatistics } from 'node:v8';
 import { nowNs, toMicros } from './clock.ts';
@@ -38,8 +41,7 @@ type GcStatistics = GCProfilerResult['statistics'];
 type SpaceGroup = keyof Heap;
 
 const OUTSIDE = '(no boot span)';
-// Background compilers allocate code and trusted space through their own buffers, so those spaces move ±300 KB between
-// two reads with no main-thread work; they are kept apart from young and old and reported for the whole boot only.
+// Why: Background compilers move code and trusted space by about 300 KB with no main-thread work, so they stay apart.
 const GROUPS: ReadonlyMap<string, SpaceGroup> = new Map([
   ['new_space', 'young'],
   ['new_large_object_space', 'young'],
@@ -110,6 +112,7 @@ export function openBoot(): void {
   });
   observer.observe({ entryTypes: ['gc'] });
   ledger.observer = observer;
+  // Why: Reading the heap allocates; the cost of one read is measured so the figures can account for it.
   const calibration = readHeap();
   ledger.readBytes = readHeap().young - calibration.young;
   takeMark();

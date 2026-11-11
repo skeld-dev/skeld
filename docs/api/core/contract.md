@@ -10,7 +10,7 @@ export interface ContractRoutes {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:48`
+Source: `packages/core/src/contract/types.ts:51`
 
 ## Empty
 
@@ -22,7 +22,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:96`
+Source: `packages/core/src/contract/types.ts:99`
 
 ## EngineErrorCode
 
@@ -41,7 +41,7 @@ export type EngineErrorCode =
   | 'INVALID_RESPONSE';
 ```
 
-Source: `packages/core/src/contract/types.ts:84`
+Source: `packages/core/src/contract/types.ts:87`
 
 ## ErrorBody
 
@@ -63,7 +63,7 @@ export interface ErrorBody {
 | `message` | A message for people.                                          |
 | `details` | The validation details, when the error has them.               |
 
-Source: `packages/core/src/contract/types.ts:69`
+Source: `packages/core/src/contract/types.ts:72`
 
 ## ErrorDetail
 
@@ -81,7 +81,7 @@ export interface ErrorDetail {
 | `path`    | The JSON pointer of the failing value, starting with the part, as in `/body/name`. |
 | `message` | What is wrong; it never holds the received value.                                  |
 
-Source: `packages/core/src/contract/types.ts:53`
+Source: `packages/core/src/contract/types.ts:56`
 
 ## HttpMethod
 
@@ -91,7 +91,7 @@ The HTTP methods a route can declare.
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 ```
 
-Source: `packages/core/src/contract/types.ts:4`
+Source: `packages/core/src/contract/types.ts:7`
 
 ## ResponseSchemas
 
@@ -105,7 +105,7 @@ export interface ResponseSchemas {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:10`
+Source: `packages/core/src/contract/types.ts:13`
 
 ## RouteDefinition
 
@@ -133,7 +133,7 @@ export interface RouteDefinition {
 | `body`      | The JSON body's schema; a GET route declares none.                                              |
 | `responses` | The responses the route may write, by status.                                                   |
 
-Source: `packages/core/src/contract/types.ts:15`
+Source: `packages/core/src/contract/types.ts:18`
 
 ## errorBodySchema
 
@@ -156,7 +156,7 @@ export const errorBodySchema: import("../schema/types.ts").ObjectSchema<{
 }, undefined>
 ```
 
-Source: `packages/core/src/contract/contract.ts:22`
+Source: `packages/core/src/contract/contract.ts:26`
 
 ## defineContract
 
@@ -172,4 +172,4 @@ export function defineContract<const C extends ContractRoutes>(routes: C): C;
 defineContract({ health: { method: 'GET', path: '/health', responses: { 204: null } } });
 ```
 
-Source: `packages/core/src/contract/contract.ts:42`
+Source: `packages/core/src/contract/contract.ts:46`

@@ -1,3 +1,6 @@
+// Does:  Runs one request through its stages in order: pre-route, onRequest, body, validation, preHandler, handler.
+// Holds: A body declared over its route's limit condemns the connection before any onRequest hook runs.
+
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { begin, contain, destroyed, end, event, leave, next, resume, routed, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
@@ -12,7 +15,7 @@ import { respond } from './respond.ts';
 import type { EngineRuntime, RuntimeReply, RuntimeRequest } from './types.ts';
 import { type ValidatedParts, validateRequest } from './validate.ts';
 
-// A prototype getter keeps req.signal lazy; a getter in a per-request object literal costs a closure and the literal fast path.
+// Why: A prototype getter keeps req.signal lazy; a getter in a per-request literal costs a closure and the fast path.
 class HandlerRequest implements RuntimeRequest {
   readonly route: RouteInfo;
   readonly params: unknown;
@@ -102,6 +105,7 @@ function bodyRead(exchange: Exchange, outcome: BodyOutcome): void {
       validateStage(exchange, outcome.value);
       return;
     case 'refused':
+      // Why: An oversized body is still arriving; its refusal needs the staged close for the response to be read.
       if (outcome.close && !exchange.closeConnection) {
         exchange.closeConnection = true;
         stageBodyRefusal(exchange.req);
@@ -109,6 +113,7 @@ function bodyRead(exchange: Exchange, outcome: BodyOutcome): void {
       fail(exchange, outcome.error, false);
       return;
     case 'aborted':
+      // Why: The client went away mid-body, so there is no one left to answer.
       exchange.state = 'written';
       end(exchange.stage);
       event('refuse.body_aborted');
@@ -137,7 +142,9 @@ function readStage(exchange: Exchange): void {
   }
 }
 
+// Does:  Handles one request event from node:http, from the refused-socket check to the first stage.
 export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res: ServerResponse): void {
+  // Why: A request pipelined behind a refused one must never reach application code.
   if (stopRefusedPipeline(req)) {
     return;
   }
@@ -158,6 +165,7 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
     return;
   }
   const { route } = exchange;
+  // Why: An asynchronous onRequest hook yields to Node, which would dispatch the next pipelined request meanwhile.
   if (route.readsBody && declaresOverLimit(req, route.bodyLimit)) {
     exchange.closeConnection = true;
     stageBodyRefusal(req);

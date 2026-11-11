@@ -1,3 +1,6 @@
+// Does:  Inspects a schema at boot for unbounded fields, invalid bounds and a secret in a response.
+// Holds: A secret node in a response is a finding unless an exposed node with a reason stands above it.
+
 import { isModelSchema } from './node.ts';
 import type { Finding, Schema, Sensitivity } from './types.ts';
 
@@ -12,6 +15,7 @@ function escapeKey(key: string): string {
   return key.replaceAll('~', '~0').replaceAll('/', '~1');
 }
 
+// Why: A bad bound is described by its type unless it is a number, so no arbitrary value is echoed.
 function render(value: unknown): string {
   return typeof value === 'number' ? String(value) : typeof value;
 }
@@ -108,6 +112,7 @@ function inspectNode(schema: Schema, pointer: string, exempt: boolean, walk: Wal
       count(report, 'maxProperties', schema.maxProperties);
       exclusive(report, 'maxProperties', schema.maxProperties, schema.unbounded);
       secret(schema.sensitivity);
+      // Why: A record key cannot carry sensitivity (the builder refuses it), so it is never a secret finding.
       inspectNode(schema.key, `${pointer}/propertyNames`, true, walk);
       inspectNode(schema.value, `${pointer}/additionalProperties`, exempt, walk);
       return;

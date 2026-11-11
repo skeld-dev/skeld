@@ -1,3 +1,6 @@
+// Does:  Builds the step that runs after a value passes its check: wrapping secrets and rebuilding open objects.
+// Holds: A value marked secret reaches the handler only as a Secret, unless its schema exposes it.
+
 import { compileCheck, type DeclaredProperty, declaredProperties, isObjectValue, readDeclared } from './check.ts';
 import { isModelSchema, type ModelSchema } from './node.ts';
 import { Secret } from './secret.ts';
@@ -38,6 +41,7 @@ function sealed(sensitivity: Sensitivity | undefined, mode: FinishMode, inner: F
   return (value) => new Secret(inner(value));
 }
 
+// Does:  Returns the finish for an open object, which rebuilds it from its declared keys only.
 function openFinish(properties: readonly FinishedProperty[]): Finish {
   return (value) => {
     if (!isObjectValue(value)) {
@@ -83,7 +87,9 @@ function objectFinish(schema: ObjectSchema, mode: FinishMode): Finish | null {
       }
       const finished = finish(item);
       if (finished !== item) {
+        // Why: The value is copied only when a property really changes, so most requests allocate nothing here.
         copy ??= { ...value };
+        // Why: defineProperty, not assignment, so a key named __proto__ is stored as plain data.
         Object.defineProperty(copy, property.key, {
           value: finished,
           writable: true,
@@ -156,6 +162,7 @@ function buildFinish(schema: ModelSchema, mode: FinishMode): Finish | null {
     case 'optional':
       return compileFinish(schema.inner, mode);
     case 'exposed':
+      // Why: An exposed node hands its value over unwrapped; that is what exposing it means.
       return compileFinish(schema.inner, 'raw');
   }
 }
@@ -169,6 +176,7 @@ export function compileFinish(schema: Schema, mode: FinishMode): Finish | null {
   if (cached !== undefined) {
     return cached;
   }
+  // Why: null is a cached answer too (nothing to do), so has() is asked before building again.
   if (cache.has(schema)) {
     return null;
   }

@@ -1,3 +1,6 @@
+// Does:  Declares the benchmark's shapes: options, samples, summaries, the verdict and the run.
+// Holds: A verdict is keep, below or not-assessed, and a not-assessed one always carries its reason.
+
 export type ServerId = 'darkstart' | 'fastify' | 'node-http' | 'hono' | 'express' | 'light';
 export type RouteId = 'hello' | 'echo';
 export type BuildId = 'darkstart' | 'darkstart-diag';

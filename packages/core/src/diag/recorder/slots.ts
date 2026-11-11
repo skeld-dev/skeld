@@ -1,3 +1,6 @@
+// Does:  Holds per-request records in a fixed pool and tracks which request is current.
+// Holds: The pool never grows: with all 4,096 slots in use the oldest is taken and counted as abandoned.
+
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteInfo } from '../../contract/types.ts';
 import { nowNs, toMillis } from './clock.ts';
@@ -145,6 +148,7 @@ export function beginRequest(req: IncomingMessage, res: ServerResponse): number 
   if (record === null) {
     return 0;
   }
+  // Why: The generation makes a stale slot number from an earlier request resolve to nothing.
   record.gen = record.gen === GEN_MAX ? 1 : record.gen + 1;
   record.open = true;
   record.inSeg = true;
@@ -156,6 +160,7 @@ export function beginRequest(req: IncomingMessage, res: ServerResponse): number 
   record.schemaChecked = false;
   record.replaced = false;
   record.route = null;
+  // Why: Steps are timed on one request in stepN and CPU on one in cpuN; totals and checks run on all.
   record.step = sampling.stepLeft === 0;
   record.cpu = sampling.cpuLeft === 0;
   sampling.stepLeft = record.step ? config.stepN - 1 : sampling.stepLeft - 1;

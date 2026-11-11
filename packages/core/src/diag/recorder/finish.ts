@@ -1,3 +1,6 @@
+// Does:  Closes a request's record when its response is written or its socket destroyed.
+// Holds: A request is finished once; a finish that finds no open record is counted as diag.unowned.
+
 import type { OutgoingHttpHeaders } from 'node:http';
 import { nowNs, threadCpuUs } from './clock.ts';
 import { config } from './config.ts';

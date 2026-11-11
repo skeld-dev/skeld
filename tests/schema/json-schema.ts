@@ -1,3 +1,6 @@
+// Does:  Proves that the JSON Schema export agrees with the type system, with Ajv as the oracle.
+// Holds: Schemas whose export is knowingly weaker are counted and printed, never silently skipped.
+
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { Schema } from '@darkstart/core/schema';
 import * as t from '@darkstart/core/schema';

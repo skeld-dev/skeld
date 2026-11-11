@@ -1,3 +1,6 @@
+// Does:  Proves that the serializer writes text exactly when the closure check accepts the projected value.
+// Holds: Zero mismatches is the only passing result, and every written string is compared with JSON.stringify.
+
 // biome-ignore lint/correctness/noUnresolvedImports: the seam carries only the darkstart-source condition, which Biome's resolver does not set (ADR-028)
 import { generateSerializer } from '@darkstart/core/generated-check';
 import * as t from '@darkstart/core/schema';

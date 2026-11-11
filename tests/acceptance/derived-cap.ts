@@ -1,3 +1,6 @@
+// Does:  Proves that a route's body limit is the smaller of bodyLimit and the cap derived from its schema.
+// Holds: Each case is sent over a raw socket, both with a declared length and with chunked encoding.
+
 import { defineContract } from '@darkstart/core/contract';
 import * as t from '@darkstart/core/schema';
 import { createServer } from '@darkstart/core/server';

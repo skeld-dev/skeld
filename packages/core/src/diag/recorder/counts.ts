@@ -1,3 +1,6 @@
+// Does:  Holds the recorder's counters, plain and keyed, and reports their totals.
+// Holds: A counter is created once per name and key; its total is for the whole run and is not reset per snapshot.
+
 export interface Counter {
   readonly label: string;
   total: number;

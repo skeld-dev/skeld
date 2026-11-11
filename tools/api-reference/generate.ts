@@ -1,3 +1,6 @@
+// Does:  Generates the API reference pages from the public symbols, or checks the committed pages for drift.
+// Holds: With --check nothing is written; a page that differs from a fresh run is reported and the exit is 1.
+
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';

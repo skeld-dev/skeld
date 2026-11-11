@@ -1,3 +1,6 @@
+// Does:  Starts each server in turn and checks that it answers every route exactly as expected.
+// Holds: Servers are checked one at a time, and a wrong answer from any of them means nothing is measured.
+
 import { BenchError } from './bench-error.ts';
 import { startTarget, type Target } from './diag/builds.ts';
 import type { Command } from './pinning.ts';

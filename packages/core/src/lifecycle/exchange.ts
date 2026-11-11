@@ -1,3 +1,6 @@
+// Does:  Declares the per-request state every lifecycle stage reads and advances.
+// Holds: state leaves 'running' once, for 'sent-by-hook' or 'written', and never returns: one request, one response.
+
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Slot, Token } from '#diag';
 import type { RouteParams } from '../router/types.ts';

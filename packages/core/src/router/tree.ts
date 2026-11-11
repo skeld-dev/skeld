@@ -1,3 +1,6 @@
+// Does:  Builds and reads the route tree: static children, one parameter child and a wildcard per node.
+// Holds: A node has at most one parameter child and one wildcard, and a wildcard ends its route.
+
 import type { PathSegment } from '../contract/types.ts';
 
 export interface RouteEntry<T> {
@@ -37,6 +40,7 @@ function paramNamesOf(segments: readonly PathSegment[]): string[] {
     if (segment.kind === 'param') {
       names.push(segment.name);
     } else if (segment.kind === 'wildcard') {
+      // Why: A wildcard's captured remainder is exposed as the parameter named '*'.
       names.push('*');
     }
   }

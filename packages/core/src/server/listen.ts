@@ -1,3 +1,6 @@
+// Does:  Creates the node:http server with every limit written out, and wraps its listen and close.
+// Holds: No timeout or size limit is left to Node's default, and insecureHTTPParser is always off.
+
 import { createServer, type RequestListener } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { getSystemErrorMessage } from 'node:util';
@@ -9,6 +12,8 @@ const CHECKS_PER_HEADERS_TIMEOUT = 10;
 const MIN_CHECKING_INTERVAL_MS = 1_000;
 const MAX_CHECKING_INTERVAL_MS = 30_000;
 
+// Does:  Returns how often Node checks the request timeouts: a tenth of headersTimeout, from one to thirty seconds.
+// Holds: A stalled request is answered within one interval of its timeout.
 function connectionsCheckingInterval(headersTimeout: number): number {
   return Math.min(
     MAX_CHECKING_INTERVAL_MS,
@@ -17,6 +22,7 @@ function connectionsCheckingInterval(headersTimeout: number): number {
 }
 
 function hostPort(host: string, port: number): string {
+  // Why: An IPv6 literal needs brackets before a port.
   return host.includes(':') ? `[${host}]:${port}` : `${host}:${port}`;
 }
 
@@ -77,6 +83,7 @@ export function createHttpServer(options: ResolvedServerOptions, onRequest: Requ
     close(timeoutMs) {
       const { promise, resolve } = Promise.withResolvers<void>();
       const span = track('close.total');
+      // Why: In-flight requests get closeTimeoutMs to finish before every remaining connection is cut.
       const timer = setTimeout(() => {
         event('close.forced');
         server.closeAllConnections();
@@ -87,6 +94,7 @@ export function createHttpServer(options: ResolvedServerOptions, onRequest: Requ
         closed();
         resolve();
       });
+      // Why: server.close stops accepting but leaves idle keep-alive sockets open, so they are closed at once.
       server.closeIdleConnections();
       return promise;
     },

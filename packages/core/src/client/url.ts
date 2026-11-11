@@ -1,3 +1,6 @@
+// Does:  Builds the request URL for a route from its path parameters and query values.
+// Holds: Every parameter value is percent-encoded and '.' or '..' is refused, so a value cannot change the path.
+
 import { end, track } from '#diag';
 import { parsePath } from '../contract/path.ts';
 import type { PathSegment } from '../contract/types.ts';
@@ -7,6 +10,7 @@ export interface CallValues {
 }
 
 function encodePiece(piece: string, name: string, routeName: string): string {
+  // Why: URL would normalise a dot segment away and send the call to a different route.
   if (piece === '.' || piece === '..') {
     throw new TypeError(`Path parameter ${name} of ${routeName} cannot be "." or ".."`);
   }
@@ -20,6 +24,7 @@ function encodeSegment(segment: PathSegment, params: CallValues | undefined, rou
   if (segment.kind === 'param') {
     return encodePiece(String(params?.[segment.name]), segment.name, routeName);
   }
+  // Why: A wildcard value keeps its slashes as separators; each piece between them is encoded on its own.
   return String(params?.['*'])
     .split('/')
     .map((piece) => encodePiece(piece, '*', routeName))

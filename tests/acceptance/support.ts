@@ -1,3 +1,6 @@
+// Does:  Holds the raw-socket helpers the base acceptance scripts share.
+// Holds: Requests are written as raw bytes, so a script can send what a conforming client never would.
+
 import net from 'node:net';
 
 export interface RawResponse {

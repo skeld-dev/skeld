@@ -1,3 +1,6 @@
+// Does:  Measures the generated check against typebox and Ajv on the four reference schemas.
+// Holds: A check that accepts no value aborts the run, so a broken engine cannot post a fast figure.
+
 import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { loadavg } from 'node:os';

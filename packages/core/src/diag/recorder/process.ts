@@ -1,3 +1,6 @@
+// Does:  Samples process-wide figures per snapshot: CPU, event-loop delay and utilisation, heap and GC.
+// Holds: Each figure is the change since the previous snapshot, not a running total.
+
 import {
   constants,
   type ELDHistogram,
@@ -23,7 +26,6 @@ const GC_KINDS: ReadonlyMap<number, string> = new Map([
   [constants.NODE_PERFORMANCE_GC_INCREMENTAL, 'incremental'],
   [constants.NODE_PERFORMANCE_GC_WEAKCB, 'weakcb'],
 ]);
-// monitorEventLoopDelay resolution in ms, D-1 §6.
 const DELAY_RESOLUTION_MS = 10;
 
 const gc = new Map<string, GcFigures>();

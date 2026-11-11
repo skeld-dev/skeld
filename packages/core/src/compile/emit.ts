@@ -1,3 +1,6 @@
+// Does:  Emits the JavaScript source of the validation check for a schema.
+// Holds: Every declared key and value enters the source through JSON.stringify or String; none is spliced in raw.
+
 import { isModelSchema } from '../schema/node.ts';
 import type { ArraySchema, ObjectSchema, RecordSchema, Schema, UnionSchema } from '../schema/types.ts';
 import { above, below, exactKeys, fresh, type Names, objectTest, optionalInner, scalarTerms, test } from './terms.ts';
@@ -13,6 +16,7 @@ function emitProperty(
   const quoted = JSON.stringify(key);
   const item = fresh('v', names);
   const inner = optionalInner(node);
+  // Why: A declared key that Object.prototype also has would read the inherited member, so hasOwn is tested first.
   const inherited = key in Object.prototype;
   if (inner === null) {
     const own = inherited ? test([`!Object.hasOwn(${value}, ${quoted})`], fail) : '';
@@ -28,6 +32,7 @@ function emitObject(node: ObjectSchema, value: string, fail: string, names: Name
   const required = entries.filter(([, property]) => optionalInner(property) === null).length;
   const closed = node.open === undefined;
   const counted = closed || node.minProperties !== undefined;
+  // Why: Optional keys make the key count vary; the counter tells the closed-object walk how many to expect.
   const present = counted && required < entries.length ? fresh('c', names) : null;
   let code = test(objectTest(value), fail);
   if (present !== null) {
@@ -64,6 +69,7 @@ function emitRecord(node: RecordSchema, value: string, fail: string, names: Name
   return `${head}let ${count} = 0;\nfor (const ${key} in ${value}) {\n${body}}\n`;
 }
 
+// Does:  Emits one labelled block per member: a member that fails breaks to the next, and the last one fails the check.
 function emitUnion(node: UnionSchema, value: string, fail: string, names: Names): string {
   const last = node.members.at(-1);
   if (last === undefined) {
@@ -82,6 +88,7 @@ function emitUnion(node: UnionSchema, value: string, fail: string, names: Names)
 }
 
 function emitNode(node: Schema, value: string, fail: string, names: Names): string {
+  // Why: A node this model did not make can never pass, so its check fails closed.
   if (!isModelSchema(node)) {
     return `${fail}\n`;
   }
@@ -107,6 +114,7 @@ function emitNode(node: Schema, value: string, fail: string, names: Names): stri
   }
 }
 
+// Does:  Returns the source of a function expression that takes one value and answers true or false.
 export function emitCheck(schema: Schema): string {
   return `function check(v0) {\n${emitNode(schema, 'v0', 'return false;', { next: 0 })}return true;\n}`;
 }

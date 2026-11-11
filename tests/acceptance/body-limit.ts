@@ -1,3 +1,6 @@
+// Does:  Proves that a body over the route's limit is answered 413 with connection: close before the handler runs.
+// Holds: Both ways of exceeding the limit are sent: a declared Content-Length and streamed chunks.
+
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as t from '@darkstart/core/schema';

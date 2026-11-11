@@ -1,3 +1,6 @@
+// Does:  Proves that an engine-written error drops author-set headers except the CORS set and vary.
+// Holds: Checked on 400, 413 and 500 responses the engine writes, over raw sockets.
+
 import { fileURLToPath } from 'node:url';
 import { defineContract } from '@darkstart/core/contract';
 import * as t from '@darkstart/core/schema';

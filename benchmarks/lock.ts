@@ -1,3 +1,6 @@
+// Does:  Takes the machine-wide benchmark lock, so two runs never measure at the same time.
+// Holds: The lock is taken with an atomic link; a lock whose holder is dead is replaced, a live one refuses the run.
+
 import { linkSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { BenchError, errorCode } from './bench-error.ts';
 import { isoSeconds } from './terminal.ts';

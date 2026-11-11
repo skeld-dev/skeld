@@ -1,3 +1,6 @@
+// Does:  Compiles a route's response serializers and the error-body serializer.
+// Holds: A schema node is compiled once and its serializer reused; an EvalError passes through unwrapped.
+
 import { errorBodySchema } from '../contract/contract.ts';
 import type { RouteDefinition } from '../contract/types.ts';
 import type { Schema } from '../schema/types.ts';
@@ -16,6 +19,7 @@ function compileSerializer(schema: Schema, status: number | null): Serializer {
   try {
     serializer = generateSerializer(schema);
   } catch (cause) {
+    // Why: An EvalError means the runtime forbids code generation, which listen reports as its own boot error.
     if (cause instanceof EvalError) {
       throw cause;
     }
@@ -29,6 +33,7 @@ export function compileResponseSerializers(route: RouteDefinition): ResponseSeri
   return new Map(
     Object.entries(route.responses).map(([key, schema]) => {
       const status = Number(key);
+      // Why: A status declared as null has no body, so it has no serializer.
       return [status, schema === null ? null : compileSerializer(schema, status)];
     }),
   );

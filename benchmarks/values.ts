@@ -1,3 +1,6 @@
+// Does:  Holds the benchmark protocol's constants: load, cores, timings, lines and expected answers.
+// Holds: A run whose settings differ from these is a deviation and is not assessed.
+
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 

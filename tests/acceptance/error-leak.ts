@@ -1,3 +1,6 @@
+// Does:  Proves that a thrown error with no status is answered with the fixed 500 body and nothing of its own.
+// Holds: A random token in the thrown message must not appear anywhere in the response bytes.
+
 import { randomUUID } from 'node:crypto';
 import * as t from '@darkstart/core/schema';
 import { defineContract } from '@darkstart/core/contract';

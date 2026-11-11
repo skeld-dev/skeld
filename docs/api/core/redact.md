@@ -14,4 +14,4 @@ export function redact(schema: Schema, value: unknown): unknown;
 redact(t.object({ token: t.string({ maxLength: 64, sensitivity: 'secret' }) }), { token: 'abc' });
 ```
 
-Source: `packages/core/src/schema/redact.ts:61`
+Source: `packages/core/src/schema/redact.ts:65`

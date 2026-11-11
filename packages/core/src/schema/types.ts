@@ -1,3 +1,6 @@
+// Does:  Declares the type system's public types: schema nodes, options, inference and findings.
+// Holds: A schema's ~static and ~wire types are phantom: they exist for the compiler and carry no run-time value.
+
 import type { Secret } from './secret.ts';
 
 /** The twelve kinds of schema the builders make. */

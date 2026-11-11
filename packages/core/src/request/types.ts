@@ -1,3 +1,6 @@
+// Does:  Declares the results of the request parsers: target, query, media type, body read and JSON parse.
+// Holds: Every parser result is a union tagged by kind, so a refusal is a value the caller must handle.
+
 export type FramingFault = 'duplicate-host' | 'transfer-encoding';
 
 export interface ParsedTarget {

@@ -1,3 +1,6 @@
+// Does:  Opens and closes timing spans on the current request's frame stack, and detached tracks.
+// Holds: A span closed out of order closes those above it first and is counted as diag.span_order.
+
 import type { SpanName, TrackName } from '../empty.ts';
 import { nowNs, threadCpuUs } from './clock.ts';
 import { config } from './config.ts';
@@ -23,6 +26,7 @@ interface TrackRecord {
   gen: number;
 }
 
+// Why: Bit 29 marks a token as a detached track, so endSpan can tell the two kinds apart.
 const DETACHED = 1 << 29;
 export const TRACK_COUNT = 4096;
 const TRACK_INDEX_MASK = 0xfff;

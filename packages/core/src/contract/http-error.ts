@@ -1,3 +1,6 @@
+// Does:  Defines HttpError, the one error a handler throws to answer with a chosen status and code.
+// Holds: An instance has a null status or one from 400 to 599, and a code of upper-case letters, digits and _.
+
 import type { ErrorDetail, HttpErrorOptions } from './types.ts';
 
 export type { HttpErrorOptions } from './types.ts';

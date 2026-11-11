@@ -1,3 +1,6 @@
+// Does:  Measures how long listen takes for a contract of 200 routes.
+// Holds: It prints the figure and judges nothing; one request proves the server really served.
+
 import { defineContract } from '@darkstart/core/contract';
 import * as t from '@darkstart/core/schema';
 import { createServer } from '@darkstart/core/server';

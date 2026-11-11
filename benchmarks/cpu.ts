@@ -1,3 +1,6 @@
+// Does:  Samples the server's CPU time and the generator's own, and says which of the two was saturated.
+// Holds: Server CPU comes from the kernel's per-process counters in /proc, never from wall time.
+
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { errorCode } from './bench-error.ts';
@@ -31,7 +34,7 @@ const serverTicks = (pid: number): number | null => {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-    // proc_pid_stat(5): utime and stime are fields 14 and 15; fields[0] here is field 3.
+    // Why: proc_pid_stat(5) puts utime and stime at fields 14 and 15; fields[0] here is field 3.
     return Number(fields[11]) + Number(fields[12]);
   } catch (error) {
     if (errorCode(error) === 'ENOENT') {

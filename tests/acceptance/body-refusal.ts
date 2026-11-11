@@ -1,3 +1,6 @@
+// Does:  Proves that a body refusal reaches a slow reader and that stalled, flooding and pipelined peers are bounded.
+// Holds: It speaks raw TCP to a child server, so the client's timing is independent of the server's event loop.
+
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -109,14 +112,14 @@ function exchange(port: number, initial: string, blocked = false, flood = false)
       started = performance.now();
       socket.write(initial);
       if (blocked) {
-        // Model a descheduled client independently of the child server's event loop.
+        // Why: Models a descheduled client, independent of the child server's event loop.
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
         for (let i = 0; i < 3; i++) {
           socket.write(Buffer.alloc(65_536, 32));
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
         }
       }
-      // Keep sending after FIN: full closure becomes observable as a write error.
+      // Why: Sending goes on after the FIN, so that a full close shows up as a write error.
       writer = setInterval(() => {
         if (!socket.destroyed && socket.writableLength < 65_536) {
           socket.write(Buffer.alloc(flood ? 65_536 : 1, 32));

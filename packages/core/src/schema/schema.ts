@@ -1,3 +1,6 @@
+// Does:  Defines the builders, the only way to make a schema node.
+// Holds: Every builder refuses a child that is not a node, and optional is accepted only as an object property.
+
 import { createNode } from './create.ts';
 import { isNode, type RuntimeNode } from './node.ts';
 import type { Secret } from './secret.ts';
@@ -29,6 +32,7 @@ import type {
   UnionSchema,
 } from './types.ts';
 
+// Why: A reason is the written justification for an opt-out; an empty string is no reason.
 function isEmptyReason(reason: string): boolean {
   return reason.trim() === '';
 }

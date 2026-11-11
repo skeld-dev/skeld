@@ -1,3 +1,6 @@
+// Does:  Reads and decodes a route's request body (JSON or plain text).
+// Holds: Size and media type are accepted before a single byte is parsed.
+
 import { event } from '#diag';
 import type { IncomingMessage } from 'node:http';
 import { HttpError } from '../contract/http-error.ts';
@@ -20,6 +23,7 @@ function refused(status: number, code: string, message: string): BodyOutcome {
   return { kind: 'refused', error: new HttpError(status, code, message), close: false };
 }
 
+// Does:  Turns a finished read into an outcome; only an oversized body asks for the connection to close.
 function decode(result: BodyReadResult, type: string, limit: number): BodyOutcome {
   switch (result.kind) {
     case 'aborted':
@@ -28,6 +32,7 @@ function decode(result: BodyReadResult, type: string, limit: number): BodyOutcom
       return {
         kind: 'refused',
         error: new HttpError(413, 'PAYLOAD_TOO_LARGE', `Request body exceeds the limit of ${limit} bytes`),
+        // Why: The rest of the body is unread, so the connection cannot carry another request.
         close: true,
       };
     case 'ok':
@@ -49,11 +54,15 @@ function decode(result: BodyReadResult, type: string, limit: number): BodyOutcom
   }
 }
 
+// Does:  Tells whether Content-Length alone already exceeds the limit, before any hook runs.
+// Holds: A missing or unreadable length is false; the read itself still enforces the limit.
 export function declaresOverLimit(req: IncomingMessage, limit: number): boolean {
   const declared = req.headers['content-length'];
   return declared !== undefined && Number.parseInt(declared, 10) > limit;
 }
 
+// Does:  Reads the body when there is one: returns the outcome now, or null and reports it later through done.
+// Holds: Either an outcome is returned or done is called once, never both.
 export function readRouteBody(
   req: IncomingMessage,
   limit: number,
@@ -61,6 +70,7 @@ export function readRouteBody(
 ): BodyOutcome | null {
   const declared = req.headers['content-length'];
   const contentLength = declared === undefined ? null : Number.parseInt(declared, 10);
+  // Why: A request with neither Content-Length nor Transfer-Encoding has no body (RFC 9112 section 6).
   if ((contentLength === null && req.headers['transfer-encoding'] === undefined) || contentLength === 0) {
     return ABSENT;
   }
@@ -86,6 +96,7 @@ export function readRouteBody(
   }
   const early = readBody(req, limit, contentLength, (result) => {
     let outcome: BodyOutcome;
+    // Why: This runs from a socket event, outside the caller's stack; a throw here would be uncaught.
     try {
       outcome = decode(result, type, limit);
     } catch (error) {

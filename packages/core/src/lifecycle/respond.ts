@@ -1,3 +1,6 @@
+// Does:  Serializes the handler's reply for its declared status, runs the onSend hooks and writes it.
+// Holds: A reply that breaks its response schema becomes the fixed 500; the offending value is never written.
+
 import { contain, end, event, header, next, payload, start, wrote } from '#diag';
 import type { Serializer } from '../compile/types.ts';
 import { fail } from './error-path.ts';
@@ -38,6 +41,7 @@ function writeEmpty(exchange: Exchange, status: number): void {
   if (exchange.runtime.isClosing()) {
     res.setHeader('connection', 'close');
   }
+  // Why: A 204 must not carry Content-Length (RFC 9110 section 8.6), and a 304's would describe the full response.
   if (status !== NO_CONTENT && status !== NOT_MODIFIED) {
     res.setHeader('content-length', 0);
   }
@@ -48,6 +52,7 @@ function writeEmpty(exchange: Exchange, status: number): void {
   exchange.state = 'written';
 }
 
+// Does:  Passes the serialized text through the onSend hooks; a hook's return value replaces what is written.
 function sendThrough(exchange: Exchange, status: number, serialized: string): void {
   const hooks = exchange.route.hooks.onSend;
   if (hooks.length === 0) {
@@ -85,6 +90,7 @@ function sendThrough(exchange: Exchange, status: number, serialized: string): vo
   );
 }
 
+// Does:  Writes the handler's reply; an undeclared status or a schema mismatch goes to the error path instead.
 export function respond(exchange: Exchange, reply: RuntimeReply): void {
   if (exchange.state !== 'running') {
     return;
@@ -94,6 +100,7 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
   let status: number;
   let serializer: Serializer | null;
   try {
+    // Why: The reply is the author's object; reading it can run a getter that throws.
     status = reply.status;
     const declared = exchange.route.serializers.get(status);
     if (declared === undefined) {
@@ -128,6 +135,7 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
     return;
   }
   end(serialize);
+  // Why: A number is the index of the schema location that refused the value, never the value itself.
   if (typeof written === 'number') {
     event('err.serialize');
     fail(exchange, mismatch(serializer.refusals[written]), true);

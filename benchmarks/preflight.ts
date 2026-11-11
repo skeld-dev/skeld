@@ -1,3 +1,6 @@
+// Does:  Sends one request per route to a started server and compares the answer with the expected one.
+// Holds: A route passes only on status 200, the JSON media type and the exact expected body.
+
 import type { CheckRow, RouteId } from './types.ts';
 import { expectedBody, expectedMediaType, host, preflightTimeoutMs } from './values.ts';
 

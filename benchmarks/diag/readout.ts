@@ -1,3 +1,6 @@
+// Does:  Builds and writes the diag readout: per-stage table, diag-to-normal ratio and the security pass.
+// Holds: The overhead ratio is taken from server CPU per request of the two builds in the same run.
+
 import { writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { routeIds } from '../options.ts';

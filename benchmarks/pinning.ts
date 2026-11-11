@@ -1,3 +1,6 @@
+// Does:  Pins the runner to its cores and builds the command that pins each server to its own.
+// Holds: A host that cannot be pinned is reported as a deviation; the run is never pinned silently wrong.
+
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { cpus } from 'node:os';

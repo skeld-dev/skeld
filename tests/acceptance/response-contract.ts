@@ -1,3 +1,6 @@
+// Does:  Proves that a response which breaks its schema is the fixed 500, and an undeclared key is dropped.
+// Holds: The stderr line names the route, the status and the schema location, never the value.
+
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { defineContract } from '@darkstart/core/contract';

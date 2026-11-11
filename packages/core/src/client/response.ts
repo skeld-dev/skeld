@@ -1,3 +1,6 @@
+// Does:  Reads a fetch response into nothing, text, parsed JSON or a failure.
+// Holds: A failure to read or to parse the body is returned as a result, never thrown.
+
 import { end, track } from '#diag';
 
 export type ReadBody =

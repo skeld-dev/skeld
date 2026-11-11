@@ -1,3 +1,6 @@
+// Does:  Defines the error a schema that cannot be compiled is reported with at boot.
+// Holds: Its message names the request part or the response status, never the schema's content.
+
 import type { PartName } from './types.ts';
 
 export class SchemaCompileError extends Error {

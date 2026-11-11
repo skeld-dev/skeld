@@ -1,3 +1,6 @@
+// Does:  Holds a scope's registrations (routes, hooks, error handler, child plugins) until listen builds the runtime.
+// Holds: A sealed scope refuses every registration, and one scope has at most one error handler.
+
 import { checkContract } from '../contract/checks.ts';
 import type { ContractRoutes, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { RuntimeHandler } from '../lifecycle/types.ts';
@@ -119,6 +122,7 @@ export function createScope(state: ScopeState): Scope {
   return {
     routes(contract, handlers, options) {
       assertOpen(state, 'routes');
+      // Why: A contract object can reach routes() without having passed defineContract, so it is checked again here.
       checkContract(contract);
       // biome-ignore lint/nursery/noUnsafeTypeAssertion: the one erasure point; Handlers<C> is typed per route, the runtime reads handlers by name
       const erased = handlers as unknown as ErasedHandlers;
