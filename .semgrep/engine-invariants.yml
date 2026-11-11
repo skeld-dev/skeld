@@ -1,0 +1,186 @@
+rules:
+  - id: codegen-outside-generate
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      Code generation (new Function, Function or eval) is allowed only in
+      packages/core/src/compile/generate.ts, which compiles declarations at listen (ADR-019).
+    paths:
+      include:
+        - "/packages/core/src/"
+      exclude:
+        - "/packages/core/src/compile/generate.ts"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern-either:
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - pattern: eval(...)
+    metadata:
+      category: security
+      references:
+        - ".project/adr/019-validate-with-a-generated-check-on-node-and-a-closure-check-elsewhere-over-one-explain-and-one-finish.md"
+        - ".project/controls.md C-12"
+  - id: engine-imports-dangerous-module
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      The engine imports node:fs, node:child_process, node:vm or node:worker_threads, which only the
+      diagnostic recorder in packages/core/src/diag/ may use.
+    paths:
+      include:
+        - "/packages/core/src/"
+      exclude:
+        - "/packages/core/src/diag/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?(fs|fs/promises|child_process|vm|worker_threads)$
+    metadata:
+      category: security
+  - id: json-parse-outside-the-parsers
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      JSON.parse outside request/json.ts and client/response.ts bypasses the __proto__ and
+      constructor.prototype refusal.
+    paths:
+      include:
+        - "/packages/core/src/"
+      exclude:
+        - "/packages/core/src/request/json.ts"
+        - "/packages/core/src/client/response.ts"
+        - "/packages/core/src/diag/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern: JSON.parse(...)
+    metadata:
+      category: security
+      references:
+        - ".project/controls.md C-02"
+  - id: expose-called-inside-core
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      Core calls expose, which unwraps a Secret; only the service author's handler may read a secret.
+    paths:
+      include:
+        - "/packages/core/src/"
+      exclude:
+        - "/packages/core/src/schema/secret.ts"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern: expose(...)
+    metadata:
+      category: security
+      references:
+        - ".project/controls.md C-42"
+  - id: internal-error-text-to-wire
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      A stack, or a caught value's message or text, is read where it can reach the response; no
+      internal message or stack leaves the process.
+    paths:
+      include:
+        - "/packages/core/src/lifecycle/"
+        - "/packages/core/src/server/"
+      exclude:
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern-either:
+      - pattern: $V.stack
+      - patterns:
+          - pattern-inside: |
+              try { ... } catch ($E) { ... }
+          - pattern-either:
+              - pattern: $RES.end(..., <... $E.message ...>, ...)
+              - pattern: $RES.end(..., <... $E.stack ...>, ...)
+              - pattern: $RES.end(..., <... String($E) ...>, ...)
+              - pattern: $RES.end(..., <... `...${$E}...` ...>, ...)
+              - pattern: $RES.write(..., <... $E.message ...>, ...)
+              - pattern: $RES.write(..., <... $E.stack ...>, ...)
+              - pattern: $RES.write(..., <... String($E) ...>, ...)
+              - pattern: $RES.write(..., <... `...${$E}...` ...>, ...)
+              - pattern: $RES.writeHead(..., <... $E.message ...>, ...)
+              - pattern: $RES.writeHead(..., <... $E.stack ...>, ...)
+              - pattern: $RES.writeHead(..., <... String($E) ...>, ...)
+              - pattern: $RES.writeHead(..., <... `...${$E}...` ...>, ...)
+              - pattern: $RES.setHeader(..., <... $E.message ...>, ...)
+              - pattern: $RES.setHeader(..., <... $E.stack ...>, ...)
+              - pattern: $RES.setHeader(..., <... String($E) ...>, ...)
+              - pattern: $RES.setHeader(..., <... `...${$E}...` ...>, ...)
+    metadata:
+      category: security
+      references:
+        - ".project/controls.md C-06"
+  - id: stderr-outside-the-one-writer
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      process.stderr, process.stdout or console is used outside lifecycle/stderr.ts, the one writer
+      that escapes control characters.
+    paths:
+      include:
+        - "/packages/core/src/"
+      exclude:
+        - "/packages/core/src/lifecycle/stderr.ts"
+        - "/packages/core/src/diag/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern-either:
+      - pattern: process.stderr
+      - pattern: process.stdout
+      - pattern: console.$M(...)
+    metadata:
+      category: security
+      references:
+        - ".project/controls.md C-15"
+  - id: env-read-in-engine
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      The engine reads process.env; configuration comes from the service declaration, and only the
+      diagnostic recorder reads the environment.
+    paths:
+      include:
+        - "/packages/core/src/"
+      exclude:
+        - "/packages/core/src/diag/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern: process.env
+    metadata:
+      category: security
+  - id: dynamic-regexp
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      A RegExp is built from a value that is not a string literal, which can compile untrusted text
+      into a pattern.
+    paths:
+      include:
+        - "/packages/core/src/"
+      exclude:
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: new RegExp($X, ...)
+          - pattern: RegExp($X, ...)
+      - pattern-not: new RegExp("...", ...)
+      - pattern-not: RegExp("...", ...)
+    metadata:
+      category: security
+      cwe: "CWE-1333: Inefficient Regular Expression Complexity"
