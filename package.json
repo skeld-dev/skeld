@@ -19,7 +19,6 @@
     "bench": "tsc -b packages/core && node benchmarks/run.ts",
     "readme-check": "node tools/check-readme-example.ts",
     "pack-check": "node tools/check-pack-markers.ts --pack",
-    "map-check": "node tools/check-instrumentation-map.ts",
     "api-check": "node tools/api-reference/check.ts",
     "api-docs": "node tools/api-reference/generate.ts",
     "differential": "node --conditions=darkstart-source tests/schema/differential.ts"
