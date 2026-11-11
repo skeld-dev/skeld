@@ -24,13 +24,7 @@ const KEPT_ON_ERROR: ReadonlySet<string> = new Set([
   'vary',
 ]);
 
-export function writeJson(
-  res: ServerResponse,
-  method: string,
-  status: number,
-  payload: string | Uint8Array,
-  close: boolean,
-): void {
+export function writeJson(res: ServerResponse, method: string, status: number, payload: string, close: boolean): void {
   const headers: OutgoingHttpHeaders = {
     'content-type': JSON_CONTENT_TYPE,
     'content-length': Buffer.byteLength(payload),

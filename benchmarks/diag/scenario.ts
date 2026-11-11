@@ -186,6 +186,9 @@ function internalBody(response: WireResponse): string | null {
     : 'without code INTERNAL';
 }
 
+const servedAsDeclared = (response: WireResponse): string | null =>
+  response.body === '{"hello":"world"}' ? null : 'with a body other than the serialized contract body';
+
 const noContentType = (response: WireResponse): string | null =>
   response.headers.has('content-type') ? 'with a content-type' : null;
 
@@ -546,14 +549,6 @@ function cleanSteps(token: string): readonly Step[] {
 const plantedLeaks: readonly PlantedLeak[] = [
   { kind: 'leak.canary', figure: delta('leak.canary', 1, true) },
   {
-    kind: 'leak.response_schema',
-    figure: journaled(
-      'leak.response_schema{plant_send}',
-      1,
-      (line) => line.hook === 'leak.response_schema' && line.route === 'plant_send',
-    ),
-  },
-  {
     kind: 'leak.header_injection',
     figure: journaled(
       'leak.header_injection{x-scenario-note}',
@@ -575,9 +570,9 @@ const plantedSteps: readonly Step[] = [
   callsStep(
     'planted',
     [
-      { ...get('/plant/send', 'plant_send', 200), carriesToken: true },
+      get('/plant/send', 'plant_send', 200, servedAsDeclared),
       get('/plant/header', 'plant_header', 500),
-      get('/plant/raw', 'plant_raw', 200, noContentType),
+      { ...get('/plant/raw', 'plant_raw', 200, noContentType), carriesToken: true },
     ],
     plantedLeaks.map((leak) => leak.figure),
   ),

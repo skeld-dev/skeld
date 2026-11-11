@@ -210,11 +210,11 @@ export type OnRequestHook = (context: RequestContext) => void | Promise<void>;
  * It never runs for a refused request; `context.send` replies and skips the handler.
  */
 export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>;
-/** A hook given the serialized payload before it is written; a returned string or bytes replaces it. */
-export type OnSendHook = (
-  context: ResponseContext,
-  payload: string | Uint8Array,
-) => string | Uint8Array | undefined | Promise<string | Uint8Array | undefined>;
+/**
+ * A hook that observes the serialized payload before it is written; it can set headers but never change the payload.
+ * Its return value is ignored; a throw goes to the error path.
+ */
+export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 /**
  * A hook run once the response is done or its connection closed, to observe the outcome.
  * A throw is written to stderr and changes nothing; it does not run after a hook replied with `send`.

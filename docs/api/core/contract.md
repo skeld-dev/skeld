@@ -22,7 +22,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:99`
+Source: `packages/core/src/contract/types.ts:100`
 
 ## EngineErrorCode
 
@@ -38,7 +38,8 @@ export type EngineErrorCode =
   | 'UNSUPPORTED_MEDIA_TYPE'
   | 'INTERNAL'
   | 'NETWORK'
-  | 'INVALID_RESPONSE';
+  | 'INVALID_RESPONSE'
+  | 'RESPONSE_TOO_LARGE';
 ```
 
 Source: `packages/core/src/contract/types.ts:87`

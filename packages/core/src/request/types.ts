@@ -25,4 +25,5 @@ export type BodyReadResult =
 export type JsonParseResult =
   | { readonly kind: 'ok'; readonly value: unknown }
   | { readonly kind: 'invalid-json' }
+  | { readonly kind: 'too-deep' }
   | { readonly kind: 'forbidden-key'; readonly key: '__proto__' | 'constructor.prototype' };

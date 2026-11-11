@@ -1,6 +1,7 @@
-// Does:  Inspects a schema at boot for unbounded fields, invalid bounds and a secret in a response.
+// Does:  Inspects a schema at boot for unbounded fields, invalid bounds, a secret in a response and deep nesting.
 // Holds: A secret node in a response is a finding unless an exposed node with a reason stands above it.
 
+import { MAX_JSON_DEPTH, tooDeepPointer } from './json-depth.ts';
 import { isModelSchema } from './node.ts';
 import type { Finding, Schema, Sensitivity } from './types.ts';
 
@@ -134,5 +135,13 @@ function inspectNode(schema: Schema, pointer: string, exempt: boolean, walk: Wal
 export function inspectSchema(schema: Schema, role: 'request' | 'response'): readonly Finding[] {
   const walk: Walk = { role, findings: [] };
   inspectNode(schema, '', false, walk);
+  const deep = tooDeepPointer(schema);
+  if (deep !== null) {
+    walk.findings.push({
+      code: 'NESTED_TOO_DEEP',
+      pointer: deep,
+      message: `values here nest deeper than ${MAX_JSON_DEPTH} arrays and objects, past the JSON depth limit`,
+    });
+  }
   return walk.findings;
 }

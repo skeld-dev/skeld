@@ -79,10 +79,10 @@ function declaredSegments(schema: Schema, path: readonly (string | number)[]): (
   return kept;
 }
 
-function schemaFailure(validator: ResponseCheck, payload: string | Uint8Array): string | null {
+function schemaFailure(validator: ResponseCheck, payload: string): string | null {
   let value: unknown;
   try {
-    value = JSON.parse(asText(payload));
+    value = JSON.parse(payload);
   } catch (error) {
     if (error instanceof SyntaxError) {
       return 'not_json';
@@ -97,18 +97,14 @@ function schemaFailure(validator: ResponseCheck, payload: string | Uint8Array): 
   return pointer === '' ? '/' : pointer;
 }
 
-export function checkPayload(status: number, serialized: string, final: string | Uint8Array): void {
+export function checkPayload(status: number, serialized: string): void {
   const record = state.current;
   if (record === null) {
     return;
   }
-  const replaced = serialized !== final;
-  if (replaced) {
-    record.replaced = true;
-  }
   const { route } = record;
-  // Why: A replaced payload is always checked against its schema; an untouched one only on sampled requests.
-  if (route === null || record.schemaChecked || !(replaced || record.step)) {
+  // Why: The payload comes from the compiled serializer, so only sampled requests re-check it against its schema.
+  if (route === null || record.schemaChecked || !record.step) {
     return;
   }
   const validator = route.validators.get(status);
@@ -116,7 +112,7 @@ export function checkPayload(status: number, serialized: string, final: string |
     return;
   }
   record.schemaChecked = true;
-  const subject = schemaFailure(validator, final);
+  const subject = schemaFailure(validator, serialized);
   if (subject !== null) {
     raise('leak.response_schema', subject, route.name, status);
   }
@@ -190,7 +186,7 @@ export function checkWrite(
   const { canary } = config;
   if (payload !== null) {
     const text = asText(payload);
-    const internal = status >= 400 || record.replaced || record.step ? internalText(text, record.req?.url ?? '') : null;
+    const internal = status >= 400 || record.step ? internalText(text, record.req?.url ?? '') : null;
     if (internal !== null) {
       raise('leak.internal_text', internal, route, status);
     }

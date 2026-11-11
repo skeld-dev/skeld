@@ -13,6 +13,9 @@ const scripts = [
   'error-headers.ts',
   'timeouts.ts',
   'pipeline-refusal.ts',
+  'json-depth.ts',
+  'onsend-observe.ts',
+  'client-response-limit.ts',
 ];
 
 let failed = 0;

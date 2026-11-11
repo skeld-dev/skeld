@@ -67,6 +67,7 @@ export type EventName =
   | 'refuse.media_type'
   | 'refuse.body_limit'
   | 'refuse.body_json'
+  | 'refuse.body_depth'
   | 'refuse.forbidden_key'
   | 'refuse.validation'
   | 'refuse.body_aborted'
@@ -103,7 +104,7 @@ export type Wrote = (status: number, headers: OutgoingHttpHeaders | null, payloa
 export type Destroyed = () => void;
 export type Header = (name: string, value: HeaderValue) => void;
 export type Contain = (kind: ContextKind, value: object) => void;
-export type Payload = (status: number, serialized: string, final: string | Uint8Array) => void;
+export type Payload = (status: number, serialized: string) => void;
 export type Key = (key: string) => void;
 export type Stderr = (line: string) => void;
 export type Open = (options: ResolvedServerOptions) => void;

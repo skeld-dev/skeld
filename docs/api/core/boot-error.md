@@ -4,7 +4,7 @@
 
 Why a service could not boot.
 
-The schema codes `UNBOUNDED_FIELD`, `INVALID_BOUND` and `SECRET_IN_RESPONSE` come from `listen` and name the route, part and JSON pointer.
+The schema codes `UNBOUNDED_FIELD`, `INVALID_BOUND`, `SECRET_IN_RESPONSE` and `NESTED_TOO_DEEP` come from `listen` and name the route, part and JSON pointer.
 
 ```ts
 export type BootErrorCode =
@@ -21,6 +21,7 @@ export type BootErrorCode =
   | 'UNBOUNDED_FIELD'
   | 'INVALID_BOUND'
   | 'SECRET_IN_RESPONSE'
+  | 'NESTED_TOO_DEEP'
   | 'CODEGEN_UNAVAILABLE';
 ```
 
@@ -48,4 +49,4 @@ export class BootError extends Error {
 }
 ```
 
-Source: `packages/core/src/server/boot-error.ts:30`
+Source: `packages/core/src/server/boot-error.ts:31`

@@ -13,7 +13,7 @@ export type CallInput<R extends RouteDefinition> = (R extends { readonly params:
   (R extends { readonly body: infer S extends Schema } ? { readonly body: Wire<S> } : unknown);
 ```
 
-Source: `packages/core/src/client/types.ts:422`
+Source: `packages/core/src/client/types.ts:427`
 
 ## CallResult
 
@@ -43,7 +43,7 @@ export type CallResult<R extends RouteDefinition> =
 | `headers` | The response headers.                                                                          |
 | `body`    | The response body; for a status the contract does not declare, unchecked JSON, text or `null`. |
 
-Source: `packages/core/src/client/types.ts:433`
+Source: `packages/core/src/client/types.ts:438`
 
 ## Client
 
@@ -53,7 +53,7 @@ A typed client: one `RouteCall` per route name of the contract.
 export type Client<C extends ContractRoutes> = { readonly [K in keyof C]: RouteCall<C[K]> };
 ```
 
-Source: `packages/core/src/client/types.ts:463`
+Source: `packages/core/src/client/types.ts:468`
 
 ## ClientOptions
 
@@ -63,13 +63,15 @@ The options of `createClient`.
 export interface ClientOptions {
   readonly baseUrl: string | URL;
   readonly fetch?: typeof globalThis.fetch;
+  readonly maxResponseBytes?: number;
 }
 ```
 
-| Field     | Summary                                                                                      |
-| --------- | -------------------------------------------------------------------------------------------- |
-| `baseUrl` | The service's origin and base path: an absolute http or https URL with no query or fragment. |
-| `fetch`   | The function that sends each request (default `globalThis.fetch`).                           |
+| Field              | Summary                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| `baseUrl`          | The service's origin and base path: an absolute http or https URL with no query or fragment.        |
+| `fetch`            | The function that sends each request (default `globalThis.fetch`).                                  |
+| `maxResponseBytes` | The most decoded bytes a call reads from any response body, replacing the limit derived per status. |
 
 Source: `packages/core/src/client/types.ts:8`
 
@@ -481,13 +483,13 @@ export type FetchStatus =
   | 599;
 ```
 
-Source: `packages/core/src/client/types.ts:19`
+Source: `packages/core/src/client/types.ts:24`
 
 ## RouteCall
 
 The function a client gives for one route.
 
-It resolves for every status from 200 to 599; it rejects with HttpError `NETWORK` or `INVALID_RESPONSE`.
+It resolves for every status from 200 to 599; it rejects with HttpError `NETWORK`, `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`.
 
 ```ts
 export type RouteCall<R extends RouteDefinition> = R extends
@@ -499,13 +501,13 @@ export type RouteCall<R extends RouteDefinition> = R extends
   : (input?: Empty) => Promise<CallResult<R>>;
 ```
 
-Source: `packages/core/src/client/types.ts:454`
+Source: `packages/core/src/client/types.ts:459`
 
 ## createClient
 
 Creates a typed client with one call per route of a contract.
 
-A call rejects with HttpError `INVALID_RESPONSE` when a declared body fails its schema; throws `TypeError` for a bad `baseUrl`.
+A call rejects with HttpError `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`; throws `TypeError` for a bad option or a schema nested past 64.
 
 ```ts
 export function createClient<const C extends ContractRoutes>(contract: C, options: ClientOptions): Client<C>;
@@ -517,4 +519,4 @@ createClient(defineContract({ health: { method: 'GET', path: '/health', response
 });
 ```
 
-Source: `packages/core/src/client/client.ts:187`
+Source: `packages/core/src/client/client.ts:260`

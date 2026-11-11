@@ -93,7 +93,8 @@ export type EngineErrorCode =
   | 'UNSUPPORTED_MEDIA_TYPE'
   | 'INTERNAL'
   | 'NETWORK'
-  | 'INVALID_RESPONSE';
+  | 'INVALID_RESPONSE'
+  | 'RESPONSE_TOO_LARGE';
 
 /** The type of a request part the route does not declare: an object with no keys. */
 export interface Empty {

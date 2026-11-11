@@ -5,7 +5,7 @@ import type { RouteInfo } from '../contract/types.ts';
 
 /**
  * Why a service could not boot.
- * The schema codes `UNBOUNDED_FIELD`, `INVALID_BOUND` and `SECRET_IN_RESPONSE` come from `listen` and name the route, part and JSON pointer.
+ * The schema codes `UNBOUNDED_FIELD`, `INVALID_BOUND`, `SECRET_IN_RESPONSE` and `NESTED_TOO_DEEP` come from `listen` and name the route, part and JSON pointer.
  */
 export type BootErrorCode =
   | 'INVALID_OPTION'
@@ -21,6 +21,7 @@ export type BootErrorCode =
   | 'UNBOUNDED_FIELD'
   | 'INVALID_BOUND'
   | 'SECRET_IN_RESPONSE'
+  | 'NESTED_TOO_DEEP'
   | 'CODEGEN_UNAVAILABLE';
 
 /**

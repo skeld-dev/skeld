@@ -13,6 +13,11 @@ export interface ClientOptions {
   readonly baseUrl: string | URL;
   /** The function that sends each request (default `globalThis.fetch`). */
   readonly fetch?: typeof globalThis.fetch;
+  /**
+   * The most decoded bytes a call reads from any response body, replacing the limit derived per status.
+   * By default a declared status's schema sets it, else 1 MiB; `createClient` throws `TypeError` unless it is a positive integer.
+   */
+  readonly maxResponseBytes?: number;
 }
 
 /** Every status from 200 to 599, the range a call can resolve with. */
@@ -449,7 +454,7 @@ export type CallResult<R extends RouteDefinition> =
 
 /**
  * The function a client gives for one route.
- * It resolves for every status from 200 to 599; it rejects with HttpError `NETWORK` or `INVALID_RESPONSE`.
+ * It resolves for every status from 200 to 599; it rejects with HttpError `NETWORK`, `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`.
  */
 export type RouteCall<R extends RouteDefinition> = R extends
   | { readonly params: Schema }

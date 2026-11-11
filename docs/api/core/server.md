@@ -10,7 +10,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:99`
+Source: `packages/core/src/contract/types.ts:100`
 
 ## RouteInfo
 
@@ -30,7 +30,7 @@ export interface RouteInfo {
 | `method` | The route's HTTP method.          |
 | `path`   | The route's path pattern.         |
 
-Source: `packages/core/src/contract/types.ts:104`
+Source: `packages/core/src/contract/types.ts:105`
 
 ## CompletedContext
 
@@ -202,16 +202,15 @@ Source: `packages/core/src/server/types.ts:222`
 
 ## OnSendHook
 
-A hook given the serialized payload before it is written; a returned string or bytes replaces it.
+A hook that observes the serialized payload before it is written; it can set headers but never change the payload.
+
+Its return value is ignored; a throw goes to the error path.
 
 ```ts
-export type OnSendHook = (
-  context: ResponseContext,
-  payload: string | Uint8Array,
-) => string | Uint8Array | undefined | Promise<string | Uint8Array | undefined>;
+export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:214`
+Source: `packages/core/src/server/types.ts:217`
 
 ## OutgoingHeaders
 

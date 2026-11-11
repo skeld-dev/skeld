@@ -48,6 +48,9 @@ function decode(result: BodyReadResult, type: string, limit: number): BodyOutcom
     case 'invalid-json':
       event('refuse.body_json');
       return refused(400, 'BAD_REQUEST', 'Request body is not valid JSON');
+    case 'too-deep':
+      event('refuse.body_depth');
+      return refused(400, 'BAD_REQUEST', 'Request body is nested too deeply');
     case 'forbidden-key':
       event('refuse.forbidden_key', parsed.key);
       return refused(400, 'BAD_REQUEST', `Request body contains a forbidden key: ${parsed.key}`);

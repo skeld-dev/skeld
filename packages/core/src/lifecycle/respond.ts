@@ -1,5 +1,5 @@
 // Does:  Serializes the handler's reply for its declared status, runs the onSend hooks and writes it.
-// Holds: A reply that breaks its response schema becomes the fixed 500; the offending value is never written.
+// Holds: Only the serializer's text is written; a schema mismatch becomes the fixed 500 and no hook replaces it.
 
 import { contain, end, event, header, next, payload, start, wrote } from '#diag';
 import type { Serializer } from '../compile/types.ts';
@@ -17,13 +17,13 @@ function mismatch(location: string | undefined): Error {
   return new Error(location === undefined || location === '' ? SCHEMA_MISMATCH : `${SCHEMA_MISMATCH} at ${location}`);
 }
 
-function writePayload(exchange: Exchange, status: number, final: string | Uint8Array): void {
+function writePayload(exchange: Exchange, status: number, serialized: string): void {
   if (exchange.state !== 'running') {
     return;
   }
   exchange.stage = next(exchange.stage, 'req.respond.write');
   try {
-    writeJson(exchange.res, exchange.method, status, final, exchange.runtime.isClosing());
+    writeJson(exchange.res, exchange.method, status, serialized, exchange.runtime.isClosing());
   } catch (error) {
     fail(exchange, error, true);
     return;
@@ -52,37 +52,24 @@ function writeEmpty(exchange: Exchange, status: number): void {
   exchange.state = 'written';
 }
 
-// Does:  Passes the serialized text through the onSend hooks; a hook's return value replaces what is written.
+// Does:  Shows the serialized text to the onSend hooks, then writes it; whatever a hook returns is ignored.
 function sendThrough(exchange: Exchange, status: number, serialized: string): void {
   const hooks = exchange.route.hooks.onSend;
   if (hooks.length === 0) {
-    payload(status, serialized, serialized);
+    payload(status, serialized);
     writePayload(exchange, status, serialized);
     return;
   }
   const context = new ResponseContextRecord(exchange, status);
   contain('response', context);
-  let current: string | Uint8Array = serialized;
   exchange.stage = next(exchange.stage, 'req.hook.on_send');
   runStage(
     exchange,
     hooks,
-    (hook) => {
-      const replaced = hook(context, current);
-      if (replaced instanceof Promise) {
-        return replaced.then((value) => {
-          if (value !== undefined) {
-            current = value;
-          }
-        });
-      }
-      if (replaced !== undefined) {
-        current = replaced;
-      }
-    },
+    (hook) => hook(context, serialized),
     () => {
-      payload(status, serialized, current);
-      writePayload(exchange, status, current);
+      payload(status, serialized);
+      writePayload(exchange, status, serialized);
     },
     (error) => {
       fail(exchange, error, true);

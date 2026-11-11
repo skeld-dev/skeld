@@ -37,7 +37,6 @@ export interface SlotRecord {
   syncSelf: number;
   syncDone: boolean;
   schemaChecked: boolean;
-  replaced: boolean;
   route: RouteRecord | null;
   req: IncomingMessage | null;
   res: ServerResponse | null;
@@ -77,7 +76,6 @@ function createSlot(index: number): SlotRecord {
     syncSelf: 0,
     syncDone: false,
     schemaChecked: false,
-    replaced: false,
     route: null,
     req: null,
     res: null,
@@ -158,7 +156,6 @@ export function beginRequest(req: IncomingMessage, res: ServerResponse): number 
   record.syncSelf = 0;
   record.syncDone = false;
   record.schemaChecked = false;
-  record.replaced = false;
   record.route = null;
   // Why: Steps are timed on one request in stepN and CPU on one in cpuN; totals and checks run on all.
   record.step = sampling.stepLeft === 0;

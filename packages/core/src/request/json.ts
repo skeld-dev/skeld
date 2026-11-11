@@ -1,10 +1,14 @@
-// Does:  Parses a JSON body and refuses the keys that could reach a prototype.
-// Holds: A value with an own __proto__ key, or a constructor holding a prototype, is never returned.
+// Does:  Parses a JSON body and refuses text nested too deeply and the keys that could reach a prototype.
+// Holds: No returned value nests deeper than the depth limit or holds a forbidden key.
 
 import { end, key, start } from '#diag';
+import { exceedsJsonDepth } from '../schema/json-depth.ts';
 import type { JsonParseResult } from './types.ts';
 
 export function parseJsonBody(text: string): JsonParseResult {
+  if (exceedsJsonDepth(text)) {
+    return { kind: 'too-deep' };
+  }
   const span = start('req.body.parse');
   let value: unknown;
   try {

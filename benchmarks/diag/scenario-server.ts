@@ -3,7 +3,7 @@
 
 import { defineContract } from '@darkstart/core/contract';
 import * as t from '@darkstart/core/schema';
-import type { Scope } from '@darkstart/core/server';
+import type { ResponseContext, Scope } from '@darkstart/core/server';
 import { createServer } from '@darkstart/core/server';
 import { announceReady, failToStart } from '../servers/server-command.ts';
 import { host, standalonePort } from '../values.ts';
@@ -103,12 +103,14 @@ function plantPlugin(scope: Scope): void {
     if (context.route.name === 'plant_header') {
       context.send({ status: 200, headers: { 'x-scenario-note': `ok\r\nx-scenario-canary: ${token}` } });
     } else if (context.route.name === 'plant_raw') {
-      context.send({ status: 200, payload: JSON.stringify(world) });
+      context.send({ status: 200, payload: JSON.stringify({ ...world, note: token }) });
     }
   });
-  scope.addHook('onSend', (context) =>
-    context.route.name === 'plant_send' ? JSON.stringify({ ...world, note: token }) : undefined,
-  );
+  const replacing = (context: ResponseContext): string | undefined =>
+    context.route.name === 'plant_send' ? JSON.stringify({ ...world, note: token }) : undefined;
+  // Why: A void-returning type accepts the replacing hook, which proves the engine never writes what onSend returns.
+  const observer: (context: ResponseContext, payload: string) => void = replacing;
+  scope.addHook('onSend', observer);
 }
 
 const listenCause = (error: unknown): unknown =>

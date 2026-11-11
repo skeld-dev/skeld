@@ -374,7 +374,7 @@ export type Finish = (value: unknown) => unknown;
 export type FinishMode = 'wrap' | 'raw';
 
 export interface Finding {
-  readonly code: 'UNBOUNDED_FIELD' | 'INVALID_BOUND' | 'SECRET_IN_RESPONSE';
+  readonly code: 'UNBOUNDED_FIELD' | 'INVALID_BOUND' | 'SECRET_IN_RESPONSE' | 'NESTED_TOO_DEEP';
   readonly pointer: string;
   readonly message: string;
 }
