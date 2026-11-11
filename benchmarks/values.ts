@@ -35,7 +35,7 @@ export const expectedMediaType = 'application/json';
 export const stderrTailLines = 20;
 
 export const busyLoadAverage = 1.0;
-export const protocolNode = 'v26.12.1';
+export const protocolNode = 'v26.13.0';
 export const protocolFastify = '5.12.7';
 export const tasksetPath = '/usr/bin/taskset';
 export const serverCores = '7';
