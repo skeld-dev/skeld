@@ -10,7 +10,7 @@ export interface ContractRoutes {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:51`
+Source: `packages/core/src/contract/types.ts:56`
 
 ## Empty
 
@@ -22,7 +22,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:101`
+Source: `packages/core/src/contract/types.ts:133`
 
 ## EngineErrorCode
 
@@ -43,7 +43,7 @@ export type EngineErrorCode =
   | 'RESPONSE_TOO_LARGE';
 ```
 
-Source: `packages/core/src/contract/types.ts:87`
+Source: `packages/core/src/contract/types.ts:119`
 
 ## ErrorBody
 
@@ -65,7 +65,7 @@ export interface ErrorBody {
 | `message` | A message for people.                                          |
 | `details` | The validation details, when the error has them.               |
 
-Source: `packages/core/src/contract/types.ts:72`
+Source: `packages/core/src/contract/types.ts:104`
 
 ## ErrorDetail
 
@@ -83,7 +83,7 @@ export interface ErrorDetail {
 | `path`    | The JSON pointer of the failing value, starting with the part, as in `/body/name`. |
 | `message` | What is wrong; it never holds the received value.                                  |
 
-Source: `packages/core/src/contract/types.ts:56`
+Source: `packages/core/src/contract/types.ts:61`
 
 ## HttpMethod
 
@@ -120,20 +120,22 @@ export interface RouteDefinition {
   readonly params?: ObjectSchema;
   readonly query?: ObjectSchema;
   readonly headers?: ObjectSchema;
+  readonly cookies?: ObjectSchema;
   readonly body?: Schema;
   readonly responses: ResponseSchemas;
 }
 ```
 
-| Field       | Summary                                                                                         |
-| ----------- | ----------------------------------------------------------------------------------------------- |
-| `method`    | The HTTP method; a HEAD request is served by the GET route of the same path.                    |
-| `path`      | The path pattern: static segments, `:name` parameters and a final `*` wildcard.                 |
-| `params`    | The path parameters' schema: one key per `:name` segment, and `*` for the wildcard.             |
-| `query`     | The query string's schema; the handler receives only the declared keys and others are ignored.  |
-| `headers`   | The request headers' schema, with lower-case keys; the handler receives only the declared ones. |
-| `body`      | The JSON body's schema; a GET route declares none.                                              |
-| `responses` | The responses the route may write, by status.                                                   |
+| Field       | Summary                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------- |
+| `method`    | The HTTP method; a HEAD request is served by the GET route of the same path.                                  |
+| `path`      | The path pattern: static segments, `:name` parameters and a final `*` wildcard.                               |
+| `params`    | The path parameters' schema: one key per `:name` segment, and `*` for the wildcard.                           |
+| `query`     | The query string's schema; the handler receives only the declared keys and others are ignored.                |
+| `headers`   | The request headers' schema, with lower-case keys; the handler receives only the declared ones.               |
+| `cookies`   | The request cookies' schema; names are case-sensitive tokens and the handler receives only the declared ones. |
+| `body`      | The JSON body's schema; a GET route declares none.                                                            |
+| `responses` | The responses the route may write, by status.                                                                 |
 
 Source: `packages/core/src/contract/types.ts:18`
 

@@ -4,11 +4,12 @@
 import { authorResult } from './author-result.ts';
 import type { OutgoingHttpHeaders } from 'node:http';
 import { contain, end, event, leave, resume, type Slot, track, wrote } from '#diag';
-import type { RouteInfo } from '../contract/types.ts';
+import type { OutgoingCookie, RouteInfo } from '../contract/types.ts';
 import type {
   CompletedContext,
   ErrorContext,
   OnResponseHook,
+  RawCookies,
   RawHeaders,
   RawReply,
   RequestContext,
@@ -17,12 +18,26 @@ import type {
 } from '../server/types.ts';
 import { setAuthorHeader, setAuthorHeaders } from './author-header.ts';
 import { clientAddressOf } from './client-address.ts';
+import { collectCookie, rawCookiesOf } from './cookies.ts';
 import { settle, signalOf } from './deadline.ts';
 import type { Exchange } from './exchange.ts';
+import { finishHead } from './head.ts';
 import { describeThrown, writeStderrLine } from './stderr.ts';
-import { addSecurityHeaders } from './wire.ts';
 
 const ALREADY_SENT = 'Response already sent';
+// Why: The statuses a contract can declare; Node's writeHead truncates a number to 32 bits, so others could become 3xx.
+const FIRST_STATUS = 200;
+const LAST_STATUS = 599;
+
+// Does:  Reads a hook reply's status once; throws unless it is an integer a contract could declare.
+function replyStatus(reply: RawReply): number {
+  const { status } = reply;
+  if (!Number.isInteger(status) || status < FIRST_STATUS || status > LAST_STATUS) {
+    event('err.send_status');
+    throw new Error(`send status must be an integer from ${FIRST_STATUS} to ${LAST_STATUS}`);
+  }
+  return status;
+}
 
 // Does:  Writes a reply a hook sends in place of the handler's; a second send throws and is reported once.
 function sendReply(exchange: Exchange, reply: RawReply): void {
@@ -38,9 +53,12 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
     writeStderrLine(method, exchange.route.info.path, res.statusCode, exchange.route.info.name, ALREADY_SENT);
     throw error;
   }
+  const status = replyStatus(reply);
   if (reply.headers !== undefined) {
     setAuthorHeaders(res, reply.headers);
   }
+  const head: OutgoingHttpHeaders = {};
+  finishHead(res, status, head, exchange.runtime.securityHeaders, exchange.route, exchange.pendingCookies);
   end(exchange.stage);
   if (exchange.closeConnection || exchange.runtime.isClosing()) {
     res.setHeader('connection', 'close');
@@ -49,17 +67,13 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
   if (payload !== undefined) {
     res.setHeader('content-length', Buffer.byteLength(payload));
   }
-  const head: OutgoingHttpHeaders = {};
-  if (exchange.runtime.securityHeaders) {
-    addSecurityHeaders(res, head);
-  }
-  res.writeHead(reply.status, head);
+  res.writeHead(status, head);
   if (payload === undefined || method === 'HEAD') {
     res.end();
-    wrote(reply.status, null, null);
+    wrote(status, null, null);
   } else {
     res.end(payload);
-    wrote(reply.status, null, payload);
+    wrote(status, null, payload);
   }
   settle(exchange, 'sent-by-hook');
 }
@@ -86,10 +100,23 @@ export class ErrorContextRecord implements ErrorContext {
   get clientAddress(): string {
     return clientAddressOf(this.#exchange);
   }
+
+  get rawCookies(): RawCookies {
+    return rawCookiesOf(this.#exchange);
+  }
+}
+
+// Does:  Collects a hook's cookie for the response; throws once the response is sent, as setHeader would.
+function setCookie(exchange: Exchange, cookie: OutgoingCookie): void {
+  if (exchange.res.headersSent) {
+    throw new Error(ALREADY_SENT);
+  }
+  exchange.pendingCookies = collectCookie(exchange.pendingCookies, cookie);
 }
 
 export class RequestContextRecord extends ErrorContextRecord implements RequestContext {
   readonly setHeader: RequestContext['setHeader'];
+  readonly setCookie: RequestContext['setCookie'];
   readonly send: RequestContext['send'];
 
   constructor(exchange: Exchange) {
@@ -97,6 +124,9 @@ export class RequestContextRecord extends ErrorContextRecord implements RequestC
     const { res } = exchange;
     this.setHeader = (name, value) => {
       setAuthorHeader(res, name, value);
+    };
+    this.setCookie = (cookie) => {
+      setCookie(exchange, cookie);
     };
     this.send = (reply) => {
       sendReply(exchange, reply);
@@ -120,6 +150,7 @@ export class ValidatedContextRecord extends RequestContextRecord implements Vali
 export class ResponseContextRecord extends ErrorContextRecord implements ResponseContext {
   readonly status: number;
   readonly setHeader: ResponseContext['setHeader'];
+  readonly setCookie: ResponseContext['setCookie'];
 
   constructor(exchange: Exchange, status: number) {
     super(exchange);
@@ -127,6 +158,9 @@ export class ResponseContextRecord extends ErrorContextRecord implements Respons
     this.status = status;
     this.setHeader = (name, value) => {
       setAuthorHeader(res, name, value);
+    };
+    this.setCookie = (cookie) => {
+      setCookie(exchange, cookie);
     };
   }
 }

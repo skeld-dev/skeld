@@ -10,7 +10,41 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:101`
+Source: `packages/core/src/contract/types.ts:133`
+
+## OutgoingCookie
+
+A cookie a response sets, written as one `Set-Cookie` line; unset attributes take the secure defaults.
+
+An invalid cookie is refused, never encoded: a handler's reply becomes the fixed 500, `setCookie` throws `Error`.
+
+```ts
+export interface OutgoingCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly path?: string;
+  readonly domain?: string;
+  readonly maxAge?: number;
+  readonly httpOnly?: boolean;
+  readonly secure?: boolean;
+  readonly sameSite?: 'Strict' | 'Lax' | 'None';
+  readonly partitioned?: boolean;
+}
+```
+
+| Field         | Summary                                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`        | The name, an HTTP token; a `__Host-` name needs `secure`, path `/` and no domain, a `__Secure-` one `secure`.                        |
+| `value`       | The value, sent as given: printable ASCII except space, `"`, `,`, `;` and `\`; name and value fit 4,096 bytes.                       |
+| `path`        | The path it is sent back on (default `/`): it starts with `/`, is printable ASCII without `;`, at most 1,024 bytes.                  |
+| `domain`      | The domain it is sent back to, widening it to subdomains (default this host only); printable ASCII without `;`, at most 1,024 bytes. |
+| `maxAge`      | Its lifetime in whole seconds, from 0 to 34,560,000 (400 days); `0` clears it (default: until the browser closes).                   |
+| `httpOnly`    | Whether page scripts are denied it (default true).                                                                                   |
+| `secure`      | Whether it is sent only over HTTPS (default true); `sameSite: 'None'` and `partitioned` need it.                                     |
+| `sameSite`    | Which cross-site requests carry it (default `Lax`).                                                                                  |
+| `partitioned` | Whether it is keyed to the top-level site it was set under (default false).                                                          |
+
+Source: `packages/core/src/contract/types.ts:72`
 
 ## RouteInfo
 
@@ -30,7 +64,7 @@ export interface RouteInfo {
 | `method` | The route's HTTP method.          |
 | `path`   | The route's path pattern.         |
 
-Source: `packages/core/src/contract/types.ts:106`
+Source: `packages/core/src/contract/types.ts:138`
 
 ## AuthorHeaderName
 
@@ -39,12 +73,14 @@ A header name an author may set: the name itself, or a message type naming it wh
 ```ts
 export type AuthorHeaderName<N extends string> = N extends unknown
   ? Lowercase<N> extends ReservedHeaderName
-    ? `${N} is reserved for the engine`
+    ? Lowercase<N> extends 'set-cookie'
+      ? `${N} is reserved for the engine: use setCookie or the reply's cookies`
+      : `${N} is reserved for the engine`
     : N
   : never;
 ```
 
-Source: `packages/core/src/server/types.ts:91`
+Source: `packages/core/src/server/types.ts:106`
 
 ## CompletedContext
 
@@ -70,7 +106,7 @@ export interface CompletedContext {
 | `completed`     | Whether the whole response was written before the connection closed.                                  |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
 
-Source: `packages/core/src/server/types.ts:237`
+Source: `packages/core/src/server/types.ts:281`
 
 ## ErrorContext
 
@@ -84,6 +120,7 @@ export interface ErrorContext {
   readonly headers: RawHeaders;
   readonly signal: AbortSignal;
   readonly clientAddress: string;
+  readonly rawCookies: RawCookies;
 }
 ```
 
@@ -95,8 +132,9 @@ export interface ErrorContext {
 | `headers`       | The raw request headers.                                                                              |
 | `signal`        | Aborted when the connection closes or the request times out.                                          |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
+| `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                    |
 
-Source: `packages/core/src/server/types.ts:253`
+Source: `packages/core/src/server/types.ts:297`
 
 ## ErrorHandler
 
@@ -108,7 +146,7 @@ The nearest scope's handler runs first and a value it throws goes to the parent'
 export type ErrorHandler = (error: unknown, context: ErrorContext) => HttpError | Promise<HttpError>;
 ```
 
-Source: `packages/core/src/server/types.ts:298`
+Source: `packages/core/src/server/types.ts:344`
 
 ## Handler
 
@@ -122,7 +160,7 @@ export type Handler<C extends ContractRoutes, K extends keyof C> = (
 ) => RouteReply<C[K]> | Promise<RouteReply<C[K]>>;
 ```
 
-Source: `packages/core/src/server/types.ts:146`
+Source: `packages/core/src/server/types.ts:171`
 
 ## Handlers
 
@@ -132,7 +170,7 @@ One handler per route name of a contract.
 export type Handlers<C extends ContractRoutes> = { readonly [K in keyof C]: Handler<C, K> };
 ```
 
-Source: `packages/core/src/server/types.ts:151`
+Source: `packages/core/src/server/types.ts:176`
 
 ## HookName
 
@@ -142,7 +180,7 @@ The hook names `addHook` accepts.
 export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'onError';
 ```
 
-Source: `packages/core/src/server/types.ts:301`
+Source: `packages/core/src/server/types.ts:347`
 
 ## ListeningAddress
 
@@ -162,7 +200,7 @@ export interface ListeningAddress {
 | `port` | The bound port.                                                           |
 | `url`  | The base URL, as in `http://127.0.0.1:3000`; an IPv6 host is in brackets. |
 
-Source: `packages/core/src/server/types.ts:364`
+Source: `packages/core/src/server/types.ts:410`
 
 ## ListenOptions
 
@@ -180,7 +218,7 @@ export interface ListenOptions {
 | `port` | The TCP port, from 0 to 65535; 0 picks a free one.                     |
 | `host` | The address to bind; an empty string is refused (default `127.0.0.1`). |
 
-Source: `packages/core/src/server/types.ts:353`
+Source: `packages/core/src/server/types.ts:399`
 
 ## OnErrorHook
 
@@ -192,7 +230,7 @@ It cannot change the reply; a throw is written to stderr.
 export type OnErrorHook = (context: ErrorContext, error: unknown) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:292`
+Source: `packages/core/src/server/types.ts:338`
 
 ## OnRequestHook
 
@@ -204,7 +242,7 @@ A hook run after routing and before the body is read.
 export type OnRequestHook = (context: RequestContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:272`
+Source: `packages/core/src/server/types.ts:318`
 
 ## OnResponseHook
 
@@ -216,7 +254,7 @@ A throw is written to stderr and changes nothing; it does not run after a hook r
 export type OnResponseHook = (context: CompletedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:287`
+Source: `packages/core/src/server/types.ts:333`
 
 ## OnSendHook
 
@@ -228,13 +266,13 @@ Its return value is ignored; a throw goes to the error path.
 export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:282`
+Source: `packages/core/src/server/types.ts:328`
 
 ## OutgoingHeaders
 
 Response headers to set, by name.
 
-The engine owns `transfer-encoding`, `content-length`, `connection`, `keep-alive`, `proxy-connection`, `te`, `trailer` and `upgrade`: a lower-case key among them fails to compile, and one in any letter case at runtime is answered with the fixed 500.
+The engine owns `transfer-encoding`, `content-length`, `connection`, `keep-alive`, `proxy-connection`, `te`, `trailer`, `upgrade` and `set-cookie`: a lower-case key among them fails to compile, and one in any letter case at runtime is answered with the fixed 500.
 
 ```ts
 export type OutgoingHeaders = { readonly [name: string]: string | number | readonly string[] } & {
@@ -242,7 +280,7 @@ export type OutgoingHeaders = { readonly [name: string]: string | number | reado
 };
 ```
 
-Source: `packages/core/src/server/types.ts:101`
+Source: `packages/core/src/server/types.ts:118`
 
 ## Plugin
 
@@ -252,7 +290,7 @@ A function that declares routes, hooks and plugins on the child scope it is give
 export type Plugin = (scope: Scope) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:344`
+Source: `packages/core/src/server/types.ts:390`
 
 ## PreHandlerHook
 
@@ -264,7 +302,25 @@ It never runs for a refused request; `context.send` replies and skips the handle
 export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:277`
+Source: `packages/core/src/server/types.ts:323`
+
+## RawCookies
+
+A request's cookies exactly as sent: no percent-decoding, no quote removal; names are case-sensitive.
+
+```ts
+export interface RawCookies {
+  get(name: string): string | undefined;
+  getAll(name: string): readonly string[];
+}
+```
+
+| Field    | Summary                                                                                        |
+| -------- | ---------------------------------------------------------------------------------------------- |
+| `get`    | Returns the value of a cookie sent exactly once; a name sent twice or never gives `undefined`. |
+| `getAll` | Returns every value sent under the name, in the order received; empty when it was not sent.    |
+
+Source: `packages/core/src/server/types.ts:86`
 
 ## RawHeaders
 
@@ -276,7 +332,7 @@ export interface RawHeaders {
 }
 ```
 
-Source: `packages/core/src/server/types.ts:75`
+Source: `packages/core/src/server/types.ts:81`
 
 ## RawReply
 
@@ -292,11 +348,11 @@ export interface RawReply {
 
 | Field     | Summary                                                                                                              |
 | --------- | -------------------------------------------------------------------------------------------------------------------- |
-| `status`  | The HTTP status.                                                                                                     |
+| `status`  | The HTTP status, an integer from 200 to 599; any other value makes `send` throw `Error` before anything is set.      |
 | `headers` | Headers to set on the reply; a reserved name of `OutgoingHeaders` makes `send` throw `Error` before anything is set. |
 | `payload` | The body, written as given; without it the reply has no body.                                                        |
 
-Source: `packages/core/src/server/types.ts:168`
+Source: `packages/core/src/server/types.ts:198`
 
 ## RegisterOptions
 
@@ -312,11 +368,11 @@ export interface RegisterOptions {
 | ------ | ------------------------------------------------------------------------------------------------------ |
 | `name` | The plugin's name in boot errors (default the function's name, or `plugin #<n>` for an anonymous one). |
 
-Source: `packages/core/src/server/types.ts:347`
+Source: `packages/core/src/server/types.ts:393`
 
 ## ReservedHeaderName
 
-A response header name the engine owns: a framing or connection field no author may set.
+A response header name the engine owns: a framing or connection field, or `set-cookie`, which no author may set.
 
 ```ts
 export type ReservedHeaderName =
@@ -327,10 +383,11 @@ export type ReservedHeaderName =
   | 'proxy-connection'
   | 'te'
   | 'trailer'
-  | 'upgrade';
+  | 'upgrade'
+  | 'set-cookie';
 ```
 
-Source: `packages/core/src/server/types.ts:80`
+Source: `packages/core/src/server/types.ts:94`
 
 ## RequestContext
 
@@ -344,7 +401,9 @@ export interface RequestContext {
   readonly headers: RawHeaders;
   readonly signal: AbortSignal;
   readonly clientAddress: string;
+  readonly rawCookies: RawCookies;
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
+  setCookie(cookie: OutgoingCookie): void;
   send(reply: RawReply): void;
 }
 ```
@@ -357,10 +416,12 @@ export interface RequestContext {
 | `headers`       | The raw request headers.                                                                              |
 | `signal`        | Aborted when the connection closes or the request times out.                                          |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
+| `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                    |
 | `setHeader`     | Sets a header on the response.                                                                        |
+| `setCookie`     | Sets a cookie on the response, replacing a pending one of the same name, path and domain.             |
 | `send`          | Replies at once; later hooks and the handler do not run.                                              |
 
-Source: `packages/core/src/server/types.ts:178`
+Source: `packages/core/src/server/types.ts:208`
 
 ## ResponseContext
 
@@ -374,8 +435,10 @@ export interface ResponseContext {
   readonly headers: RawHeaders;
   readonly signal: AbortSignal;
   readonly clientAddress: string;
+  readonly rawCookies: RawCookies;
   readonly status: number;
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
+  setCookie(cookie: OutgoingCookie): void;
 }
 ```
 
@@ -387,10 +450,12 @@ export interface ResponseContext {
 | `headers`       | The raw request headers.                                                                              |
 | `signal`        | Aborted when the connection closes or the request times out.                                          |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
+| `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                    |
 | `status`        | The status being written.                                                                             |
 | `setHeader`     | Sets a header on the response.                                                                        |
+| `setCookie`     | Sets a cookie on the response, replacing a pending one of the same name, path and domain.             |
 
-Source: `packages/core/src/server/types.ts:214`
+Source: `packages/core/src/server/types.ts:251`
 
 ## RouteReply
 
@@ -406,16 +471,20 @@ export type RouteReply<R extends RouteDefinition> = {
         readonly body: Wire<R['responses'][S]>;
         /** Headers to set on the reply; a reserved name of `OutgoingHeaders` is answered with the fixed 500. */
         readonly headers?: OutgoingHeaders;
+        /** Cookies to set, each as its own `Set-Cookie` line; an invalid one is answered with the fixed 500. */
+        readonly cookies?: readonly OutgoingCookie[];
       }
     : {
         readonly status: S;
         /** Headers to set on the reply; a reserved name of `OutgoingHeaders` is answered with the fixed 500. */
         readonly headers?: OutgoingHeaders;
+        /** Cookies to set, each as its own `Set-Cookie` line; an invalid one is answered with the fixed 500. */
+        readonly cookies?: readonly OutgoingCookie[];
       };
 }[keyof R['responses']];
 ```
 
-Source: `packages/core/src/server/types.ts:127`
+Source: `packages/core/src/server/types.ts:148`
 
 ## RouteRequest
 
@@ -427,9 +496,11 @@ export interface RouteRequest<R extends RouteDefinition> {
   readonly params: R extends { readonly params: infer S extends Schema } ? Infer<S> : Empty;
   readonly query: R extends { readonly query: infer S extends Schema } ? Infer<S> : Empty;
   readonly headers: R extends { readonly headers: infer S extends Schema } ? Infer<S> : RawHeaders;
+  readonly cookies: R extends { readonly cookies: infer S extends Schema } ? Infer<S> : Empty;
   readonly body: R extends { readonly body: infer S extends Schema } ? Infer<S> : undefined;
   readonly signal: AbortSignal;
   readonly clientAddress: string;
+  readonly rawCookies: RawCookies;
 }
 ```
 
@@ -439,11 +510,13 @@ export interface RouteRequest<R extends RouteDefinition> {
 | `params`        | The path parameters, validated and converted to the declared kinds.                                   |
 | `query`         | The declared query parameters, validated and converted; undeclared keys are left out.                 |
 | `headers`       | The declared headers, validated; every raw header when the route declares none.                       |
+| `cookies`       | The declared cookies, validated, with `secret` values wrapped; empty when the route declares none.    |
 | `body`          | The parsed and validated body, with `secret` values wrapped in `Secret`.                              |
 | `signal`        | Aborted when the connection closes or the request times out, to stop work no client waits for.        |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
+| `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                    |
 
-Source: `packages/core/src/server/types.ts:106`
+Source: `packages/core/src/server/types.ts:123`
 
 ## RoutesOptions
 
@@ -453,15 +526,17 @@ The options of `Scope.routes`.
 export interface RoutesOptions<C extends ContractRoutes> {
   readonly bodyLimits?: { readonly [K in keyof C]?: number };
   readonly handlerTimeouts?: { readonly [K in keyof C]?: number };
+  readonly redirectOrigins?: readonly string[];
 }
 ```
 
-| Field             | Summary                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------- |
-| `bodyLimits`      | Body limits in bytes by route name, each replacing `bodyLimit` for its route.               |
-| `handlerTimeouts` | Time limits in milliseconds by route name, each replacing `handlerTimeoutMs` for its route. |
+| Field             | Summary                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `bodyLimits`      | Body limits in bytes by route name, each replacing `bodyLimit` for its route.                                    |
+| `handlerTimeouts` | Time limits in milliseconds by route name, each replacing `handlerTimeoutMs` for its route.                      |
+| `redirectOrigins` | Origins an absolute redirect from these routes may name, replacing the server's `redirectOrigins`, never merged. |
 
-Source: `packages/core/src/server/types.ts:154`
+Source: `packages/core/src/server/types.ts:179`
 
 ## Scope
 
@@ -497,7 +572,7 @@ export interface Scope {
 | `setErrorHandler` | Sets this scope's error handler.                                                                              |
 | `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                   |
 
-Source: `packages/core/src/server/types.ts:307`
+Source: `packages/core/src/server/types.ts:353`
 
 ## Server
 
@@ -515,7 +590,7 @@ export interface Server extends Scope {
 | `listen` | Runs the plugins, checks and compiles every route, then listens; resolves with the bound address. |
 | `close`  | Stops accepting connections and resolves once every open one has closed.                          |
 
-Source: `packages/core/src/server/types.ts:374`
+Source: `packages/core/src/server/types.ts:420`
 
 ## ServerOptions
 
@@ -537,23 +612,25 @@ export interface ServerOptions {
   readonly handlerTimeoutMs?: number;
   readonly trustProxy?: readonly string[];
   readonly securityHeaders?: boolean;
+  readonly redirectOrigins?: readonly string[];
 }
 ```
 
-| Field                  | Summary                                                                                                     |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `bodyLimit`            | Largest request body accepted, in bytes; a larger one is refused with 413 (default 1 MiB).                  |
-| `maxParamLength`       | Longest path parameter accepted, in bytes as received; a longer one is refused with 414 (default 100).      |
-| `pluginTimeoutMs`      | Time each plugin has to settle at `listen`, in milliseconds, at most 2 147 483 647 (default 10 000).        |
-| `pluginCloseTimeoutMs` | Time each registered disposer has to settle, in ms, at most 2 147 483 647 (default 10 000).                 |
-| `closeTimeoutMs`       | Time `close` waits for open connections before closing them, in ms, at most 2 147 483 647 (default 10 000). |
-| `keepAliveTimeout`     | Time an idle keep-alive connection stays open, in milliseconds (default 72 000).                            |
-| `requestTimeout`       | Time allowed to receive a whole request, in milliseconds (default 300 000).                                 |
-| `headersTimeout`       | Time allowed to receive the request headers, in milliseconds; at most `requestTimeout` (default 60 000).    |
-| `maxHeaderSize`        | Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB).         |
-| `handlerTimeoutMs`     | Time a request has from its route match to its response, in ms, at most 2 147 483 647 (default 30 000).     |
-| `trustProxy`           | Proxy addresses and CIDR ranges whose `X-Forwarded-For` sets `clientAddress` (default none).                |
-| `securityHeaders`      | Whether responses carry `nosniff`, a frame ban and `cache-control: no-store` unless set (default true).     |
+| Field                  | Summary                                                                                                         |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `bodyLimit`            | Largest request body accepted, in bytes; a larger one is refused with 413 (default 1 MiB).                      |
+| `maxParamLength`       | Longest path parameter accepted, in bytes as received; a longer one is refused with 414 (default 100).          |
+| `pluginTimeoutMs`      | Time each plugin has to settle at `listen`, in milliseconds, at most 2 147 483 647 (default 10 000).            |
+| `pluginCloseTimeoutMs` | Time each registered disposer has to settle, in ms, at most 2 147 483 647 (default 10 000).                     |
+| `closeTimeoutMs`       | Time `close` waits for open connections before closing them, in ms, at most 2 147 483 647 (default 10 000).     |
+| `keepAliveTimeout`     | Time an idle keep-alive connection stays open, in milliseconds (default 72 000).                                |
+| `requestTimeout`       | Time allowed to receive a whole request, in milliseconds (default 300 000).                                     |
+| `headersTimeout`       | Time allowed to receive the request headers, in milliseconds; at most `requestTimeout` (default 60 000).        |
+| `maxHeaderSize`        | Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB).             |
+| `handlerTimeoutMs`     | Time a request has from its route match to its response, in ms, at most 2 147 483 647 (default 30 000).         |
+| `trustProxy`           | Proxy addresses and CIDR ranges whose `X-Forwarded-For` sets `clientAddress` (default none).                    |
+| `securityHeaders`      | Whether responses carry `nosniff`, a frame ban and `cache-control: no-store` unless set (default true).         |
+| `redirectOrigins`      | Origins an absolute redirect `Location` may name, each exactly as `new URL(x).origin` writes it (default none). |
 
 Source: `packages/core/src/server/types.ts:12`
 
@@ -575,13 +652,13 @@ export interface ValidatedContext extends RequestContext {
 | `query`  | The validated query parameters. |
 | `body`   | The validated body.             |
 
-Source: `packages/core/src/server/types.ts:204`
+Source: `packages/core/src/server/types.ts:241`
 
 ## createServer
 
 Creates a server, the root scope of a service; nothing listens until `listen`.
 
-Throws BootError `INVALID_OPTION` for an option out of range, a `headersTimeout` above `requestTimeout` or a bad `trustProxy`.
+Throws BootError `INVALID_OPTION` for an option out of range, a `headersTimeout` above `requestTimeout` or a bad `trustProxy` or `redirectOrigins` entry.
 
 ```ts
 export function createServer(options: ServerOptions = {}): Server;
@@ -593,4 +670,4 @@ await server.listen({ port: 0 });
 await server.close();
 ```
 
-Source: `packages/core/src/server/server.ts:54`
+Source: `packages/core/src/server/server.ts:55`

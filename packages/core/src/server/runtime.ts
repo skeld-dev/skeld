@@ -123,6 +123,7 @@ function toRouteRuntime(
     bodyLimit,
     readsBody: definition.body !== undefined,
     timeoutMs,
+    redirectOrigins: route.redirectOrigins ?? options.redirectOrigins,
     waiting: deadlines.queue(timeoutMs),
     hooks,
     errorHandlers,

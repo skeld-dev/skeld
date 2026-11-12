@@ -3,7 +3,9 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Slot, Token } from '#diag';
+import type { CookieEntries } from '../cookie/parse.ts';
 import type { RouteParams } from '../router/types.ts';
+import type { RawCookies } from '../server/types.ts';
 import type { EngineRuntime, RouteRuntime } from './types.ts';
 
 type ExchangeState = 'running' | 'sent-by-hook' | 'written' | 'timed-out';
@@ -29,4 +31,7 @@ export interface Exchange {
   abort: AbortController | null;
   signal: AbortSignal | null;
   clientAddress: string | null;
+  cookieEntries: CookieEntries | null;
+  rawCookies: RawCookies | null;
+  pendingCookies: Map<string, string> | null;
 }

@@ -1,5 +1,5 @@
 // Does:  Inspects every schema of a route at boot and reports the first finding.
-// Holds: Parts are inspected in one fixed order (params, query, headers, body, responses by status).
+// Holds: Parts are inspected in one fixed order (params, query, headers, cookies, body, responses by status).
 
 import type { RouteDefinition } from '../contract/types.ts';
 import { inspectSchema } from '../schema/inspect.ts';
@@ -20,6 +20,7 @@ function inspectedParts(route: RouteDefinition): readonly InspectedPart[] {
     { part: 'params', schema: route.params, role: 'request' },
     { part: 'query', schema: route.query, role: 'request' },
     { part: 'headers', schema: route.headers, role: 'request' },
+    { part: 'cookies', schema: route.cookies, role: 'request' },
     { part: 'body', schema: route.body, role: 'request' },
     ...responses,
   ];

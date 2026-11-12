@@ -1,10 +1,11 @@
-// Does:  Writes JSON bodies and the engine's own error bodies, and adds the security headers to the heads it writes.
-// Holds: An engine-written error keeps no author header but CORS and vary; it carries the security headers when on.
+// Does:  Writes JSON bodies and the engine's own error bodies, completing each head through finishHead.
+// Holds: An engine-written error keeps no author header but CORS and vary, and carries only the cookies it is given.
 
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { end, start, wrote } from '#diag';
 import type { ErrorBody } from '../contract/types.ts';
-import type { EngineRuntime } from './types.ts';
+import { finishHead } from './head.ts';
+import type { EngineRuntime, RouteRuntime } from './types.ts';
 
 const JSON_CONTENT_TYPE = 'application/json; charset=utf-8';
 
@@ -24,23 +25,7 @@ const KEPT_ON_ERROR: ReadonlySet<string> = new Set([
   'vary',
 ]);
 
-// Why: OWASP's REST guidance; the two frame bans cover old and new browsers, no-store keeps replies out of caches.
-const SECURITY_HEADERS = [
-  ['x-content-type-options', 'nosniff'],
-  ['content-security-policy', "frame-ancestors 'none'"],
-  ['x-frame-options', 'DENY'],
-  ['cache-control', 'no-store'],
-] as const;
-
-// Does:  Adds to the head about to be written each security header the response does not already carry.
-export function addSecurityHeaders(res: ServerResponse, head: OutgoingHttpHeaders): void {
-  for (const [name, value] of SECURITY_HEADERS) {
-    if (!res.hasHeader(name)) {
-      head[name] = value;
-    }
-  }
-}
-
+// Does:  Writes a JSON response; route is null for an engine-written error, and a refused redirect throws unwritten.
 export function writeJson(
   res: ServerResponse,
   method: string,
@@ -48,6 +33,8 @@ export function writeJson(
   payload: string,
   close: boolean,
   secure: boolean,
+  route: RouteRuntime | null,
+  cookies: ReadonlyMap<string, string> | null,
 ): void {
   const headers: OutgoingHttpHeaders = {
     'content-type': JSON_CONTENT_TYPE,
@@ -56,9 +43,7 @@ export function writeJson(
   if (close) {
     headers.connection = 'close';
   }
-  if (secure) {
-    addSecurityHeaders(res, headers);
-  }
+  finishHead(res, status, headers, secure, route, cookies);
   res.writeHead(status, headers);
   // Why: A HEAD response declares the length of the body it does not send.
   if (method === 'HEAD') {
@@ -80,13 +65,14 @@ function errorText(runtime: EngineRuntime, body: ErrorBody): string | null {
   }
 }
 
-// Does:  Writes an error body, falling back to the fixed 500 text; false means the body did not fit the schema.
+// Does:  Writes an error body with its cookies, or the fixed 500 text with none; false means the body did not fit.
 export function writeErrorBody(
   runtime: EngineRuntime,
   res: ServerResponse,
   method: string,
   body: ErrorBody,
   close: boolean,
+  cookies: ReadonlyMap<string, string> | null,
 ): boolean {
   const span = start('err.write');
   const text = errorText(runtime, body);
@@ -100,9 +86,9 @@ export function writeErrorBody(
   // Why: removeHeader('date') turns sendDate off, which would leave the error without Node's Date header.
   res.sendDate = true;
   if (text === null) {
-    writeJson(res, method, INTERNAL_BODY.status, INTERNAL_TEXT, closing, runtime.securityHeaders);
+    writeJson(res, method, INTERNAL_BODY.status, INTERNAL_TEXT, closing, runtime.securityHeaders, null, null);
   } else {
-    writeJson(res, method, body.status, text, closing, runtime.securityHeaders);
+    writeJson(res, method, body.status, text, closing, runtime.securityHeaders, null, cookies);
   }
   end(span);
   return text !== null;

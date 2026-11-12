@@ -1,5 +1,5 @@
 // Does:  Turns anything thrown or refused into the one error shape via onError hooks and handlers; answers timeouts.
-// Holds: A non-HttpError is answered with the fixed 500 body; after a timeout no further hook or handler is called.
+// Holds: A non-HttpError is answered with the fixed 500 body and no cookie; after a timeout nothing more is called.
 
 import { authorResult } from './author-result.ts';
 import { contain, count, destroyed, end, event, leave, next, resume, start, type Token } from '#diag';
@@ -8,6 +8,7 @@ import type { ErrorBody } from '../contract/types.ts';
 import type { ErrorContext } from '../server/types.ts';
 import { stageBodyRefusal } from './body-refusal.ts';
 import { settle, timeoutReason } from './deadline.ts';
+import { collectCookies } from './cookies.ts';
 import type { Exchange } from './exchange.ts';
 import { ErrorContextRecord, runObservers } from './hooks.ts';
 import { describeThrown, writeStderrLine } from './stderr.ts';
@@ -60,6 +61,11 @@ function report(exchange: Exchange, status: number, message: string): void {
   writeStderrLine(exchange.method, exchange.route.info.path, status, exchange.route.info.name, message);
 }
 
+// Does:  Collects the cookies an HttpError names for its response; throws when one of them is invalid.
+function errorCookies(outcome: unknown): Map<string, string> | null {
+  return outcome instanceof HttpError && outcome.cookies !== null ? collectCookies(null, outcome.cookies) : null;
+}
+
 interface Pending {
   readonly thrown: unknown[];
   readonly hookFailures: readonly string[];
@@ -75,7 +81,20 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
     return;
   }
   const read = toErrorBody(outcome);
-  const body = read ?? INTERNAL_BODY;
+  let cookies: Map<string, string> | null = null;
+  let cookieFailure: string | null = null;
+  if (read !== null && read !== INTERNAL_BODY) {
+    try {
+      cookies = errorCookies(outcome);
+    } catch (error) {
+      // Why: An error that names an invalid cookie is answered as the fixed 500, which carries no cookie at all.
+      cookieFailure = describeThrown(error);
+    }
+  }
+  const body = read === null || cookieFailure !== null ? INTERNAL_BODY : read;
+  if (cookieFailure !== null) {
+    report(exchange, body.status, cookieFailure);
+  }
   for (const message of pending.hookFailures) {
     report(exchange, body.status, message);
   }
@@ -89,7 +108,14 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
   }
   settle(exchange, 'written');
   end(exchange.stage);
-  const matched = writeErrorBody(exchange.runtime, exchange.res, exchange.method, body, exchange.closeConnection);
+  const matched = writeErrorBody(
+    exchange.runtime,
+    exchange.res,
+    exchange.method,
+    body,
+    exchange.closeConnection,
+    cookies,
+  );
   if (read === null || !matched) {
     report(exchange, INTERNAL_BODY.status, ERROR_BODY_MISMATCH);
   }
@@ -210,7 +236,7 @@ export function expire(exchange: Exchange): void {
       stageBodyRefusal(req);
     }
     exchange.closeConnection = true;
-    writeErrorBody(exchange.runtime, res, exchange.method, TIMEOUT_BODY, true);
+    writeErrorBody(exchange.runtime, res, exchange.method, TIMEOUT_BODY, true, null);
   }
   leave(exchange.diag);
 }

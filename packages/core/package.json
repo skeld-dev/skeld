@@ -75,6 +75,11 @@
       "types": "./dist/schema/json-schema.d.ts",
       "default": "./dist/schema/json-schema.js"
     },
+    "./redirect": {
+      "skeld-source": "./src/redirect/redirect.ts",
+      "types": "./dist/redirect/redirect.d.ts",
+      "default": "./dist/redirect/redirect.js"
+    },
     "./generated-check": {
       "skeld-source": "./src/compile/generate.ts"
     },

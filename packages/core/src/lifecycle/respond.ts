@@ -5,12 +5,14 @@ import type { OutgoingHttpHeaders } from 'node:http';
 import { contain, end, event, next, payload, start, wrote } from '#diag';
 import type { Serializer } from '../compile/types.ts';
 import { setAuthorHeaders } from './author-header.ts';
+import { collectCookies } from './cookies.ts';
 import { settle } from './deadline.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { ResponseContextRecord, runStage } from './hooks.ts';
 import type { RuntimeReply } from './types.ts';
-import { addSecurityHeaders, writeJson } from './wire.ts';
+import { finishHead } from './head.ts';
+import { writeJson } from './wire.ts';
 
 const NO_CONTENT = 204;
 const NOT_MODIFIED = 304;
@@ -27,7 +29,16 @@ function writePayload(exchange: Exchange, status: number, serialized: string): v
   exchange.stage = next(exchange.stage, 'req.respond.write');
   try {
     const { runtime } = exchange;
-    writeJson(exchange.res, exchange.method, status, serialized, runtime.isClosing(), runtime.securityHeaders);
+    writeJson(
+      exchange.res,
+      exchange.method,
+      status,
+      serialized,
+      runtime.isClosing(),
+      runtime.securityHeaders,
+      exchange.route,
+      exchange.pendingCookies,
+    );
   } catch (error) {
     fail(exchange, error, true);
     return;
@@ -50,8 +61,11 @@ function writeEmpty(exchange: Exchange, status: number): void {
     res.setHeader('content-length', 0);
   }
   const head: OutgoingHttpHeaders = {};
-  if (exchange.runtime.securityHeaders) {
-    addSecurityHeaders(res, head);
+  try {
+    finishHead(res, status, head, exchange.runtime.securityHeaders, exchange.route, exchange.pendingCookies);
+  } catch (error) {
+    fail(exchange, error, true);
+    return;
   }
   res.writeHead(status, head);
   res.end();
@@ -106,6 +120,10 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
     serializer = declared;
     if (reply.headers !== undefined) {
       setAuthorHeaders(res, reply.headers);
+    }
+    const { cookies } = reply;
+    if (cookies !== undefined) {
+      exchange.pendingCookies = collectCookies(exchange.pendingCookies, cookies);
     }
   } catch (error) {
     fail(exchange, error, true);

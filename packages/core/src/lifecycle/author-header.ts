@@ -1,4 +1,4 @@
-// Does:  Sets the response headers an author names, refusing the framing and connection headers the engine owns.
+// Does:  Sets the response headers an author names, refusing the framing, connection and cookie fields the engine owns.
 // Holds: A reserved name in any letter case throws before any header of the call is set.
 
 import type { ServerResponse } from 'node:http';
@@ -15,13 +15,17 @@ const RESERVED_NAMES = {
   te: true,
   trailer: true,
   upgrade: true,
+  // Why: Cookies go through setCookie and the reply's cookies, which check each one and write it as its own line.
+  'set-cookie': true,
 } as const satisfies Record<ReservedHeaderName, true>;
 const RESERVED: ReadonlySet<string> = new Set(Object.keys(RESERVED_NAMES));
 
 function refuseReserved(name: string): void {
-  if (RESERVED.has(name.toLowerCase())) {
+  const lower = name.toLowerCase();
+  if (RESERVED.has(lower)) {
     event('err.reserved_header', name);
-    throw new Error(`header ${name} is reserved for the engine`);
+    const hint = lower === 'set-cookie' ? "; use setCookie or the reply's cookies" : '';
+    throw new Error(`header ${name} is reserved for the engine${hint}`);
   }
 }
 

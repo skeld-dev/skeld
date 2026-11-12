@@ -2,7 +2,7 @@
 // Holds: A route's runtime and hook chains are frozen at listen; a request changes only the route's waiting queue.
 
 import type { BlockList } from 'node:net';
-import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
+import type { OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { Router } from '../router/types.ts';
 import type { RequestValidators, ResponseSerializers, Serializer } from '../compile/types.ts';
 import type {
@@ -22,6 +22,7 @@ export interface RuntimeRequest {
   readonly params: unknown;
   readonly query: unknown;
   readonly headers: unknown;
+  readonly cookies: unknown;
   readonly body: unknown;
   readonly signal: AbortSignal;
 }
@@ -30,6 +31,7 @@ export interface RuntimeReply {
   readonly status: number;
   readonly body?: unknown;
   readonly headers?: OutgoingHeaders;
+  readonly cookies?: readonly OutgoingCookie[];
 }
 
 export type RuntimeHandler = (request: RuntimeRequest) => RuntimeReply | Promise<RuntimeReply>;
@@ -51,6 +53,7 @@ export interface RouteRuntime {
   readonly bodyLimit: number;
   readonly readsBody: boolean;
   readonly timeoutMs: number;
+  readonly redirectOrigins: readonly string[];
   readonly waiting: Set<Exchange>;
   readonly hooks: HookChains;
   readonly errorHandlers: readonly ErrorHandler[];

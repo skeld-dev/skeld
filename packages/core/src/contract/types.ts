@@ -39,6 +39,11 @@ export interface RouteDefinition {
    */
   readonly headers?: ObjectSchema;
   /**
+   * The request cookies' schema; names are case-sensitive tokens and the handler receives only the declared ones.
+   * Each property is a scalar schema as in `params`; a declared name sent twice is refused with 400.
+   */
+  readonly cookies?: ObjectSchema;
+  /**
    * The JSON body's schema; a GET route declares none.
    * The route's body limit is the smaller of the configured limit and twice the largest encoding it admits plus 1,024 bytes.
    */
@@ -60,10 +65,37 @@ export interface ErrorDetail {
   readonly message: string;
 }
 
+/**
+ * A cookie a response sets, written as one `Set-Cookie` line; unset attributes take the secure defaults.
+ * An invalid cookie is refused, never encoded: a handler's reply becomes the fixed 500, `setCookie` throws `Error`.
+ */
+export interface OutgoingCookie {
+  /** The name, an HTTP token; a `__Host-` name needs `secure`, path `/` and no domain, a `__Secure-` one `secure`. */
+  readonly name: string;
+  /** The value, sent as given: printable ASCII except space, `"`, `,`, `;` and `\`; name and value fit 4,096 bytes. */
+  readonly value: string;
+  /** The path it is sent back on (default `/`): it starts with `/`, is printable ASCII without `;`, at most 1,024 bytes. */
+  readonly path?: string;
+  /** The domain it is sent back to, widening it to subdomains (default this host only); printable ASCII without `;`, at most 1,024 bytes. */
+  readonly domain?: string;
+  /** Its lifetime in whole seconds, from 0 to 34,560,000 (400 days); `0` clears it (default: until the browser closes). */
+  readonly maxAge?: number;
+  /** Whether page scripts are denied it (default true). */
+  readonly httpOnly?: boolean;
+  /** Whether it is sent only over HTTPS (default true); `sameSite: 'None'` and `partitioned` need it. */
+  readonly secure?: boolean;
+  /** Which cross-site requests carry it (default `Lax`). */
+  readonly sameSite?: 'Strict' | 'Lax' | 'None';
+  /** Whether it is keyed to the top-level site it was set under (default false). */
+  readonly partitioned?: boolean;
+}
+
 /** The options of `new HttpError`. */
 export interface HttpErrorOptions {
   /** The details written in the error body's `details`. */
   readonly details?: readonly ErrorDetail[];
+  /** The cookies the error's response sets, checked as a reply's are; one invalid cookie makes it the fixed 500. */
+  readonly cookies?: readonly OutgoingCookie[];
   /** The underlying cause, kept on the error and never written to the client. */
   readonly cause?: unknown;
 }

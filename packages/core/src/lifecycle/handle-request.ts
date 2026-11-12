@@ -6,9 +6,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { begin, contain, destroyed, end, event, leave, next, resume, routed, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { RouteInfo } from '../contract/types.ts';
+import type { RawCookies } from '../server/types.ts';
 import { type BodyOutcome, declaresOverLimit, readRouteBody } from './body.ts';
 import { stageBodyRefusal, stopRefusedPipeline } from './body-refusal.ts';
 import { clientAddressOf } from './client-address.ts';
+import { rawCookiesOf } from './cookies.ts';
 import { settle, signalOf } from './deadline.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
@@ -18,12 +20,13 @@ import { respond } from './respond.ts';
 import type { EngineRuntime, RuntimeReply, RuntimeRequest } from './types.ts';
 import { type ValidatedParts, validateRequest } from './validate.ts';
 
-// Why: Prototype getters keep the signal and address lazy; a getter in a per-request literal costs a closure.
+// Why: Prototype getters keep the signal, address and cookies lazy; a getter in a per-request literal costs a closure.
 class HandlerRequest implements RuntimeRequest {
   readonly route: RouteInfo;
   readonly params: unknown;
   readonly query: unknown;
   readonly headers: unknown;
+  readonly cookies: unknown;
   readonly body: unknown;
   readonly #exchange: Exchange;
 
@@ -32,6 +35,7 @@ class HandlerRequest implements RuntimeRequest {
     this.params = parts.params;
     this.query = parts.query;
     this.headers = parts.headers;
+    this.cookies = parts.cookies;
     this.body = parts.body;
     this.#exchange = exchange;
   }
@@ -42,6 +46,10 @@ class HandlerRequest implements RuntimeRequest {
 
   get clientAddress(): string {
     return clientAddressOf(this.#exchange);
+  }
+
+  get rawCookies(): RawCookies {
+    return rawCookiesOf(this.#exchange);
   }
 }
 

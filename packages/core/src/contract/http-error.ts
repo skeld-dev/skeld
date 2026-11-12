@@ -1,9 +1,9 @@
 // Does:  Defines HttpError, the one error a handler throws to answer with a chosen status and code.
 // Holds: An instance has a null status or one from 400 to 599, and a code of upper-case letters, digits and _.
 
-import type { ErrorDetail, HttpErrorOptions } from './types.ts';
+import type { ErrorDetail, HttpErrorOptions, OutgoingCookie } from './types.ts';
 
-export type { HttpErrorOptions } from './types.ts';
+export type { HttpErrorOptions, OutgoingCookie } from './types.ts';
 
 const ERROR_CODE = /^[A-Z][A-Z0-9_]*$/;
 
@@ -21,6 +21,7 @@ export class HttpError extends Error {
   readonly status: number | null;
   readonly code: string;
   readonly details: readonly ErrorDetail[] | null;
+  readonly cookies: readonly OutgoingCookie[] | null;
 
   constructor(status: number | null, code: string, message: string, options?: HttpErrorOptions) {
     if (!isErrorStatus(status)) {
@@ -33,5 +34,6 @@ export class HttpError extends Error {
     this.status = status;
     this.code = code;
     this.details = options?.details ?? null;
+    this.cookies = options?.cookies ?? null;
   }
 }

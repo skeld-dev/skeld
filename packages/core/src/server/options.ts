@@ -1,8 +1,9 @@
 // Does:  Resolves and checks the server and listen options against their defaults.
-// Holds: Every limit is a positive safe integer, every timer fits Node's timers, every trusted proxy entry is valid.
+// Holds: Every limit is a positive safe integer, every timer fits Node's timers, every proxy and origin entry is valid.
 
 import { BlockList, isIP } from 'node:net';
 import { end, start } from '#diag';
+import { parseOrigin } from '../origin/origin.ts';
 import { BootError } from './boot-error.ts';
 import type { ListenOptions, ResolvedServerOptions, ServerOptions } from './types.ts';
 
@@ -19,9 +20,10 @@ const DEFAULTS: ResolvedServerOptions = {
   // Why: Within the 29 to 60 s that common proxies in front allow (AWS API Gateway, nginx, AWS ALB).
   handlerTimeoutMs: 30_000,
   securityHeaders: true,
+  redirectOrigins: Object.freeze([]),
 };
 
-type LimitOption = Exclude<keyof ResolvedServerOptions, 'securityHeaders'>;
+type LimitOption = Exclude<keyof ResolvedServerOptions, 'securityHeaders' | 'redirectOrigins'>;
 
 // Why: Node's timers take a 32-bit signed delay and fire after 1 ms for anything larger (TimeoutOverflowWarning).
 export const MAX_TIMER_MS = 2_147_483_647;
@@ -65,6 +67,10 @@ export function resolveServerOptions(options: ServerOptions): ResolvedServerOpti
       // biome-ignore lint/security/noSecrets: an option name, flagged only for the entropy of its letters
       handlerTimeoutMs: positiveInteger('handlerTimeoutMs', options.handlerTimeoutMs, MAX_TIMER_MS),
       securityHeaders: resolveSecurityHeaders(options.securityHeaders),
+      redirectOrigins:
+        options.redirectOrigins === undefined
+          ? DEFAULTS.redirectOrigins
+          : resolveOrigins(options.redirectOrigins, 'server option redirectOrigins'),
     };
     if (resolved.headersTimeout > resolved.requestTimeout) {
       throw invalidOption(
@@ -85,6 +91,14 @@ function resolveSecurityHeaders(value: boolean | undefined): boolean {
     throw invalidOption(`Invalid server option securityHeaders: must be a boolean, got ${typeof value}`);
   }
   return value;
+}
+
+// Does:  Checks every entry of an option's list of origins and returns the list frozen.
+export function resolveOrigins(entries: readonly string[], option: string): readonly string[] {
+  if (!Array.isArray(entries)) {
+    throw invalidOption(`Invalid ${option}: must be an array of strings`);
+  }
+  return Object.freeze(entries.map((entry: unknown) => parseOrigin(entry, option)));
 }
 
 function invalidProxy(entry: unknown, reason: string): BootError {

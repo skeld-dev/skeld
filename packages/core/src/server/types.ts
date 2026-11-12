@@ -2,7 +2,7 @@
 // Holds: A handler's request and reply types are derived from its route's schemas, never written by hand.
 
 import type { HttpError } from '../contract/http-error.ts';
-import type { ContractRoutes, Empty, RouteDefinition, RouteInfo } from '../contract/types.ts';
+import type { ContractRoutes, Empty, OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { Infer, Schema, Wire } from '../schema/types.ts';
 
 /**
@@ -55,6 +55,11 @@ export interface ServerOptions {
    * A header the application set on the response is kept; an error the engine writes always carries all four.
    */
   readonly securityHeaders?: boolean;
+  /**
+   * Origins an absolute redirect `Location` may name, each exactly as `new URL(x).origin` writes it (default none).
+   * Local paths are always allowed; a malformed entry is refused with BootError `INVALID_OPTION`.
+   */
+  readonly redirectOrigins?: readonly string[];
 }
 
 export interface ResolvedServerOptions {
@@ -69,6 +74,7 @@ export interface ResolvedServerOptions {
   readonly maxHeaderSize: number;
   readonly handlerTimeoutMs: number;
   readonly securityHeaders: boolean;
+  readonly redirectOrigins: readonly string[];
 }
 
 /** Request headers by lower-case name, as the HTTP parser gives them. */
@@ -76,7 +82,15 @@ export interface RawHeaders {
   readonly [name: string]: string | readonly string[] | undefined;
 }
 
-/** A response header name the engine owns: a framing or connection field no author may set. */
+/** A request's cookies exactly as sent: no percent-decoding, no quote removal; names are case-sensitive. */
+export interface RawCookies {
+  /** Returns the value of a cookie sent exactly once; a name sent twice or never gives `undefined`. */
+  get(name: string): string | undefined;
+  /** Returns every value sent under the name, in the order received; empty when it was not sent. */
+  getAll(name: string): readonly string[];
+}
+
+/** A response header name the engine owns: a framing or connection field, or `set-cookie`, which no author may set. */
 export type ReservedHeaderName =
   | 'transfer-encoding'
   | 'content-length'
@@ -85,18 +99,21 @@ export type ReservedHeaderName =
   | 'proxy-connection'
   | 'te'
   | 'trailer'
-  | 'upgrade';
+  | 'upgrade'
+  | 'set-cookie';
 
 /** A header name an author may set: the name itself, or a message type naming it when it is a `ReservedHeaderName`. */
 export type AuthorHeaderName<N extends string> = N extends unknown
   ? Lowercase<N> extends ReservedHeaderName
-    ? `${N} is reserved for the engine`
+    ? Lowercase<N> extends 'set-cookie'
+      ? `${N} is reserved for the engine: use setCookie or the reply's cookies`
+      : `${N} is reserved for the engine`
     : N
   : never;
 
 /**
  * Response headers to set, by name.
- * The engine owns `transfer-encoding`, `content-length`, `connection`, `keep-alive`, `proxy-connection`, `te`, `trailer` and `upgrade`: a lower-case key among them fails to compile, and one in any letter case at runtime is answered with the fixed 500.
+ * The engine owns `transfer-encoding`, `content-length`, `connection`, `keep-alive`, `proxy-connection`, `te`, `trailer`, `upgrade` and `set-cookie`: a lower-case key among them fails to compile, and one in any letter case at runtime is answered with the fixed 500.
  */
 export type OutgoingHeaders = { readonly [name: string]: string | number | readonly string[] } & {
   readonly [K in ReservedHeaderName]?: never;
@@ -112,12 +129,16 @@ export interface RouteRequest<R extends RouteDefinition> {
   readonly query: R extends { readonly query: infer S extends Schema } ? Infer<S> : Empty;
   /** The declared headers, validated; every raw header when the route declares none. */
   readonly headers: R extends { readonly headers: infer S extends Schema } ? Infer<S> : RawHeaders;
+  /** The declared cookies, validated, with `secret` values wrapped; empty when the route declares none. */
+  readonly cookies: R extends { readonly cookies: infer S extends Schema } ? Infer<S> : Empty;
   /** The parsed and validated body, with `secret` values wrapped in `Secret`. */
   readonly body: R extends { readonly body: infer S extends Schema } ? Infer<S> : undefined;
   /** Aborted when the connection closes or the request times out, to stop work no client waits for. */
   readonly signal: AbortSignal;
   /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
   readonly clientAddress: string;
+  /** The request's cookies as sent; the header is parsed on first read. */
+  readonly rawCookies: RawCookies;
 }
 
 /**
@@ -131,11 +152,15 @@ export type RouteReply<R extends RouteDefinition> = {
         readonly body: Wire<R['responses'][S]>;
         /** Headers to set on the reply; a reserved name of `OutgoingHeaders` is answered with the fixed 500. */
         readonly headers?: OutgoingHeaders;
+        /** Cookies to set, each as its own `Set-Cookie` line; an invalid one is answered with the fixed 500. */
+        readonly cookies?: readonly OutgoingCookie[];
       }
     : {
         readonly status: S;
         /** Headers to set on the reply; a reserved name of `OutgoingHeaders` is answered with the fixed 500. */
         readonly headers?: OutgoingHeaders;
+        /** Cookies to set, each as its own `Set-Cookie` line; an invalid one is answered with the fixed 500. */
+        readonly cookies?: readonly OutgoingCookie[];
       };
 }[keyof R['responses']];
 
@@ -162,11 +187,16 @@ export interface RoutesOptions<C extends ContractRoutes> {
    * `routes` throws BootError `INVALID_OPTION` for a value not from 1 to 2 147 483 647 or a name not in the contract.
    */
   readonly handlerTimeouts?: { readonly [K in keyof C]?: number };
+  /**
+   * Origins an absolute redirect from these routes may name, replacing the server's `redirectOrigins`, never merged.
+   * `routes` throws BootError `INVALID_OPTION` for an entry that is not exactly an http or https origin.
+   */
+  readonly redirectOrigins?: readonly string[];
 }
 
 /** A reply a hook sends with `context.send`. */
 export interface RawReply {
-  /** The HTTP status. */
+  /** The HTTP status, an integer from 200 to 599; any other value makes `send` throw `Error` before anything is set. */
   readonly status: number;
   /** Headers to set on the reply; a reserved name of `OutgoingHeaders` makes `send` throw `Error` before anything is set. */
   readonly headers?: OutgoingHeaders;
@@ -188,14 +218,21 @@ export interface RequestContext {
   readonly signal: AbortSignal;
   /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
   readonly clientAddress: string;
+  /** The request's cookies as sent; the header is parsed on first read. */
+  readonly rawCookies: RawCookies;
   /**
    * Sets a header on the response.
    * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; on an error response the engine writes, only the CORS response headers and `vary` are kept.
    */
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
   /**
+   * Sets a cookie on the response, replacing a pending one of the same name, path and domain.
+   * Throws `Error` for an invalid cookie or once the response is sent; an error response drops it.
+   */
+  setCookie(cookie: OutgoingCookie): void;
+  /**
    * Replies at once; later hooks and the handler do not run.
-   * A second reply throws `Error` `Response already sent`, one after a timeout is dropped; `onResponse` skips a hook's reply.
+   * Throws `Error` for a status outside 200-599 or a second reply (`Response already sent`); one after a timeout is dropped; `onResponse` skips it.
    */
   send(reply: RawReply): void;
 }
@@ -224,6 +261,8 @@ export interface ResponseContext {
   readonly signal: AbortSignal;
   /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
   readonly clientAddress: string;
+  /** The request's cookies as sent; the header is parsed on first read. */
+  readonly rawCookies: RawCookies;
   /** The status being written. */
   readonly status: number;
   /**
@@ -231,6 +270,11 @@ export interface ResponseContext {
    * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; on an error response the engine writes, only the CORS response headers and `vary` are kept.
    */
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
+  /**
+   * Sets a cookie on the response, replacing a pending one of the same name, path and domain.
+   * Throws `Error` for an invalid cookie or once the response is sent; an error response drops it.
+   */
+  setCookie(cookie: OutgoingCookie): void;
 }
 
 /** What an `onResponse` hook receives once the response is done or its connection closed. */
@@ -263,6 +307,8 @@ export interface ErrorContext {
   readonly signal: AbortSignal;
   /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
   readonly clientAddress: string;
+  /** The request's cookies as sent; the header is parsed on first read. */
+  readonly rawCookies: RawCookies;
 }
 
 /**

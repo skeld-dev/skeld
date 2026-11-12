@@ -24,7 +24,7 @@ function refuse(
   message: string,
   close: boolean,
 ): null {
-  writeErrorBody(runtime, res, method, { status, code, message }, close);
+  writeErrorBody(runtime, res, method, { status, code, message }, close, null);
   return null;
 }
 
@@ -81,6 +81,9 @@ export function preRoute(
         abort: null,
         signal: null,
         clientAddress: null,
+        cookieEntries: null,
+        rawCookies: null,
+        pendingCookies: null,
       };
     case 'not-found':
       count('refuse.not_found', method);

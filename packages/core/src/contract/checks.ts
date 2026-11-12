@@ -1,13 +1,14 @@
-// Does:  Checks a contract's routes when it is declared: paths, schemas, params, bodies, statuses and header keys.
+// Does:  Checks a contract's routes when declared: paths, schemas, params, bodies, statuses, header and cookie keys.
 // Holds: A contract that passes names only model schemas, and its path parameters and params keys match one for one.
 
 import { end, start } from '#diag';
+import { isCookieName } from '../cookie/name.ts';
 import { isModelSchema, isNode } from '../schema/node.ts';
 import type { Kind, Schema } from '../schema/types.ts';
 import { parsePath } from './path.ts';
 import type { ContractRoutes, RouteDefinition } from './types.ts';
 
-type KeyedPart = 'params' | 'query' | 'headers';
+type KeyedPart = 'params' | 'query' | 'headers' | 'cookies';
 
 const PARAMETER_SEGMENT = /^:[A-Za-z_][A-Za-z0-9_]*$/;
 // Why: A declared path is matched against the decoded request path, so it carries no query, fragment or escape.
@@ -15,8 +16,8 @@ const FORBIDDEN_PATH_CHARACTER = /[?#%\\\s]/;
 const SCALAR_KINDS: ReadonlySet<Kind> = new Set(['string', 'number', 'integer', 'boolean', 'literal']);
 // Why: HTTP gives 204 and 304 no body, so a schema declared for one could never be honoured.
 const BODYLESS_STATUSES = ['204', '304'];
-const KEYED_PARTS: readonly KeyedPart[] = ['params', 'query', 'headers'];
-const REQUEST_PARTS = ['params', 'query', 'headers', 'body'] as const;
+const KEYED_PARTS: readonly KeyedPart[] = ['params', 'query', 'headers', 'cookies'];
+const REQUEST_PARTS = ['params', 'query', 'headers', 'cookies', 'body'] as const;
 
 function checkPath(path: string): string | null {
   if (!path.startsWith('/')) {
@@ -132,6 +133,14 @@ function checkHeaderKeys(route: RouteDefinition): string | null {
   return upper === undefined ? null : `headers key ${upper} must be lower case`;
 }
 
+function checkCookieKeys(route: RouteDefinition): string | null {
+  if (route.cookies === undefined) {
+    return null;
+  }
+  const invalid = Object.keys(route.cookies.properties).find((key) => !isCookieName(key));
+  return invalid === undefined ? null : `cookies key ${invalid} is not a cookie name (an HTTP token)`;
+}
+
 function isScalarSchema(schema: Schema): boolean {
   if (!isModelSchema(schema)) {
     return false;
@@ -155,7 +164,7 @@ function checkPropertyKinds(route: RouteDefinition): string | null {
     if (schema === undefined) {
       continue;
     }
-    // Why: Only a query key repeats into an array; a path parameter and a header arrive as one string.
+    // Why: Only a query key repeats into an array; a path parameter, a header and a cookie arrive as one string.
     const allowsArrays = part === 'query';
     const refused = Object.entries(schema.properties).find(
       ([, property]) => !isKeyedPropertySchema(property, allowsArrays),
@@ -176,6 +185,7 @@ function checkRoute(route: RouteDefinition): string | null {
     checkBody(route) ??
     checkResponses(route) ??
     checkHeaderKeys(route) ??
+    checkCookieKeys(route) ??
     checkPropertyKinds(route)
   );
 }

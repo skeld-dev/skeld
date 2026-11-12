@@ -6,7 +6,7 @@ import type { ContractRoutes, RouteDefinition, RouteInfo } from '../contract/typ
 import type { RuntimeHandler } from '../lifecycle/types.ts';
 import { BootError } from './boot-error.ts';
 import type { DisposalState } from './disposal.ts';
-import { MAX_TIMER_MS } from './options.ts';
+import { MAX_TIMER_MS, resolveOrigins } from './options.ts';
 import type {
   ErrorHandler,
   HookName,
@@ -35,6 +35,7 @@ export interface RouteRecord {
   readonly handler: RuntimeHandler;
   readonly bodyLimit: number | null;
   readonly timeoutMs: number | null;
+  readonly redirectOrigins: readonly string[] | null;
 }
 
 export interface ChildScope {
@@ -132,6 +133,7 @@ function toRouteRecords(
   handlers: ErasedHandlers,
   bodyLimits: RouteLimits,
   timeouts: RouteLimits,
+  redirectOrigins: readonly string[] | null,
 ): RouteRecord[] {
   for (const name of Object.keys(bodyLimits)) {
     if (!Object.hasOwn(contract, name)) {
@@ -155,6 +157,7 @@ function toRouteRecords(
       handler,
       bodyLimit: routeBodyLimit(info, definition, Object.hasOwn(bodyLimits, name) ? bodyLimits[name] : undefined),
       timeoutMs: routeTimeout(info, Object.hasOwn(timeouts, name) ? timeouts[name] : undefined),
+      redirectOrigins,
     };
   });
 }
@@ -175,7 +178,11 @@ export function createScope(state: ScopeState): Scope {
       checkContract(contract);
       // biome-ignore lint/nursery/noUnsafeTypeAssertion: the one erasure point; Handlers<C> is typed per route, the runtime reads handlers by name
       const erased = handlers as unknown as ErasedHandlers;
-      state.routes.push(...toRouteRecords(contract, erased, options?.bodyLimits ?? {}, options?.handlerTimeouts ?? {}));
+      const origins = options?.redirectOrigins;
+      const redirectOrigins = origins === undefined ? null : resolveOrigins(origins, 'route option redirectOrigins');
+      state.routes.push(
+        ...toRouteRecords(contract, erased, options?.bodyLimits ?? {}, options?.handlerTimeouts ?? {}, redirectOrigins),
+      );
     },
     addHook<K extends HookName>(name: K, hook: HookTypes[K]): void {
       assertOpen(state, 'addHook');

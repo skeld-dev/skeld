@@ -27,6 +27,10 @@ const scripts = [
   'audit-schema.ts',
   'audit-boundaries.ts',
   'audit-retention.ts',
+  'redirects.ts',
+  'cookie-read.ts',
+  'cookie-contract.ts',
+  'cookie-write.ts',
 ];
 
 let failed = 0;

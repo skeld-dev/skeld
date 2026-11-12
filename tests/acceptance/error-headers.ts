@@ -63,7 +63,7 @@ async function serve(): Promise<void> {
   server.addHook('onRequest', (context) => {
     context.setHeader('access-control-allow-origin', origin);
     context.setHeader('vary', 'origin');
-    context.setHeader('set-cookie', 'hook=1');
+    context.setCookie({ name: 'hook', value: '1' });
     context.setHeader('cache-control', 'public, max-age=600');
     context.setHeader('x-canary', 'hook');
     context.setHeader('date', hookDate);
@@ -79,7 +79,8 @@ async function serve(): Promise<void> {
       boom: () => ({
         status: 200,
         body: pastTypes({ ok: 'not a boolean' }),
-        headers: { 'set-cookie': 'handler=1', 'x-second': 'handler' },
+        headers: { 'x-second': 'handler' },
+        cookies: [{ name: 'handler', value: '1' }],
       }),
       fine: () => ({ status: 200, body: { ok: true }, headers: { 'x-handler': 'fine' } }),
       gone: () => ({ status: 404, body: { reason: 'gone' }, headers: { 'x-handler': 'gone' } }),
@@ -125,7 +126,7 @@ function checkKept(
   const expected = new Map<string, string>([
     ['access-control-allow-origin', origin],
     ['vary', 'origin'],
-    ['set-cookie', 'hook=1'],
+    ['set-cookie', 'hook=1; Path=/; HttpOnly; Secure; SameSite=Lax'],
     ['cache-control', 'public, max-age=600'],
     ['x-canary', 'hook'],
     ['date', hookDate],

@@ -28,6 +28,7 @@ export type StepName =
   | 'req.body.media_type'
   | 'req.body.forbidden_key'
   | 'req.query.parse'
+  | 'req.cookies.parse'
   | 'req.validate.part'
   | 'req.validate.errors'
   | 'req.handler.arg'
@@ -72,12 +73,15 @@ export type EventName =
   | 'refuse.validation'
   | 'refuse.body_aborted'
   | 'refuse.handler_timeout'
+  | 'refuse.redirect'
   | 'err.internal'
   | 'err.undeclared_status'
   | 'err.serialize'
   | 'err.already_sent'
   | 'err.headers_sent'
   | 'err.reserved_header'
+  | 'err.cookie'
+  | 'err.send_status'
   | 'close.forced'
   | 'client.error';
 export type LimitName =

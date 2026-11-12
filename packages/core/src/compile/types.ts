@@ -3,7 +3,7 @@
 
 import type { ErrorDetail } from '../contract/types.ts';
 
-export type PartName = 'params' | 'query' | 'headers' | 'body';
+export type PartName = 'params' | 'query' | 'headers' | 'cookies' | 'body';
 
 export type PartOutcome =
   | { readonly kind: 'ok'; readonly value: unknown }
@@ -17,6 +17,7 @@ export interface RequestValidators {
   readonly params: PartValidator | null;
   readonly query: PartValidator | null;
   readonly headers: PartValidator | null;
+  readonly cookies: PartValidator | null;
   readonly body: PartValidator | null;
 }
 

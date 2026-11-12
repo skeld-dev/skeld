@@ -66,7 +66,7 @@ function compileSchema(schema: Schema): CompiledSchema {
 
 function keyedValidator(part: PartName, schema: ObjectSchema): PartValidator {
   const compiled = compileSchema(schema);
-  // Why: Undeclared query and header keys are dropped before the closed-object check, which would refuse them.
+  // Why: Undeclared query, header and cookie keys are dropped before the closed-object check, which would refuse them.
   const project = compileProjection(schema);
   return { run: (raw) => validate(part, compiled, project(raw)) };
 }
@@ -100,6 +100,7 @@ export function compileRequestValidators(route: RouteDefinition): RequestValidat
     params: compilePart('params', route.params, (schema) => keyedValidator('params', schema)),
     query: compilePart('query', route.query, (schema) => keyedValidator('query', schema)),
     headers: compilePart('headers', route.headers, (schema) => keyedValidator('headers', schema)),
+    cookies: compilePart('cookies', route.cookies, (schema) => keyedValidator('cookies', schema)),
     body: compilePart('body', route.body, bodyValidator),
   };
 }

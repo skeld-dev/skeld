@@ -1,4 +1,4 @@
-// Does:  Proves the eight engine-owned response headers are refused at four author sites and ordinary headers pass.
+// Does:  Proves the nine engine-owned response headers are refused at four author sites and ordinary headers pass.
 // Holds: Responses are read as raw socket bytes, so a duplicate or an application framing header cannot hide.
 
 import { spawnSync } from 'node:child_process';
@@ -12,7 +12,7 @@ import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 
 const statement =
-  'each of the eight engine-owned headers, lower or mixed case, set at an onRequest, preHandler or onSend hook, a hook send or a handler reply answers the fixed 500 INTERNAL with no application header and no application value on the wire, ordinary headers pass at the same four sites, a reserved name fails to compile at setHeader, a reply and a send while ordinary names compile, and the next connection is answered';
+  'each of the nine engine-owned headers, lower or mixed case, set at an onRequest, preHandler or onSend hook, a hook send or a handler reply answers the fixed 500 INTERNAL with no application header and no application value on the wire, ordinary headers pass at the same four sites, a reserved name fails to compile at setHeader, a reply and a send while ordinary names compile, and the next connection is answered';
 
 const reserved: Record<string, string> = {
   'transfer-encoding': 'chunked',
@@ -23,10 +23,10 @@ const reserved: Record<string, string> = {
   te: 'trailers',
   trailer: 'x-trailer-probe',
   upgrade: 'websocket',
+  'set-cookie': 'sid=abc; Path=/; HttpOnly',
 };
 const ordinary: Record<string, string> = {
   'x-request-id': 'req-7f3a',
-  'set-cookie': 'sid=abc; Path=/; HttpOnly',
   'cache-control': 'no-store',
 };
 const sites = ['onrequest', 'prehandler', 'onsend', 'hooksend', 'handler'] as const;
@@ -196,6 +196,17 @@ const probes: { name: string; source: string; compiles: boolean }[] = [
   {
     name: 'send headers connection',
     source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { connection: 'close' } }); });\n`,
+    compiles: false,
+  },
+  {
+    name: 'setHeader set-cookie',
+    source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('set-cookie', 'a=1'); });\n`,
+    compiles: false,
+  },
+  { name: 'reply headers set-cookie', source: reply("{ 'set-cookie': 'a=1' }"), compiles: false },
+  {
+    name: 'send headers set-cookie',
+    source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { 'set-cookie': 'a=1' } }); });\n`,
     compiles: false,
   },
   {

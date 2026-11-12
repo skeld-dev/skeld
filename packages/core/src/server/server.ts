@@ -13,7 +13,7 @@ import { buildRuntime } from './runtime.ts';
 import { createScope, createScopeState } from './scope.ts';
 import type { HttpServerHandle, ListeningAddress, ListenOptions, Server, ServerOptions } from './types.ts';
 
-export type { Empty, RouteInfo } from '../contract/types.ts';
+export type { Empty, OutgoingCookie, RouteInfo } from '../contract/types.ts';
 export type {
   AuthorHeaderName,
   CompletedContext,
@@ -31,6 +31,7 @@ export type {
   OutgoingHeaders,
   Plugin,
   PreHandlerHook,
+  RawCookies,
   RawHeaders,
   RawReply,
   RegisterOptions,
@@ -48,7 +49,7 @@ export type {
 
 /**
  * Creates a server, the root scope of a service; nothing listens until `listen`.
- * Throws BootError `INVALID_OPTION` for an option out of range, a `headersTimeout` above `requestTimeout` or a bad `trustProxy`.
+ * Throws BootError `INVALID_OPTION` for an option out of range, a `headersTimeout` above `requestTimeout` or a bad `trustProxy` or `redirectOrigins` entry.
  * @example const server = createServer({ bodyLimit: 65_536 }); await server.listen({ port: 0 }); await server.close();
  */
 export function createServer(options: ServerOptions = {}): Server {

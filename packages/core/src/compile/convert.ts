@@ -1,4 +1,4 @@
-// Does:  Builds the projection of params, query and headers: declared keys only, strings converted where declared.
+// Does:  Builds the projection of a keyed request part: declared keys only, strings converted where declared.
 // Holds: Only declared own keys are kept; a string that is not an exact literal of the declared type stays a string.
 
 import { isModelSchema } from '../schema/node.ts';

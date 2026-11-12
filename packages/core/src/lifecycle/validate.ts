@@ -1,4 +1,4 @@
-// Does:  Validates params, query, headers and body against the route's compiled validators.
+// Does:  Validates params, query, headers, cookies and body against the route's compiled validators.
 // Holds: The handler receives only values that passed; a 400 carries at most 100 failure details.
 
 import { end, event, limit, next, start } from '#diag';
@@ -6,6 +6,7 @@ import { HttpError } from '../contract/http-error.ts';
 import type { ErrorDetail } from '../contract/types.ts';
 import { parseQuery } from '../request/query.ts';
 import type { PartValidator } from '../compile/types.ts';
+import { cookieEntriesOf } from './cookies.ts';
 import type { Exchange } from './exchange.ts';
 
 // Why: A hostile body can fail in thousands of places; the 400 that reports it stays bounded.
@@ -16,6 +17,7 @@ export interface ValidatedParts {
   readonly params: unknown;
   readonly query: unknown;
   readonly headers: unknown;
+  readonly cookies: unknown;
   readonly body: unknown;
 }
 
@@ -52,11 +54,15 @@ export function validateRequest(exchange: Exchange, body: unknown): ValidatedPar
   const headersPart = start('req.validate.part', 'headers');
   const headers = check(validators.headers, exchange.req.headers, failures);
   end(headersPart);
+  const cookiesPart = start('req.validate.part', 'cookies');
+  // Why: The Cookie header is parsed only for a route that declares cookies, through the cache rawCookies reads.
+  const cookies = validators.cookies === null ? EMPTY : check(validators.cookies, cookieEntriesOf(exchange), failures);
+  end(cookiesPart);
   const bodyPart = start('req.validate.part', 'body');
   const validBody = check(validators.body, body, failures);
   end(bodyPart);
   if (!failures.failed) {
-    return { params, query, headers, body: validBody };
+    return { params, query, headers, cookies, body: validBody };
   }
   const { details } = failures;
   limit('limit.validation_details', details.length, DETAILS_CAP);
