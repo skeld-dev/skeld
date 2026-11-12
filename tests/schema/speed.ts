@@ -1,4 +1,4 @@
-// Does:  Measures the generated check against typebox and Ajv on the four reference schemas.
+// Does:  Measures the generated check against the comparator engines in a given folder, on the four reference schemas.
 // Holds: A check that accepts no value aborts the run, so a broken engine cannot post a fast figure.
 
 import { spawnSync } from 'node:child_process';
