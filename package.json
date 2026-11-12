@@ -18,6 +18,7 @@
     "knip": "knip",
     "bench": "tsc -b packages/core && node benchmarks/run.ts",
     "readme-check": "node tools/check-readme-example.ts",
+    "examples-check": "tsc -b && node tools/check-examples.ts",
     "pack-check": "node tools/check-pack-markers.ts --pack",
     "api-check": "node tools/api-reference/check.ts",
     "api-docs": "node tools/api-reference/generate.ts",

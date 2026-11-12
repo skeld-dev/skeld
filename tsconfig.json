@@ -8,6 +8,12 @@
       "path": "./examples/hello"
     },
     {
+      "path": "./examples/logging"
+    },
+    {
+      "path": "./examples/service"
+    },
+    {
       "path": "./benchmarks"
     },
     {

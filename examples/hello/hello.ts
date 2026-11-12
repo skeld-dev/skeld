@@ -14,8 +14,8 @@ server.routes(helloContract, {
   }),
 });
 
-await server.listen({ port: 3000, host: '127.0.0.1' });
-server.log.info('hello listening', { url: 'http://127.0.0.1:3000' });
+const address = await server.listen({ port: Number(process.env.PORT ?? 3000), host: '127.0.0.1' });
+server.log.info('hello listening', { url: address.url });
 
 await Promise.race([once(process, 'SIGINT'), once(process, 'SIGTERM')]);
 server.log.info('hello stopping');

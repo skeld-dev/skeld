@@ -84,8 +84,8 @@ server.routes(helloContract, {
   }),
 });
 
-await server.listen({ port: 3000, host: '127.0.0.1' });
-server.log.info('hello listening', { url: 'http://127.0.0.1:3000' });
+const address = await server.listen({ port: Number(process.env.PORT ?? 3000), host: '127.0.0.1' });
+server.log.info('hello listening', { url: address.url });
 
 await Promise.race([once(process, 'SIGINT'), once(process, 'SIGTERM')]);
 server.log.info('hello stopping');
@@ -98,7 +98,7 @@ await server.close();
 import { createClient } from '@skeld/core/client';
 import { helloContract } from './contract.ts';
 
-const client = createClient(helloContract, { baseUrl: 'http://127.0.0.1:3000' });
+const client = createClient(helloContract, { baseUrl: process.env.BASE_URL ?? 'http://127.0.0.1:3000' });
 
 const greeting = await client.greet({ params: { name: 'Ada' }, query: { excited: true } });
 const reply = await client.greetInLanguage({ body: { name: 'Ada', language: 'pt' } });
@@ -126,6 +126,9 @@ Olá, Ada
 ```
 
 Node runs the `.ts` files directly by stripping their types. Stop the server with Ctrl-C; it logs `hello stopping`, finishes in-flight responses and writes `skeld.server.closed`.
+
+`PORT` overrides the server's default port; set the client's `BASE_URL` to match. For runnable examples of logging and a
+service organized into a plugin, see the [examples guide](../../examples/README.md).
 
 `message` is bounded at 72: the longest reply the handlers build is `Hello, ` (7 UTF-16 code units) plus a name at its `maxLength` of 64 plus `!` (1). Change a handler to return a body without `message`, or `client.ts` to read `greeting.body.message` without checking `status`, and `tsc` reports a type error: the contract types both sides.
 

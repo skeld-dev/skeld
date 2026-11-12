@@ -1,7 +1,7 @@
 import { createClient } from '@skeld/core/client';
 import { helloContract } from './contract.ts';
 
-const client = createClient(helloContract, { baseUrl: 'http://127.0.0.1:3000' });
+const client = createClient(helloContract, { baseUrl: process.env.BASE_URL ?? 'http://127.0.0.1:3000' });
 
 const greeting = await client.greet({ params: { name: 'Ada' }, query: { excited: true } });
 const reply = await client.greetInLanguage({ body: { name: 'Ada', language: 'pt' } });
