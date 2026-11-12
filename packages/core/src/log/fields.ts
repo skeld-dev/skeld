@@ -100,13 +100,8 @@ function valueText(value: unknown, options: ErrorOptions, errors: ErrorCount): s
 
 // Does:  Whether a field past FIELDS_MAX would have been written, from its descriptor alone.
 function present(fields: object, name: string): boolean {
-  try {
-    const descriptor = Object.getOwnPropertyDescriptor(fields, name);
-    return descriptor !== undefined && !('value' in descriptor && descriptor.value === undefined);
-  } catch {
-    // Why: The binding exists but cannot be read, so the field would have been written as invalid.
-    return true;
-  }
+  const descriptor = Object.getOwnPropertyDescriptor(fields, name);
+  return descriptor !== undefined && !('value' in descriptor && descriptor.value === undefined);
 }
 
 // Does:  Encodes the field under name, an accessor as unclassified without calling it; null leaves the key out.
@@ -118,7 +113,7 @@ function fieldText(fields: object, name: string, options: ErrorOptions, errors: 
     }
     return 'value' in descriptor ? valueText(descriptor.value, options, errors) : UNCLASSIFIED;
   } catch {
-    // Why: A descriptor read of a namespace's binding before it is set throws; that field is unreadable.
+    // Why: Encoding a value can throw, including a classified namespace whose bindings cannot yet be read.
     return INVALID;
   }
 }
@@ -127,10 +122,17 @@ export function encodeFields(fields: LogFields, options: ErrorOptions): EncodedF
   if (typeof fields !== 'object' || fields === null || isProxy(fields)) {
     return NO_FIELDS;
   }
+  let names: string[];
+  try {
+    names = Object.keys(fields);
+  } catch {
+    // Why: Enumerating a module namespace reads binding descriptors and can throw before a binding is initialized.
+    return NO_FIELDS;
+  }
   const members: string[] = [];
   const errors: ErrorCount = { read: 0 };
   let omitted = 0;
-  for (const name of Object.keys(fields)) {
+  for (const name of names) {
     if (members.length === FIELDS_MAX) {
       omitted += present(fields, name) ? 1 : 0;
       continue;

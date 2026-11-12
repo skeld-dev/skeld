@@ -23,7 +23,7 @@ export interface Searched {
 }
 
 const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
-const evidenceDir = join(sourceRoot, '.project/features/logging/evidence/gate');
+const evidenceDir = join(sourceRoot, '.project/features/.0.0.1-core/evidence/logging');
 const windowLength = 10;
 
 export function createReport(script: string): Report {

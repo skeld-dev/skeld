@@ -1,4 +1,4 @@
-// Does:  Runs the eight logging rig scripts in turn and reports how many passed.
+// Does:  Runs the logging rig scripts in turn and reports how many passed.
 // Holds: A script that does not exist counts as a failure, and the exit is non-zero unless every script passed.
 
 import { spawnSync } from 'node:child_process';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const scripts = [
   'log-redaction.ts',
+  'log-boundaries.ts',
   'log-injection.ts',
   'log-lifecycle.ts',
   'log-correlation.ts',

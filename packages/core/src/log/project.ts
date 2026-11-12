@@ -37,7 +37,7 @@ const INVALID = `"${INVALID_MARKER}"`;
 const UNCLASSIFIED = `"${UNCLASSIFIED_MARKER}"`;
 const TRUNCATED = `"${TRUNCATED_MARKER}"`;
 
-// Why: No check accepts a symbol, so a part the copy could not read never makes a union member match.
+// Why: No declared value check accepts a symbol, so an unreadable part cannot match that property's schema.
 const UNREADABLE = Symbol('unreadable');
 
 type ScalarSchema = StringSchema | IntegerSchema | NumberSchema | BooleanSchema | NullSchema;
@@ -46,6 +46,10 @@ type ContainerSchema = ObjectSchema | ArraySchema | RecordSchema | UnionSchema;
 
 interface Budget {
   left: number;
+}
+
+interface CopyBudget extends Budget {
+  truncated: boolean;
 }
 
 function markerOf(sensitivity: Sensitivity): string {
@@ -79,11 +83,15 @@ function own(value: object, key: string): unknown {
 }
 
 // Does:  Copies a value as plain data for a union's checks, reading as the projection does, at most budget nodes.
-function copyOf(value: unknown, budget: Budget): unknown {
-  if (budget.left === 0 || typeof value === 'function' || typeof value === 'symbol') {
+function copyOf(value: unknown, budget: CopyBudget): unknown {
+  if (budget.left === 0) {
+    budget.truncated = true;
     return UNREADABLE;
   }
   budget.left -= 1;
+  if (typeof value === 'function' || typeof value === 'symbol') {
+    return UNREADABLE;
+  }
   if (typeof value !== 'object' || value === null) {
     return value;
   }
@@ -96,16 +104,16 @@ function copyOf(value: unknown, budget: Budget): unknown {
     for (let index = 0; typeof length === 'number' && index < length && budget.left > 0; index++) {
       items.push(copyOf(own(value, String(index)), budget));
     }
-    // Why: A copy cut short must fail every check rather than pass as a shorter array.
+    // Why: A cut copy must never reach member selection, even when an open member would ignore the missing part.
     if (typeof length !== 'number' || items.length < length) {
-      items.push(UNREADABLE);
+      budget.truncated = true;
     }
     return items;
   }
   const entries: Record<string, unknown> = Object.create(null);
   for (const key of Object.keys(value)) {
     if (budget.left === 0) {
-      entries[key] = UNREADABLE;
+      budget.truncated = true;
       break;
     }
     entries[key] = copyOf(own(value, key), budget);
@@ -114,7 +122,12 @@ function copyOf(value: unknown, budget: Budget): unknown {
 }
 
 function projectUnion(schema: UnionSchema, value: unknown, budget: Budget): string | null {
-  const copy = copyOf(value, { left: budget.left });
+  const copied: CopyBudget = { left: budget.left, truncated: false };
+  const copy = copyOf(value, copied);
+  if (copied.truncated) {
+    const mark = reached(schema);
+    return mark === undefined ? TRUNCATED : markerOf(mark);
+  }
   const member = schema.members.find((candidate) => compileCheck(candidate)(copy));
   if (member !== undefined) {
     return projectNode(member, copy, budget);
@@ -125,6 +138,13 @@ function projectUnion(schema: UnionSchema, value: unknown, budget: Budget): stri
 
 // Does:  Projects one node; null means the key is left out (undefined under an optional node).
 function projectNode(schema: Schema, value: unknown, budget: Budget): string | null {
+  if (budget.left === 0) {
+    return TRUNCATED;
+  }
+  if (value === UNREADABLE) {
+    budget.left -= 1;
+    return INVALID;
+  }
   if (!isModelSchema(schema)) {
     return UNCLASSIFIED;
   }
@@ -195,7 +215,7 @@ function objectText(schema: ObjectSchema, value: object, budget: Budget): string
       members.push(`${nameOf(key)}:${TRUNCATED}`);
       break;
     }
-    const text = item === UNREADABLE ? INVALID : projectNode(property, item, budget);
+    const text = projectNode(property, item, budget);
     if (text !== null) {
       members.push(`${nameOf(key)}:${text}`);
     }
@@ -216,7 +236,7 @@ function arrayText(schema: ArraySchema, value: object, budget: Budget): string {
     }
     const item = own(value, String(index));
     // Why: JSON has no undefined, so a hole or an undefined item is written as not of the item's schema.
-    items.push((item === UNREADABLE ? null : projectNode(schema.items, item, budget)) ?? INVALID);
+    items.push(projectNode(schema.items, item, budget) ?? INVALID);
   }
   return `[${items.join(',')}]`;
 }
@@ -229,7 +249,7 @@ function recordText(schema: RecordSchema, value: object, budget: Budget): string
       break;
     }
     const item = own(value, key);
-    const text = item === UNREADABLE ? INVALID : projectNode(schema.value, item, budget);
+    const text = projectNode(schema.value, item, budget);
     if (text !== null) {
       entries.push(`${nameOf(key)}:${text}`);
     }
