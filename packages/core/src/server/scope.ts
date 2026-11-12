@@ -133,6 +133,11 @@ function toRouteRecords(
   bodyLimits: RouteLimits,
   timeouts: RouteLimits,
 ): RouteRecord[] {
+  for (const name of Object.keys(bodyLimits)) {
+    if (!Object.hasOwn(contract, name)) {
+      throw new BootError('INVALID_OPTION', `Invalid route option bodyLimits.${name}: no such route`, null, null);
+    }
+  }
   for (const name of Object.keys(timeouts)) {
     if (!Object.hasOwn(contract, name)) {
       throw new BootError('INVALID_OPTION', `Invalid route option handlerTimeouts.${name}: no such route`, null, null);

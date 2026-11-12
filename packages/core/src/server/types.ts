@@ -154,7 +154,7 @@ export type Handlers<C extends ContractRoutes> = { readonly [K in keyof C]: Hand
 export interface RoutesOptions<C extends ContractRoutes> {
   /**
    * Body limits in bytes by route name, each replacing `bodyLimit` for its route.
-   * `routes` throws BootError `INVALID_OPTION` for a value that is not a positive integer or a route that declares no body.
+   * `routes` throws BootError `INVALID_OPTION` for an unknown name, a value that is not a positive integer or a route that declares no body.
    */
   readonly bodyLimits?: { readonly [K in keyof C]?: number };
   /**

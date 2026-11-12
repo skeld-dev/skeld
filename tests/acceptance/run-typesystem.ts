@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 const scripts = [
   'sensitive-leak.ts',
   'derived-cap.ts',
+  'body-limit-options.ts',
   'hostile-body.ts',
   'body-refusal.ts',
   'derived-class.ts',
