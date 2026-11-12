@@ -3,6 +3,8 @@
 
 import { checkContract } from '../contract/checks.ts';
 import type { ContractRoutes, RouteDefinition, RouteInfo } from '../contract/types.ts';
+import { type ResolvedCors, resolveCors } from '../cors/policy.ts';
+import { type ResolvedCsrf, resolveCsrf } from '../csrf/policy.ts';
 import type { RuntimeHandler } from '../lifecycle/types.ts';
 import { BootError } from './boot-error.ts';
 import type { DisposalState } from './disposal.ts';
@@ -16,6 +18,7 @@ import type {
   OnSendHook,
   Plugin,
   PreHandlerHook,
+  RoutesOptions,
   Scope,
 } from './types.ts';
 
@@ -36,6 +39,9 @@ export interface RouteRecord {
   readonly bodyLimit: number | null;
   readonly timeoutMs: number | null;
   readonly redirectOrigins: readonly string[] | null;
+  readonly cors: ResolvedCors | false | null;
+  readonly csrf: ResolvedCsrf | null;
+  readonly csrfExempt: boolean;
 }
 
 export interface ChildScope {
@@ -128,12 +134,61 @@ interface RouteLimits {
   readonly [name: string]: number | undefined;
 }
 
+// Does:  The options one routes() call applies to all of its routes, each checked and null when not set.
+interface GroupOptions {
+  readonly redirectOrigins: readonly string[] | null;
+  readonly cors: ResolvedCors | false | null;
+  readonly csrf: ResolvedCsrf | null;
+  readonly csrfExempt: ReadonlySet<string>;
+}
+
+function exemptNames(contract: ContractRoutes, names: unknown, where: string): ReadonlySet<string> {
+  if (names === undefined) {
+    return new Set();
+  }
+  if (!Array.isArray(names)) {
+    throw new BootError(
+      'INVALID_OPTION',
+      `Invalid route option csrfExempt${where}: must be an array of route names`,
+      null,
+      null,
+    );
+  }
+  for (const name of names) {
+    if (typeof name !== 'string' || !Object.hasOwn(contract, name)) {
+      throw new BootError(
+        'INVALID_OPTION',
+        `Invalid route option csrfExempt${where}: ${String(name)}: no such route`,
+        null,
+        null,
+      );
+    }
+  }
+  return new Set(names);
+}
+
+function groupOptions(
+  contract: ContractRoutes,
+  options: Pick<RoutesOptions<ContractRoutes>, 'redirectOrigins' | 'cors' | 'csrf'>,
+  exempt: unknown,
+): GroupOptions {
+  const names = Object.keys(contract);
+  const where = ` (${names.length === 1 ? 'route' : 'routes'} ${names.join(', ')})`;
+  const origins = options.redirectOrigins;
+  return {
+    redirectOrigins: origins === undefined ? null : resolveOrigins(origins, `route option redirectOrigins${where}`),
+    cors: resolveCors(options.cors, 'route option cors', where),
+    csrf: resolveCsrf(options.csrf, 'route option csrf', where),
+    csrfExempt: exemptNames(contract, exempt, where),
+  };
+}
+
 function toRouteRecords(
   contract: ContractRoutes,
   handlers: ErasedHandlers,
   bodyLimits: RouteLimits,
   timeouts: RouteLimits,
-  redirectOrigins: readonly string[] | null,
+  group: GroupOptions,
 ): RouteRecord[] {
   for (const name of Object.keys(bodyLimits)) {
     if (!Object.hasOwn(contract, name)) {
@@ -157,9 +212,34 @@ function toRouteRecords(
       handler,
       bodyLimit: routeBodyLimit(info, definition, Object.hasOwn(bodyLimits, name) ? bodyLimits[name] : undefined),
       timeoutMs: routeTimeout(info, Object.hasOwn(timeouts, name) ? timeouts[name] : undefined),
-      redirectOrigins,
+      redirectOrigins: group.redirectOrigins,
+      cors: group.cors,
+      csrf: group.csrf,
+      csrfExempt: group.csrfExempt.has(name),
     };
   });
+}
+
+// Why: A field is read once, so an accessor cannot show one value to the checks and register another.
+function snapshotRoute(definition: RouteDefinition): RouteDefinition {
+  const { method, path, params, query, headers, cookies, body, responses } = definition;
+  return Object.freeze({
+    method,
+    path,
+    responses: Object.freeze({ ...responses }),
+    ...(params === undefined ? {} : { params }),
+    ...(query === undefined ? {} : { query }),
+    ...(headers === undefined ? {} : { headers }),
+    ...(cookies === undefined ? {} : { cookies }),
+    ...(body === undefined ? {} : { body }),
+  });
+}
+
+// Does:  Copies a contract's route definitions once; the copies are what routes() checks and registers.
+function snapshotContract(contract: ContractRoutes): ContractRoutes {
+  return Object.freeze(
+    Object.fromEntries(Object.entries(contract).map(([name, definition]) => [name, snapshotRoute(definition)])),
+  );
 }
 
 export function createScope(state: ScopeState): Scope {
@@ -174,14 +254,14 @@ export function createScope(state: ScopeState): Scope {
     },
     routes(contract, handlers, options) {
       assertOpen(state, 'routes');
+      const routes = snapshotContract(contract);
       // Why: A contract object can reach routes() without having passed defineContract, so it is checked again here.
-      checkContract(contract);
+      checkContract(routes);
       // biome-ignore lint/nursery/noUnsafeTypeAssertion: the one erasure point; Handlers<C> is typed per route, the runtime reads handlers by name
       const erased = handlers as unknown as ErasedHandlers;
-      const origins = options?.redirectOrigins;
-      const redirectOrigins = origins === undefined ? null : resolveOrigins(origins, 'route option redirectOrigins');
+      const group = groupOptions(routes, options ?? {}, options?.csrfExempt);
       state.routes.push(
-        ...toRouteRecords(contract, erased, options?.bodyLimits ?? {}, options?.handlerTimeouts ?? {}, redirectOrigins),
+        ...toRouteRecords(routes, erased, options?.bodyLimits ?? {}, options?.handlerTimeouts ?? {}, group),
       );
     },
     addHook<K extends HookName>(name: K, hook: HookTypes[K]): void {

@@ -1,4 +1,4 @@
-// Does:  Runs one request through its stages in order: pre-route, onRequest, body, validation, preHandler, handler.
+// Does:  Runs one request through its stages: pre-route, cross-site check, onRequest, body, validation, handler.
 // Holds: A body declared over its route's limit condemns the connection before any onRequest hook runs.
 
 import { authorResult } from './author-result.ts';
@@ -6,13 +6,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { begin, contain, destroyed, end, event, leave, next, resume, routed, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { RouteInfo } from '../contract/types.ts';
+import { checkCrossOrigin } from '../csrf/check.ts';
 import type { RawCookies } from '../server/types.ts';
 import { type BodyOutcome, declaresOverLimit, readRouteBody } from './body.ts';
 import { stageBodyRefusal, stopRefusedPipeline } from './body-refusal.ts';
 import { clientAddressOf } from './client-address.ts';
 import { rawCookiesOf } from './cookies.ts';
 import { settle, signalOf } from './deadline.ts';
-import { fail } from './error-path.ts';
+import { fail, refuseCrossSite } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { RequestContextRecord, runStage, ValidatedContextRecord, watchCompletion } from './hooks.ts';
 import { preRoute } from './pre-route.ts';
@@ -179,7 +180,17 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
     return;
   }
   routed(exchange.route.info);
-  const { hooks } = exchange.route;
+  const { csrf, hooks } = exchange.route;
+  // Why: A refused request must reach no application code, so the check runs before onResponse observers attach.
+  if (csrf !== null) {
+    const { headers } = req;
+    const refused = checkCrossOrigin(headers.origin, headers['sec-fetch-site'], csrf);
+    if (refused !== null) {
+      refuseCrossSite(exchange, refused);
+      leave(diag);
+      return;
+    }
+  }
   if (hooks.onResponse.length > 0) {
     watchCompletion(exchange, hooks.onResponse);
   }

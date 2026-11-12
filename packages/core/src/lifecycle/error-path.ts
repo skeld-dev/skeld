@@ -4,6 +4,7 @@
 import { authorResult } from './author-result.ts';
 import { contain, count, destroyed, end, event, leave, next, resume, start, type Token } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
+import type { CsrfReason } from '../csrf/check.ts';
 import type { ErrorBody } from '../contract/types.ts';
 import type { ErrorContext } from '../server/types.ts';
 import { stageBodyRefusal } from './body-refusal.ts';
@@ -12,10 +13,12 @@ import { collectCookies } from './cookies.ts';
 import type { Exchange } from './exchange.ts';
 import { ErrorContextRecord, runObservers } from './hooks.ts';
 import { describeThrown, writeStderrLine } from './stderr.ts';
-import { INTERNAL_BODY, writeErrorBody } from './wire.ts';
+import { CROSS_ORIGIN_BODY, INTERNAL_BODY, writeErrorBody } from './wire.ts';
 
 const ERROR_BODY_MISMATCH = 'error body does not match the error schema; the fixed 500 body was written';
 const TIMEOUT_BODY: ErrorBody = { status: 503, code: 'TIMEOUT', message: 'Request timed out' };
+const PUBLIC_ORIGIN_HINT =
+  'cross-site check refused a request with Origin and no Sec-Fetch-Site; origin verification needs the publicOrigin option';
 
 // Does:  Reads a thrown value into an error body: the fixed 500 for a non-HttpError, null when reading it throws.
 function readThrown(value: unknown): ErrorBody | null {
@@ -115,6 +118,7 @@ function answer(exchange: Exchange, outcome: unknown, pending: Pending): void {
     body,
     exchange.closeConnection,
     cookies,
+    exchange.cors,
   );
   if (read === null || !matched) {
     report(exchange, INTERNAL_BODY.status, ERROR_BODY_MISMATCH);
@@ -236,7 +240,26 @@ export function expire(exchange: Exchange): void {
       stageBodyRefusal(req);
     }
     exchange.closeConnection = true;
-    writeErrorBody(exchange.runtime, res, exchange.method, TIMEOUT_BODY, true, null);
+    writeErrorBody(exchange.runtime, res, exchange.method, TIMEOUT_BODY, true, null, exchange.cors);
   }
   leave(exchange.diag);
+}
+
+// Does:  Answers a request the cross-site check refused with the fixed 403; no hook, error handler or handler runs.
+// Holds: Called before any hook of a running request; the connection closes because the body is unread.
+export function refuseCrossSite(exchange: Exchange, reason: CsrfReason): void {
+  const { req, res, route, runtime } = exchange;
+  event('refuse.csrf', reason);
+  // Why: Once per server, so refused requests cannot flood stderr; the diag event counts every one.
+  if (reason === 'unverifiable' && !runtime.notices.publicOrigin) {
+    runtime.notices.publicOrigin = true;
+    report(exchange, CROSS_ORIGIN_BODY.status, PUBLIC_ORIGIN_HINT);
+  }
+  settle(exchange, 'written');
+  end(exchange.stage);
+  if (route.readsBody && !req.complete) {
+    stageBodyRefusal(req);
+  }
+  exchange.closeConnection = true;
+  writeErrorBody(runtime, res, exchange.method, CROSS_ORIGIN_BODY, true, null, exchange.cors);
 }

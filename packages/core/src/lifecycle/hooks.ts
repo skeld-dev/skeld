@@ -58,7 +58,8 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
     setAuthorHeaders(res, reply.headers);
   }
   const head: OutgoingHttpHeaders = {};
-  finishHead(res, status, head, exchange.runtime.securityHeaders, exchange.route, exchange.pendingCookies);
+  const { runtime, route, pendingCookies, cors } = exchange;
+  finishHead(res, status, head, runtime.securityHeaders, route, pendingCookies, cors);
   end(exchange.stage);
   if (exchange.closeConnection || exchange.runtime.isClosing()) {
     res.setHeader('connection', 'close');

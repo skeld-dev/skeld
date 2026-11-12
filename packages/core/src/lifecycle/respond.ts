@@ -38,6 +38,7 @@ function writePayload(exchange: Exchange, status: number, serialized: string): v
       runtime.securityHeaders,
       exchange.route,
       exchange.pendingCookies,
+      exchange.cors,
     );
   } catch (error) {
     fail(exchange, error, true);
@@ -62,7 +63,15 @@ function writeEmpty(exchange: Exchange, status: number): void {
   }
   const head: OutgoingHttpHeaders = {};
   try {
-    finishHead(res, status, head, exchange.runtime.securityHeaders, exchange.route, exchange.pendingCookies);
+    finishHead(
+      res,
+      status,
+      head,
+      exchange.runtime.securityHeaders,
+      exchange.route,
+      exchange.pendingCookies,
+      exchange.cors,
+    );
   } catch (error) {
     fail(exchange, error, true);
     return;

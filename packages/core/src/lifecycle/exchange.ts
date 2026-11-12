@@ -4,6 +4,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Slot, Token } from '#diag';
 import type { CookieEntries } from '../cookie/parse.ts';
+import type { CorsGrant } from '../cors/grant.ts';
 import type { RouteParams } from '../router/types.ts';
 import type { RawCookies } from '../server/types.ts';
 import type { EngineRuntime, RouteRuntime } from './types.ts';
@@ -20,6 +21,7 @@ export interface Exchange {
   readonly query: string;
   readonly params: RouteParams;
   readonly diag: Slot;
+  readonly cors: CorsGrant | null;
   stage: Token;
   child: Token;
   state: ExchangeState;

@@ -16,7 +16,10 @@ export interface ResponseSchemas {
 
 /** One route of a contract: its method, its path and the schemas of its request parts and responses. */
 export interface RouteDefinition {
-  /** The HTTP method; a HEAD request is served by the GET route of the same path. */
+  /**
+   * The HTTP method; a HEAD request is served by the GET route of the same path.
+   * Any other value, such as `OPTIONS` or `HEAD`, is refused when the contract is declared (`TypeError`).
+   */
   readonly method: HttpMethod;
   /**
    * The path pattern: static segments, `:name` parameters and a final `*` wildcard.
@@ -124,6 +127,7 @@ export type EngineErrorCode =
   | 'URI_TOO_LONG'
   | 'UNSUPPORTED_MEDIA_TYPE'
   | 'TIMEOUT'
+  | 'CROSS_ORIGIN'
   | 'INTERNAL'
   | 'NETWORK'
   | 'INVALID_RESPONSE'

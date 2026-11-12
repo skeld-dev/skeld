@@ -1,4 +1,4 @@
-// Does:  Proves that an engine-written error drops author-set headers except the CORS set and vary.
+// Does:  Proves an engine-written error carries no author header and, under a CORS policy, only the engine's grant.
 // Holds: Checked on 400, 413 and 500 responses the engine writes, over raw sockets.
 
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ import { check, conclude, parseRaw, rawExchange, type RawResponse } from './supp
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'an engine-written 400, 413 and 500 keep the hook access-control-allow-origin and vary, carry no set-cookie, cache-control or custom header and no name outside the seven kept names, with a current date; the 200, a declared 404 and a context.send 401 carry every header set for them';
+  'an engine-written 400, 413 and 500 under a CORS policy carry exactly the engine access-control-allow-origin and vary Origin and no set-cookie, cache-control or custom header and no name outside the seven kept names, with a current date; the 200, a declared 404 and a context.send 401 carry every header set for them';
 const origin = 'https://app.example';
 const hookDate = 'Thu, 01 Jan 1970 00:00:00 GMT';
 const keptNames = new Set([
@@ -23,9 +23,9 @@ const keptNames = new Set([
   'x-frame-options',
   'cache-control',
 ]);
-const keptByHook = new Map([
+const engineGrant = new Map([
   ['access-control-allow-origin', origin],
-  ['vary', 'origin'],
+  ['vary', 'Origin'],
 ]);
 const dateSlackMs = 10_000;
 
@@ -59,10 +59,8 @@ function pastTypes(value: unknown): never {
 }
 
 async function serve(): Promise<void> {
-  const server = createServer();
+  const server = createServer({ cors: { origins: [origin] } });
   server.addHook('onRequest', (context) => {
-    context.setHeader('access-control-allow-origin', origin);
-    context.setHeader('vary', 'origin');
     context.setCookie({ name: 'hook', value: '1' });
     context.setHeader('cache-control', 'public, max-age=600');
     context.setHeader('x-canary', 'hook');
@@ -98,14 +96,14 @@ function describe(response: RawResponse): string {
 
 function checkEngineError(problems: string[], label: string, response: RawResponse, status: number): void {
   check(problems, response.status === status, `${label} answered ${response.status}, not ${status}`);
-  for (const [name, value] of keptByHook) {
+  for (const [name, value] of engineGrant) {
     check(
       problems,
       response.headers.get(name) === value,
       `${label} ${name} was ${response.headers.get(name)}, not ${value}`,
     );
   }
-  const stray = [...response.headers.keys()].filter((name) => !keptByHook.has(name) && !keptNames.has(name));
+  const stray = [...response.headers.keys()].filter((name) => !engineGrant.has(name) && !keptNames.has(name));
   check(problems, stray.length === 0, `${label} carries names outside the kept seven: ${stray.join(', ')}`);
   const date = Date.parse(response.headers.get('date') ?? '');
   check(
@@ -125,7 +123,7 @@ function checkKept(
   check(problems, response.status === status, `${label} answered ${response.status}, not ${status}`);
   const expected = new Map<string, string>([
     ['access-control-allow-origin', origin],
-    ['vary', 'origin'],
+    ['vary', 'Origin'],
     ['set-cookie', 'hook=1; Path=/; HttpOnly; Secure; SameSite=Lax'],
     ['cache-control', 'public, max-age=600'],
     ['x-canary', 'hook'],
@@ -147,14 +145,14 @@ async function prove(): Promise<void> {
   const log: string[] = [];
   const { port } = child;
   const get = (path: string, method = 'GET') =>
-    rawExchange(port, `${method} ${path} HTTP/1.1\r\nhost: x\r\nconnection: close\r\n\r\n`);
+    rawExchange(port, `${method} ${path} HTTP/1.1\r\nhost: x\r\nconnection: close\r\norigin: ${origin}\r\n\r\n`);
   try {
     const bigBody = JSON.stringify({ text: 'x'.repeat(1000) });
     const [bad, big, boom, fine, gone, guarded, head] = await Promise.all([
       get('/val'),
       rawExchange(
         port,
-        `POST /big HTTP/1.1\r\nhost: x\r\nconnection: close\r\ncontent-type: application/json\r\ncontent-length: ${bigBody.length}\r\n\r\n${bigBody}`,
+        `POST /big HTTP/1.1\r\nhost: x\r\nconnection: close\r\norigin: ${origin}\r\nsec-fetch-site: same-origin\r\ncontent-type: application/json\r\ncontent-length: ${bigBody.length}\r\n\r\n${bigBody}`,
       ),
       get('/boom'),
       get('/fine'),

@@ -18,7 +18,7 @@ export interface HttpErrorOptions {
 | `cookies` | The cookies the error's response sets, checked as a reply's are; one invalid cookie makes it the fixed 500. |
 | `cause`   | The underlying cause, kept on the error and never written to the client.                                    |
 
-Source: `packages/core/src/contract/types.ts:94`
+Source: `packages/core/src/contract/types.ts:97`
 
 ## OutgoingCookie
 
@@ -52,7 +52,7 @@ export interface OutgoingCookie {
 | `sameSite`    | Which cross-site requests carry it (default `Lax`).                                                                                  |
 | `partitioned` | Whether it is keyed to the top-level site it was set under (default false).                                                          |
 
-Source: `packages/core/src/contract/types.ts:72`
+Source: `packages/core/src/contract/types.ts:75`
 
 ## HttpError
 

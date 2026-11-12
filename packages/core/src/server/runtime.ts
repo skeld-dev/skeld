@@ -5,6 +5,8 @@ import type { BlockList } from 'node:net';
 import { declare, end, mark, start } from '#diag';
 import { parsePath } from '../contract/path.ts';
 import type { RouteDefinition, RouteInfo } from '../contract/types.ts';
+import { type CorsRoute, corsRoute } from '../cors/grant.ts';
+import { type CsrfRoute, csrfRoute, isUnsafeMethod } from '../csrf/check.ts';
 import { createDeadlines, type Deadlines } from '../lifecycle/deadline.ts';
 import { expire } from '../lifecycle/error-path.ts';
 import type { EngineRuntime, HookChains, RouteRuntime } from '../lifecycle/types.ts';
@@ -75,6 +77,37 @@ function extendErrorHandlers(parent: readonly ErrorHandler[], state: ScopeState)
   return Object.freeze(state.errorHandler === null ? parent : [state.errorHandler, ...parent]);
 }
 
+function routeCors(route: RouteRecord, options: ResolvedServerOptions): CorsRoute | null {
+  const policy = route.cors ?? options.cors;
+  return policy === false || policy === null ? null : corsRoute(policy, route.definition);
+}
+
+// Does:  Builds the cross-site check of a route; null for a safe method or an exempt route, which are never checked.
+function routeCsrf(route: RouteRecord, plugin: string | null, options: ResolvedServerOptions): CsrfRoute | null {
+  const { info } = route;
+  if (route.csrf?.strict === true && options.publicOrigin.length === 0) {
+    throw new BootError(
+      'INVALID_OPTION',
+      `Invalid route option csrf.mode (route ${info.name}): strict needs the server option publicOrigin`,
+      info,
+      plugin,
+    );
+  }
+  // Why: A group's policy replaces the server's whole, so an unstated mode would silently weaken a strict server.
+  if (options.csrf.strict && route.csrf !== null && !route.csrf.modeStated) {
+    throw new BootError(
+      'INVALID_OPTION',
+      `Invalid route option csrf.mode (route ${info.name}): must be stated, because the server's csrf mode is strict`,
+      info,
+      plugin,
+    );
+  }
+  if (route.csrfExempt || !isUnsafeMethod(info.method)) {
+    return null;
+  }
+  return csrfRoute(route.csrf ?? options.csrf, options.publicOrigin);
+}
+
 function toRouteRuntime(
   route: RouteRecord,
   state: ScopeState,
@@ -124,6 +157,8 @@ function toRouteRuntime(
     readsBody: definition.body !== undefined,
     timeoutMs,
     redirectOrigins: route.redirectOrigins ?? options.redirectOrigins,
+    cors: routeCors(route, options),
+    csrf: routeCsrf(route, plugin, options),
     waiting: deadlines.queue(timeoutMs),
     hooks,
     errorHandlers,
@@ -139,11 +174,13 @@ function addScope(
   parentErrorHandlers: readonly ErrorHandler[],
   options: ResolvedServerOptions,
   deadlines: Deadlines,
-): void {
+): boolean {
+  let anyCors = false;
   const hooks = extendChains(parentHooks, state);
   const errorHandlers = extendErrorHandlers(parentErrorHandlers, state);
   for (const route of state.routes) {
     const runtime = toRouteRuntime(route, state, hooks, errorHandlers, options, deadlines);
+    anyCors ||= runtime.cors !== null;
     const { info } = route;
     const added = router.add(info.method, info.path, parsePath(info.path), runtime);
     if (added.kind === 'duplicate') {
@@ -160,8 +197,9 @@ function addScope(
     end(declared);
   }
   for (const child of state.children) {
-    addScope(router, child.state, hooks, errorHandlers, options, deadlines);
+    anyCors = addScope(router, child.state, hooks, errorHandlers, options, deadlines) || anyCors;
   }
+  return anyCors;
 }
 
 export function buildRuntime(
@@ -180,7 +218,7 @@ export function buildRuntime(
     }
     const router = createRouter<RouteRuntime>();
     const deadlines = createDeadlines(expire);
-    addScope(router, root, NO_HOOKS, [], options, deadlines);
+    const preflight = addScope(router, root, NO_HOOKS, [], options, deadlines);
     const errorSerializerSpan = start('boot.error_serializer');
     mark();
     const errorSerializer = getErrorBodySerializer();
@@ -194,6 +232,8 @@ export function buildRuntime(
       deadlines,
       trustProxy,
       securityHeaders: options.securityHeaders,
+      preflight,
+      notices: { publicOrigin: false },
     });
   } finally {
     end(span);

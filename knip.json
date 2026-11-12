@@ -11,7 +11,7 @@
     },
     "examples/*": {},
     "benchmarks": {
-      "entry": ["servers/*.ts", "diag/scenario-server.ts"]
+      "entry": ["servers/*.ts", "diag/scenario-server.ts", "browser-costs.ts", "browser-server.ts"]
     },
     "tests": {
       "entry": ["acceptance/*.ts", "type-cost/*.ts", "schema/*.ts"]

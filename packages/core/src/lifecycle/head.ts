@@ -1,8 +1,9 @@
-// Does:  Completes every response head the engine writes: redirect check, Set-Cookie lines, security headers.
+// Does:  Completes every response head the engine writes: redirect check, Set-Cookie lines, CORS, security headers.
 // Holds: A refused Location throws with nothing added to the head and no Location left on the response.
 
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { event } from '#diag';
+import { type CorsGrant, writeGrant } from '../cors/grant.ts';
 import { checkRedirect } from '../redirect/redirect.ts';
 import type { RouteRuntime } from './types.ts';
 
@@ -40,6 +41,7 @@ export function finishHead(
   securityHeaders: boolean,
   route: RouteRuntime | null,
   cookies: ReadonlyMap<string, string> | null,
+  cors: CorsGrant | null,
 ): void {
   if (route !== null && status >= FIRST_REDIRECT && status <= LAST_REDIRECT) {
     checkLocation(res, route);
@@ -47,6 +49,9 @@ export function finishHead(
   // Why: One field line per cookie; a comma-joined Set-Cookie cannot be split back apart (RFC 9110 section 5.3).
   if (cookies !== null && cookies.size > 0) {
     head['set-cookie'] = [...cookies.values()];
+  }
+  if (cors !== null) {
+    writeGrant(res, head, cors);
   }
   if (securityHeaders) {
     for (const [name, value] of SECURITY_HEADERS) {

@@ -17,6 +17,9 @@ export type { Empty, OutgoingCookie, RouteInfo } from '../contract/types.ts';
 export type {
   AuthorHeaderName,
   CompletedContext,
+  CorsHeaderName,
+  CorsPolicy,
+  CsrfPolicy,
   ErrorContext,
   ErrorHandler,
   Handler,
@@ -49,7 +52,7 @@ export type {
 
 /**
  * Creates a server, the root scope of a service; nothing listens until `listen`.
- * Throws BootError `INVALID_OPTION` for an option out of range, a `headersTimeout` above `requestTimeout` or a bad `trustProxy` or `redirectOrigins` entry.
+ * Throws BootError `INVALID_OPTION` for an option out of range or malformed, or `csrf.mode: 'strict'` without `publicOrigin`.
  * @example const server = createServer({ bodyLimit: 65_536 }); await server.listen({ port: 0 }); await server.close();
  */
 export function createServer(options: ServerOptions = {}): Server {

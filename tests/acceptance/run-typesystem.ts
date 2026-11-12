@@ -31,6 +31,8 @@ const scripts = [
   'cookie-read.ts',
   'cookie-contract.ts',
   'cookie-write.ts',
+  'cors.ts',
+  'csrf.ts',
 ];
 
 let failed = 0;

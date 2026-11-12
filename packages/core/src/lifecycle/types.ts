@@ -1,8 +1,10 @@
 // Does:  Declares the shapes the lifecycle shares: the handler's request and reply, hook chains and route runtime.
-// Holds: A route's runtime and hook chains are frozen at listen; a request changes only the route's waiting queue.
+// Holds: Route runtimes and hook chains are frozen at listen; a request changes only waiting queues and notices.
 
 import type { BlockList } from 'node:net';
 import type { OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
+import type { CorsRoute } from '../cors/grant.ts';
+import type { CsrfRoute } from '../csrf/check.ts';
 import type { Router } from '../router/types.ts';
 import type { RequestValidators, ResponseSerializers, Serializer } from '../compile/types.ts';
 import type {
@@ -54,6 +56,8 @@ export interface RouteRuntime {
   readonly readsBody: boolean;
   readonly timeoutMs: number;
   readonly redirectOrigins: readonly string[];
+  readonly cors: CorsRoute | null;
+  readonly csrf: CsrfRoute | null;
   readonly waiting: Set<Exchange>;
   readonly hooks: HookChains;
   readonly errorHandlers: readonly ErrorHandler[];
@@ -69,4 +73,11 @@ export interface EngineRuntime {
   readonly deadlines: Deadlines;
   readonly trustProxy: BlockList | null;
   readonly securityHeaders: boolean;
+  readonly preflight: boolean;
+  readonly notices: Notices;
+}
+
+// Does:  The operator notices a server writes once in its life, each marked here once written.
+export interface Notices {
+  publicOrigin: boolean;
 }

@@ -1,4 +1,4 @@
-// Does:  Proves the nine engine-owned response headers are refused at four author sites and ordinary headers pass.
+// Does:  Proves the fifteen engine-owned response headers are refused at four author sites and ordinary headers pass.
 // Holds: Responses are read as raw socket bytes, so a duplicate or an application framing header cannot hide.
 
 import { spawnSync } from 'node:child_process';
@@ -12,7 +12,7 @@ import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 
 const statement =
-  'each of the nine engine-owned headers, lower or mixed case, set at an onRequest, preHandler or onSend hook, a hook send or a handler reply answers the fixed 500 INTERNAL with no application header and no application value on the wire, ordinary headers pass at the same four sites, a reserved name fails to compile at setHeader, a reply and a send while ordinary names compile, and the next connection is answered';
+  'each of the fifteen engine-owned headers, lower or mixed case, set at an onRequest, preHandler or onSend hook, a hook send or a handler reply answers the fixed 500 INTERNAL with no application header and no application value on the wire, ordinary headers pass at the same four sites, a reserved name fails to compile at setHeader, a reply and a send while ordinary names compile, and the next connection is answered';
 
 const reserved: Record<string, string> = {
   'transfer-encoding': 'chunked',
@@ -24,6 +24,12 @@ const reserved: Record<string, string> = {
   trailer: 'x-trailer-probe',
   upgrade: 'websocket',
   'set-cookie': 'sid=abc; Path=/; HttpOnly',
+  'access-control-allow-origin': 'https://evil.example',
+  'access-control-allow-credentials': 'true',
+  'access-control-expose-headers': 'x-probe-expose',
+  'access-control-allow-methods': 'PURGE',
+  'access-control-allow-headers': 'x-probe-allow',
+  'access-control-max-age': '99999',
 };
 const ordinary: Record<string, string> = {
   'x-request-id': 'req-7f3a',
@@ -181,7 +187,21 @@ const server = createServer();
 function reply(headers: string): string {
   return `${replyHeader}server.routes(contract, { item: () => ({ status: 200, body: { ok: true }, headers: ${headers} }) });\n`;
 }
+const corsNames = Object.keys(reserved).filter((name) => name.startsWith('access-control-'));
 const probes: { name: string; source: string; compiles: boolean }[] = [
+  ...corsNames.flatMap((name) => [
+    {
+      name: `setHeader ${name}`,
+      source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('${name}', 'x'); });\n`,
+      compiles: false,
+    },
+    { name: `reply headers ${name}`, source: reply(`{ '${name}': 'x' }`), compiles: false },
+    {
+      name: `send headers ${name}`,
+      source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { '${name}': 'x' } }); });\n`,
+      compiles: false,
+    },
+  ]),
   {
     name: 'setHeader transfer-encoding',
     source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('transfer-encoding', 'chunked'); });\n`,

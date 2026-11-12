@@ -1,12 +1,14 @@
-// Does:  Checks request framing, splits the target and finds the route, before any hook runs.
+// Does:  Checks request framing, splits the target, answers a CORS preflight and finds the route, before any hook runs.
 // Holds: A framing fault is answered 400 and the connection is closed.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { count, destroyed, end, event, next, type Slot, start } from '#diag';
 import type { EngineErrorCode } from '../contract/types.ts';
+import { grantOf } from '../cors/grant.ts';
 import { checkFraming } from '../request/framing.ts';
 import { splitTarget } from '../request/target.ts';
 import type { Exchange } from './exchange.ts';
+import { answerPreflight } from './preflight.ts';
 import type { EngineRuntime } from './types.ts';
 import { writeErrorBody } from './wire.ts';
 
@@ -24,7 +26,7 @@ function refuse(
   message: string,
   close: boolean,
 ): null {
-  writeErrorBody(runtime, res, method, { status, code, message }, close, null);
+  writeErrorBody(runtime, res, method, { status, code, message }, close, null, null);
   return null;
 }
 
@@ -55,6 +57,10 @@ export function preRoute(
   const target = start('req.preroute.target');
   const { path, query } = splitTarget(url);
   end(target);
+  if (runtime.preflight && method === 'OPTIONS' && answerPreflight(runtime, req, res, path)) {
+    end(stage);
+    return null;
+  }
   stage = next(stage, 'req.route.find');
   // Why: HEAD is served by the GET route; the body is dropped where the response is written.
   const found = runtime.router.find(method === 'HEAD' ? 'GET' : method, path, runtime.maxParamLength);
@@ -70,6 +76,7 @@ export function preRoute(
         query,
         params: found.params,
         diag,
+        cors: found.value.cors === null ? null : grantOf(found.value.cors, req.headers.origin),
         stage,
         child: 0,
         state: 'running',

@@ -12,19 +12,21 @@ import { startDiagChild } from './support-diag.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'a local path in a 3xx Location is sent as written; //host, /\\host, /<tab>/host, /.//host, a control character, surrounding whitespace, javascript:, userinfo, an http URL when only its https origin is listed, another port and a subdomain each become the fixed 500 with no Location on the wire; any value starting // is refused whatever host follows; a hook send with a status that is not an integer from 200 to 599 throws and puts nothing of its reply on the wire; a listed origin passes on its group only; a Location set by a hook setHeader, send or onSend is checked the same way; stderr and the diag record hold the route and a reason and never the target; checkRedirect gives the engine verdict for every case; a 201 Location is untouched';
+  'a local path in a 3xx Location is sent as written; //host, /\\host, /<tab>/host, /.//host, a control character, surrounding whitespace, javascript:, userinfo, an http URL when only its https origin is listed, another port and a subdomain each become the fixed 500 with no Location on the wire; any value starting // is refused whatever host follows; a hook send with a status that is not an integer from 200 to 599 throws and puts nothing of its reply on the wire; an absolute redirect to the publicOrigin is the fixed 500 unless that origin is in redirectOrigins, and a local path needs neither; a listed origin passes on its group only; a Location set by a hook setHeader, send or onSend is checked the same way; stderr and the diag record hold the route and a reason and never the target; checkRedirect gives the engine verdict for every case; a 201 Location is untouched';
 
 const fixed500 = '{"status":500,"code":"INTERNAL","message":"Internal Server Error"}';
 const defaultOrigin = 'https://default.example';
 const idOrigin = 'https://id.example.com';
+const publicOrigin = 'https://api.example';
 const noOrigins: readonly string[] = [];
 const groups = {
   A: { prefix: 'a', origins: [defaultOrigin] },
   B: { prefix: 'b', origins: [idOrigin] },
   C: { prefix: 'c', origins: noOrigins },
+  D: { prefix: 'd', origins: [publicOrigin] },
 } as const;
 type GroupKey = keyof typeof groups;
-const groupKeys: readonly GroupKey[] = ['A', 'B', 'C'];
+const groupKeys: readonly GroupKey[] = ['A', 'B', 'C', 'D'];
 const marker = `zq${randomBytes(6).toString('hex')}`;
 
 function contractFor(prefix: string) {
@@ -76,7 +78,7 @@ function sendBadStatus(context: RequestContext): void {
 }
 
 async function serve(): Promise<void> {
-  const server = createServer({ redirectOrigins: [defaultOrigin] });
+  const server = createServer({ redirectOrigins: [defaultOrigin], publicOrigin });
   server.addHook('onRequest', (context) => {
     if (context.route.name === 'hookset') {
       context.setHeader('location', target(context.headers));
@@ -123,7 +125,7 @@ interface Case {
   passesIn: readonly GroupKey[];
 }
 
-const everywhere: readonly GroupKey[] = ['A', 'B', 'C'];
+const everywhere: readonly GroupKey[] = ['A', 'B', 'C', 'D'];
 const nowhere: readonly GroupKey[] = [];
 const cases: Case[] = [
   { label: 'local path', value: '/home', passesIn: everywhere },
@@ -157,6 +159,8 @@ const cases: Case[] = [
   { label: 'userinfo with password', value: `${idOrigin.replace('//', `//user:${marker}@`)}/cb`, passesIn: nowhere },
   { label: 'listed origin, path and query', value: `${idOrigin}/cb?x=1`, passesIn: ['B'] },
   { label: 'listed origin, no path', value: idOrigin, passesIn: ['B'] },
+  { label: 'publicOrigin, not in redirectOrigins', value: `${publicOrigin}/cb`, passesIn: ['D'] },
+  { label: 'publicOrigin, no path', value: publicOrigin, passesIn: ['D'] },
   { label: 'server default origin', value: `${defaultOrigin}/x`, passesIn: ['A'] },
   { label: 'http when https is listed', value: `http://id.example.com/${marker}`, passesIn: nowhere },
   { label: 'another port', value: `${idOrigin}:8443/${marker}`, passesIn: nowhere },

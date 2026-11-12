@@ -3,6 +3,8 @@
 
 import type { HttpError } from '../contract/http-error.ts';
 import type { ContractRoutes, Empty, OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
+import type { ResolvedCors } from '../cors/policy.ts';
+import type { ResolvedCsrf } from '../csrf/policy.ts';
 import type { Infer, Schema, Wire } from '../schema/types.ts';
 
 /**
@@ -57,9 +59,52 @@ export interface ServerOptions {
   readonly securityHeaders?: boolean;
   /**
    * Origins an absolute redirect `Location` may name, each exactly as `new URL(x).origin` writes it (default none).
-   * Local paths are always allowed; a malformed entry is refused with BootError `INVALID_OPTION`.
+   * Local paths are always allowed; `publicOrigin` is not added; a malformed entry is BootError `INVALID_OPTION`.
    */
   readonly redirectOrigins?: readonly string[];
+  /**
+   * The cross-origin policy of every route, unless a `routes()` group sets its own (default none: no CORS header).
+   * A malformed origin, `'*'` with `credentials`, an empty list or a bad header name is refused with BootError `INVALID_OPTION`.
+   */
+  readonly cors?: CorsPolicy | false;
+  /**
+   * The origins the service is reached at, each exactly as `new URL(x).origin` writes it (default none).
+   * The cross-site check passes an unsafe request whose `Origin` is one of them; a malformed one is BootError `INVALID_OPTION`.
+   */
+  readonly publicOrigin?: string | readonly string[];
+  /**
+   * The cross-site check on POST, PUT, PATCH and DELETE, unless a `routes()` group sets its own (default `baseline`).
+   * A refused request is answered 403 `CROSS_ORIGIN`; `strict` without `publicOrigin` is BootError `INVALID_OPTION`.
+   */
+  readonly csrf?: CsrfPolicy;
+}
+
+/**
+ * Which browser origins may read a route's responses; it never refuses a request, the cross-site check does.
+ * @example createServer({ cors: { origins: ['https://app.example'], credentials: true } })
+ */
+export interface CorsPolicy {
+  /** The allowed origins, each exactly as `new URL(x).origin` writes it, or `'*'` for any origin without credentials. */
+  readonly origins: '*' | readonly string[];
+  /** Whether a granted response lets the page send and read credentials such as cookies (default false). */
+  readonly credentials?: boolean;
+  /** Request header names a preflight allows beyond the route's declared headers and `content-type` (default none). */
+  readonly allowedHeaders?: readonly string[];
+  /** Response header names a granted page may read beyond the CORS-safelisted ones (default none). */
+  readonly exposedHeaders?: readonly string[];
+  /** How long a browser may cache a preflight answer, in whole seconds from 0 to 86,400 (default 600). */
+  readonly maxAgeSeconds?: number;
+}
+
+/**
+ * The cross-site check on unsafe methods: `Origin` against the allowed origins, then `Sec-Fetch-Site`.
+ * @example createServer({ publicOrigin: 'https://api.example', csrf: { mode: 'strict' } })
+ */
+export interface CsrfPolicy {
+  /** `baseline` passes a request with neither `Origin` nor `Sec-Fetch-Site`; `strict` refuses it (default `baseline`). */
+  readonly mode?: 'baseline' | 'strict';
+  /** Other origins whose pages may send unsafe requests, besides `publicOrigin`; CORS origins are not added (default none). */
+  readonly trustedOrigins?: readonly string[];
 }
 
 export interface ResolvedServerOptions {
@@ -75,6 +120,9 @@ export interface ResolvedServerOptions {
   readonly handlerTimeoutMs: number;
   readonly securityHeaders: boolean;
   readonly redirectOrigins: readonly string[];
+  readonly cors: ResolvedCors | null;
+  readonly publicOrigin: readonly string[];
+  readonly csrf: ResolvedCsrf;
 }
 
 /** Request headers by lower-case name, as the HTTP parser gives them. */
@@ -90,7 +138,16 @@ export interface RawCookies {
   getAll(name: string): readonly string[];
 }
 
-/** A response header name the engine owns: a framing or connection field, or `set-cookie`, which no author may set. */
+/** A CORS response header name, which only the `cors` option sets. */
+export type CorsHeaderName =
+  | 'access-control-allow-origin'
+  | 'access-control-allow-credentials'
+  | 'access-control-expose-headers'
+  | 'access-control-allow-methods'
+  | 'access-control-allow-headers'
+  | 'access-control-max-age';
+
+/** A response header name the engine owns: a framing or connection field, `set-cookie` or a CORS header. */
 export type ReservedHeaderName =
   | 'transfer-encoding'
   | 'content-length'
@@ -100,20 +157,23 @@ export type ReservedHeaderName =
   | 'te'
   | 'trailer'
   | 'upgrade'
-  | 'set-cookie';
+  | 'set-cookie'
+  | CorsHeaderName;
 
 /** A header name an author may set: the name itself, or a message type naming it when it is a `ReservedHeaderName`. */
 export type AuthorHeaderName<N extends string> = N extends unknown
   ? Lowercase<N> extends ReservedHeaderName
     ? Lowercase<N> extends 'set-cookie'
       ? `${N} is reserved for the engine: use setCookie or the reply's cookies`
-      : `${N} is reserved for the engine`
+      : Lowercase<N> extends CorsHeaderName
+        ? `${N} is reserved for the engine: use the cors option`
+        : `${N} is reserved for the engine`
     : N
   : never;
 
 /**
  * Response headers to set, by name.
- * The engine owns `transfer-encoding`, `content-length`, `connection`, `keep-alive`, `proxy-connection`, `te`, `trailer`, `upgrade` and `set-cookie`: a lower-case key among them fails to compile, and one in any letter case at runtime is answered with the fixed 500.
+ * A `ReservedHeaderName` (framing, connection, `set-cookie`, `access-control-*`) fails to compile as a lower-case key; in any letter case at runtime it is answered with the fixed 500.
  */
 export type OutgoingHeaders = { readonly [name: string]: string | number | readonly string[] } & {
   readonly [K in ReservedHeaderName]?: never;
@@ -143,7 +203,7 @@ export interface RouteRequest<R extends RouteDefinition> {
 
 /**
  * What a handler returns: a declared status, its body and optional headers.
- * Keys the response schema does not declare are not written; on an error response the engine writes, only the CORS response headers and `vary` in `headers` are kept.
+ * Keys the response schema does not declare are not written; an error response the engine writes keeps none of `headers`.
  */
 export type RouteReply<R extends RouteDefinition> = {
   [S in keyof R['responses']]: R['responses'][S] extends Schema
@@ -192,6 +252,21 @@ export interface RoutesOptions<C extends ContractRoutes> {
    * `routes` throws BootError `INVALID_OPTION` for an entry that is not exactly an http or https origin.
    */
   readonly redirectOrigins?: readonly string[];
+  /**
+   * The cross-origin policy of these routes, replacing the server's `cors` whole; `false` turns it off for them.
+   * `routes` throws BootError `INVALID_OPTION` for a policy the server option would refuse.
+   */
+  readonly cors?: CorsPolicy | false;
+  /**
+   * The cross-site check of these routes, replacing the server's `csrf` whole, never merged.
+   * `listen` throws BootError `INVALID_OPTION` for `strict` without `publicOrigin`, or no `mode` under a strict server.
+   */
+  readonly csrf?: CsrfPolicy;
+  /**
+   * Route names the cross-site check skips, such as a webhook that proves its sender another way.
+   * `routes` throws BootError `INVALID_OPTION` for a name not in the contract.
+   */
+  readonly csrfExempt?: readonly (keyof C)[];
 }
 
 /** A reply a hook sends with `context.send`. */
@@ -222,7 +297,7 @@ export interface RequestContext {
   readonly rawCookies: RawCookies;
   /**
    * Sets a header on the response.
-   * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; on an error response the engine writes, only the CORS response headers and `vary` are kept.
+   * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; an error response the engine writes keeps no header set here.
    */
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
   /**
@@ -267,7 +342,7 @@ export interface ResponseContext {
   readonly status: number;
   /**
    * Sets a header on the response.
-   * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; on an error response the engine writes, only the CORS response headers and `vary` are kept.
+   * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; an error response the engine writes keeps no header set here.
    */
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
   /**
@@ -328,7 +403,7 @@ export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>
 export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 /**
  * A hook run once the response is done or its connection closed, to observe the outcome.
- * A throw is written to stderr and changes nothing; it does not run after a hook replied with `send`.
+ * A throw is written to stderr and changes nothing; it does not run after `send` or a cross-site refusal.
  */
 export type OnResponseHook = (context: CompletedContext) => void | Promise<void>;
 /**

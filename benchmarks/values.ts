@@ -36,6 +36,8 @@ export const preflightTimeoutMs = 2000;
 export const expectedBody = '{"hello":"world"}';
 export const expectedMediaType = 'application/json';
 export const stderrTailLines = 20;
+export const publicOrigin = 'http://bench.test';
+export const browserOrigin = 'http://app.bench.test';
 
 export const busyLoadAverage = 1.0;
 export const protocolNode = 'v26.13.0';

@@ -10,7 +10,7 @@ export interface ContractRoutes {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:56`
+Source: `packages/core/src/contract/types.ts:59`
 
 ## Empty
 
@@ -22,7 +22,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:133`
+Source: `packages/core/src/contract/types.ts:137`
 
 ## EngineErrorCode
 
@@ -37,13 +37,14 @@ export type EngineErrorCode =
   | 'URI_TOO_LONG'
   | 'UNSUPPORTED_MEDIA_TYPE'
   | 'TIMEOUT'
+  | 'CROSS_ORIGIN'
   | 'INTERNAL'
   | 'NETWORK'
   | 'INVALID_RESPONSE'
   | 'RESPONSE_TOO_LARGE';
 ```
 
-Source: `packages/core/src/contract/types.ts:119`
+Source: `packages/core/src/contract/types.ts:122`
 
 ## ErrorBody
 
@@ -65,7 +66,7 @@ export interface ErrorBody {
 | `message` | A message for people.                                          |
 | `details` | The validation details, when the error has them.               |
 
-Source: `packages/core/src/contract/types.ts:104`
+Source: `packages/core/src/contract/types.ts:107`
 
 ## ErrorDetail
 
@@ -83,7 +84,7 @@ export interface ErrorDetail {
 | `path`    | The JSON pointer of the failing value, starting with the part, as in `/body/name`. |
 | `message` | What is wrong; it never holds the received value.                                  |
 
-Source: `packages/core/src/contract/types.ts:61`
+Source: `packages/core/src/contract/types.ts:64`
 
 ## HttpMethod
 

@@ -3,6 +3,8 @@
 
 import { BlockList, isIP } from 'node:net';
 import { end, start } from '#diag';
+import { resolveCors } from '../cors/policy.ts';
+import { BASELINE, resolveCsrf, resolvePublicOrigin } from '../csrf/policy.ts';
 import { parseOrigin } from '../origin/origin.ts';
 import { BootError } from './boot-error.ts';
 import type { ListenOptions, ResolvedServerOptions, ServerOptions } from './types.ts';
@@ -21,9 +23,15 @@ const DEFAULTS: ResolvedServerOptions = {
   handlerTimeoutMs: 30_000,
   securityHeaders: true,
   redirectOrigins: Object.freeze([]),
+  cors: null,
+  publicOrigin: Object.freeze([]),
+  csrf: BASELINE,
 };
 
-type LimitOption = Exclude<keyof ResolvedServerOptions, 'securityHeaders' | 'redirectOrigins'>;
+type LimitOption = Exclude<
+  keyof ResolvedServerOptions,
+  'securityHeaders' | 'redirectOrigins' | 'cors' | 'publicOrigin' | 'csrf'
+>;
 
 // Why: Node's timers take a 32-bit signed delay and fire after 1 ms for anything larger (TimeoutOverflowWarning).
 export const MAX_TIMER_MS = 2_147_483_647;
@@ -67,11 +75,14 @@ export function resolveServerOptions(options: ServerOptions): ResolvedServerOpti
       // biome-ignore lint/security/noSecrets: an option name, flagged only for the entropy of its letters
       handlerTimeoutMs: positiveInteger('handlerTimeoutMs', options.handlerTimeoutMs, MAX_TIMER_MS),
       securityHeaders: resolveSecurityHeaders(options.securityHeaders),
-      redirectOrigins:
-        options.redirectOrigins === undefined
-          ? DEFAULTS.redirectOrigins
-          : resolveOrigins(options.redirectOrigins, 'server option redirectOrigins'),
+      redirectOrigins: resolveRedirectOrigins(options.redirectOrigins),
+      cors: resolveCors(options.cors, 'server option cors', '') || null,
+      publicOrigin: resolvePublicOrigin(options.publicOrigin),
+      csrf: resolveCsrf(options.csrf, 'server option csrf', '') ?? DEFAULTS.csrf,
     };
+    if (resolved.csrf.strict && resolved.publicOrigin.length === 0) {
+      throw invalidOption('Invalid server option csrf.mode: strict needs the server option publicOrigin');
+    }
     if (resolved.headersTimeout > resolved.requestTimeout) {
       throw invalidOption(
         `Invalid server option headersTimeout: must not exceed requestTimeout (${resolved.headersTimeout} > ${resolved.requestTimeout})`,
@@ -81,6 +92,10 @@ export function resolveServerOptions(options: ServerOptions): ResolvedServerOpti
   } finally {
     end(span);
   }
+}
+
+function resolveRedirectOrigins(entries: readonly string[] | undefined): readonly string[] {
+  return entries === undefined ? DEFAULTS.redirectOrigins : resolveOrigins(entries, 'server option redirectOrigins');
 }
 
 function resolveSecurityHeaders(value: boolean | undefined): boolean {

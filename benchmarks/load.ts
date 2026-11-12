@@ -12,7 +12,7 @@ interface AutocannonOptions {
   readonly pipelining: number;
   readonly duration: number;
   readonly workers: number;
-  readonly method?: 'POST';
+  readonly method?: 'POST' | 'OPTIONS';
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
 }
@@ -55,6 +55,31 @@ export function startLoad(
   return autocannon(
     route === 'hello' ? base : { ...base, method: 'POST', headers: echoRequestHeaders, body: expectedBody },
   );
+}
+
+// Does:  The one request a load sends to every connection: its method, path, headers and body.
+export interface LoadRequest {
+  readonly method?: 'POST' | 'OPTIONS';
+  readonly path: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
+}
+
+export function startRequestLoad(
+  autocannon: Autocannon,
+  port: number,
+  request: LoadRequest,
+  durationSeconds: number,
+): AutocannonRun {
+  const { path, ...sent } = request;
+  return autocannon({
+    ...sent,
+    url: `http://${host}:${port}${path}`,
+    connections,
+    pipelining: 1,
+    duration: durationSeconds,
+    workers,
+  });
 }
 
 export function routeCommandLine(route: RouteId, flags: string): string {

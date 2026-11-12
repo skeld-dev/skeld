@@ -48,8 +48,8 @@ export interface ServerChild {
   stop: () => Promise<void>;
 }
 
-export async function startServerChild(script: string): Promise<ServerChild> {
-  const child = spawn(process.execPath, ['--conditions=skeld-source', script, 'serve'], {
+export async function startServerChild(script: string, ...serveArgs: string[]): Promise<ServerChild> {
+  const child = spawn(process.execPath, ['--conditions=skeld-source', script, 'serve', ...serveArgs], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stderr = '';

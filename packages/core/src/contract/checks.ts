@@ -1,4 +1,4 @@
-// Does:  Checks a contract's routes when declared: paths, schemas, params, bodies, statuses, header and cookie keys.
+// Does:  Checks a contract's routes when declared: methods, paths, schemas, params, bodies, statuses, keys.
 // Holds: A contract that passes names only model schemas, and its path parameters and params keys match one for one.
 
 import { end, start } from '#diag';
@@ -6,7 +6,7 @@ import { isCookieName } from '../cookie/name.ts';
 import { isModelSchema, isNode } from '../schema/node.ts';
 import type { Kind, Schema } from '../schema/types.ts';
 import { parsePath } from './path.ts';
-import type { ContractRoutes, RouteDefinition } from './types.ts';
+import type { ContractRoutes, HttpMethod, RouteDefinition } from './types.ts';
 
 type KeyedPart = 'params' | 'query' | 'headers' | 'cookies';
 
@@ -18,6 +18,12 @@ const SCALAR_KINDS: ReadonlySet<Kind> = new Set(['string', 'number', 'integer', 
 const BODYLESS_STATUSES = ['204', '304'];
 const KEYED_PARTS: readonly KeyedPart[] = ['params', 'query', 'headers', 'cookies'];
 const REQUEST_PARTS = ['params', 'query', 'headers', 'cookies', 'body'] as const;
+// Why: The router, the cross-site check and the preflight trust the method, and a declaration can bypass the type.
+const METHODS: ReadonlySet<unknown> = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] satisfies HttpMethod[]);
+
+function checkMethod(route: RouteDefinition): string | null {
+  return METHODS.has(route.method) ? null : 'method must be GET, POST, PUT, PATCH or DELETE';
+}
 
 function checkPath(path: string): string | null {
   if (!path.startsWith('/')) {
@@ -179,6 +185,7 @@ function checkPropertyKinds(route: RouteDefinition): string | null {
 
 function checkRoute(route: RouteDefinition): string | null {
   return (
+    checkMethod(route) ??
     checkPath(route.path) ??
     checkSchemas(route) ??
     checkParams(route) ??
