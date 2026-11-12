@@ -28,6 +28,15 @@ export const startProofMs = 2000;
 export const startProofPollMs = 50;
 export const readoutFile = 'readout.md';
 
+// Why: Unset until the 21-round control session measures it; a logging session needs --rounds until then.
+export const loggingRounds: number | null = null;
+export const controlBand = { min: 0.98, max: 1.02 } as const;
+export const roundCountBand = { min: 0.99, max: 1.01 } as const;
+export const roundCountRange = { min: 5, max: 15 } as const;
+export const defaultLogBudget = 1.05;
+export const accessLogBudget = 1.1;
+export const loggingReadoutFile = 'logging-readout.md';
+
 export const host = '127.0.0.1';
 export const standalonePort = 3000;
 export const readyTimeoutMs = 10_000;

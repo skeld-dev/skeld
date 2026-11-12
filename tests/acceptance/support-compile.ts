@@ -1,4 +1,4 @@
-// Does:  Type-checks a source text against the Skeld sources in a scratch folder and reports tsc's verdict.
+// Does:  Type-checks a source text against the Skeld sources, under the engine's lib, and reports tsc's verdict.
 // Holds: The scratch folder holds only the probe and is removed whatever tsc answers.
 
 import { spawnSync } from 'node:child_process';
@@ -28,7 +28,7 @@ export function compileProbes(sources: readonly string[]): Compiled[] {
           compilerOptions: {
             target: 'es2025',
             module: 'nodenext',
-            lib: ['es2025'],
+            lib: ['es2025', 'esnext.error'],
             types: ['node'],
             strict: true,
             noEmit: true,

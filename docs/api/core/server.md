@@ -66,6 +66,16 @@ export interface RouteInfo {
 
 Source: `packages/core/src/contract/types.ts:142`
 
+## RequestPart
+
+The part of a request a route declares a schema for.
+
+```ts
+export type RequestPart = 'params' | 'query' | 'headers' | 'cookies' | 'body';
+```
+
+Source: `packages/core/src/log/types.ts:43`
+
 ## AuthorHeaderName
 
 A header name an author may set: the name itself, or a message type naming it when it is a `ReservedHeaderName`.
@@ -82,7 +92,7 @@ export type AuthorHeaderName<N extends string> = N extends unknown
   : never;
 ```
 
-Source: `packages/core/src/server/types.ts:164`
+Source: `packages/core/src/server/types.ts:171`
 
 ## CompletedContext
 
@@ -96,6 +106,8 @@ export interface CompletedContext {
   readonly status: number;
   readonly completed: boolean;
   readonly clientAddress: string;
+  readonly log: Logger;
+  readonly requestId: string;
 }
 ```
 
@@ -107,8 +119,10 @@ export interface CompletedContext {
 | `status`        | The status written.                                                                                   |
 | `completed`     | Whether the whole response was written before the connection closed.                                  |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
+| `log`           | The request's logger, shared with its handler and its other hooks; each record carries `requestId`.   |
+| `requestId`     | The request's local id, a version 4 UUID, also sent as the `x-request-id` response header.            |
 
-Source: `packages/core/src/server/types.ts:356`
+Source: `packages/core/src/server/types.ts:384`
 
 ## CorsHeaderName
 
@@ -124,7 +138,7 @@ export type CorsHeaderName =
   | 'access-control-max-age';
 ```
 
-Source: `packages/core/src/server/types.ts:142`
+Source: `packages/core/src/server/types.ts:148`
 
 ## CorsPolicy
 
@@ -152,7 +166,7 @@ createServer({ cors: { origins: ['https://app.example'], credentials: true } });
 | `exposedHeaders` | Response header names a granted page may read beyond the CORS-safelisted ones (default none).                    |
 | `maxAgeSeconds`  | How long a browser may cache a preflight answer, in whole seconds from 0 to 86,400 (default 600).                |
 
-Source: `packages/core/src/server/types.ts:86`
+Source: `packages/core/src/server/types.ts:92`
 
 ## CsrfPolicy
 
@@ -174,7 +188,7 @@ createServer({ publicOrigin: 'https://api.example', csrf: { mode: 'strict' } });
 | `mode`           | `baseline` passes a request with neither `Origin` nor `Sec-Fetch-Site`; `strict` refuses it (default `baseline`).      |
 | `trustedOrigins` | Other origins whose pages may send unsafe requests, besides `publicOrigin`; CORS origins are not added (default none). |
 
-Source: `packages/core/src/server/types.ts:103`
+Source: `packages/core/src/server/types.ts:109`
 
 ## ErrorContext
 
@@ -189,6 +203,8 @@ export interface ErrorContext {
   readonly signal: AbortSignal;
   readonly clientAddress: string;
   readonly rawCookies: RawCookies;
+  readonly log: Logger;
+  readonly requestId: string;
 }
 ```
 
@@ -201,8 +217,10 @@ export interface ErrorContext {
 | `signal`        | Aborted when the connection closes or the request times out.                                          |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
 | `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                    |
+| `log`           | The request's logger, shared with its handler and its other hooks; each record carries `requestId`.   |
+| `requestId`     | The request's local id, a version 4 UUID, also sent as the `x-request-id` response header.            |
 
-Source: `packages/core/src/server/types.ts:372`
+Source: `packages/core/src/server/types.ts:404`
 
 ## ErrorHandler
 
@@ -214,7 +232,7 @@ The nearest scope's handler runs first and a value it throws goes to the parent'
 export type ErrorHandler = (error: unknown, context: ErrorContext) => HttpError | Promise<HttpError>;
 ```
 
-Source: `packages/core/src/server/types.ts:419`
+Source: `packages/core/src/server/types.ts:455`
 
 ## Handler
 
@@ -228,7 +246,7 @@ export type Handler<C extends ContractRoutes, K extends keyof C> = (
 ) => RouteReply<C[K]> | Promise<RouteReply<C[K]>>;
 ```
 
-Source: `packages/core/src/server/types.ts:231`
+Source: `packages/core/src/server/types.ts:251`
 
 ## Handlers
 
@@ -238,7 +256,7 @@ One handler per route name of a contract.
 export type Handlers<C extends ContractRoutes> = { readonly [K in keyof C]: Handler<C, K> };
 ```
 
-Source: `packages/core/src/server/types.ts:236`
+Source: `packages/core/src/server/types.ts:256`
 
 ## HookName
 
@@ -248,7 +266,7 @@ The hook names `addHook` accepts.
 export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'onError';
 ```
 
-Source: `packages/core/src/server/types.ts:422`
+Source: `packages/core/src/server/types.ts:458`
 
 ## ListeningAddress
 
@@ -268,7 +286,7 @@ export interface ListeningAddress {
 | `port` | The bound port.                                                           |
 | `url`  | The base URL, as in `http://127.0.0.1:3000`; an IPv6 host is in brackets. |
 
-Source: `packages/core/src/server/types.ts:485`
+Source: `packages/core/src/server/types.ts:523`
 
 ## ListenOptions
 
@@ -286,19 +304,19 @@ export interface ListenOptions {
 | `port` | The TCP port, from 0 to 65535; 0 picks a free one.                     |
 | `host` | The address to bind; an empty string is refused (default `127.0.0.1`). |
 
-Source: `packages/core/src/server/types.ts:474`
+Source: `packages/core/src/server/types.ts:512`
 
 ## OnErrorHook
 
 A hook that observes a failed request's error before the error handlers run.
 
-It cannot change the reply; a throw is written to stderr.
+It cannot change the reply; a throw is logged as `skeld.hook.error`.
 
 ```ts
 export type OnErrorHook = (context: ErrorContext, error: unknown) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:413`
+Source: `packages/core/src/server/types.ts:449`
 
 ## OnRequestHook
 
@@ -310,19 +328,19 @@ A hook run after routing and before the body is read.
 export type OnRequestHook = (context: RequestContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:393`
+Source: `packages/core/src/server/types.ts:429`
 
 ## OnResponseHook
 
 A hook run once the response is done or its connection closed, to observe the outcome.
 
-A throw is written to stderr and changes nothing; it does not run after `send` or a cross-site refusal.
+A throw is logged as `skeld.hook.error` and changes nothing; it does not run after `send` or a cross-site refusal.
 
 ```ts
 export type OnResponseHook = (context: CompletedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:408`
+Source: `packages/core/src/server/types.ts:444`
 
 ## OnSendHook
 
@@ -334,13 +352,13 @@ Its return value is ignored; a throw goes to the error path.
 export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:403`
+Source: `packages/core/src/server/types.ts:439`
 
 ## OutgoingHeaders
 
 Response headers to set, by name.
 
-A `ReservedHeaderName` (framing, connection, `set-cookie`, `access-control-*`) fails to compile as a lower-case key; in any letter case at runtime it is answered with the fixed 500.
+A `ReservedHeaderName` (framing, connection, `set-cookie`, `access-control-*`, `x-request-id`) fails to compile as a lower-case key; in any letter case at runtime it is answered with the fixed 500.
 
 ```ts
 export type OutgoingHeaders = { readonly [name: string]: string | number | readonly string[] } & {
@@ -348,7 +366,21 @@ export type OutgoingHeaders = { readonly [name: string]: string | number | reado
 };
 ```
 
-Source: `packages/core/src/server/types.ts:178`
+Source: `packages/core/src/server/types.ts:185`
+
+## PartKey
+
+The string keys of the schema a route declares for one request part; `never` when it declares none.
+
+```ts
+export type PartKey<R extends RouteDefinition, P extends RequestPart> = R extends {
+  readonly [Q in P]: infer S extends Schema;
+}
+  ? keyof Infer<S> & string
+  : never;
+```
+
+Source: `packages/core/src/server/types.ts:190`
 
 ## Plugin
 
@@ -358,7 +390,7 @@ A function that declares routes, hooks and plugins on the child scope it is give
 export type Plugin = (scope: Scope) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:465`
+Source: `packages/core/src/server/types.ts:503`
 
 ## PreHandlerHook
 
@@ -370,7 +402,7 @@ It never runs for a refused request; `context.send` replies and skips the handle
 export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:398`
+Source: `packages/core/src/server/types.ts:434`
 
 ## RawCookies
 
@@ -388,7 +420,7 @@ export interface RawCookies {
 | `get`    | Returns the value of a cookie sent exactly once; a name sent twice or never gives `undefined`. |
 | `getAll` | Returns every value sent under the name, in the order received; empty when it was not sent.    |
 
-Source: `packages/core/src/server/types.ts:134`
+Source: `packages/core/src/server/types.ts:140`
 
 ## RawHeaders
 
@@ -400,7 +432,7 @@ export interface RawHeaders {
 }
 ```
 
-Source: `packages/core/src/server/types.ts:129`
+Source: `packages/core/src/server/types.ts:135`
 
 ## RawReply
 
@@ -420,7 +452,7 @@ export interface RawReply {
 | `headers` | Headers to set on the reply; a reserved name of `OutgoingHeaders` makes `send` throw `Error` before anything is set. |
 | `payload` | The body, written as given; without it the reply has no body.                                                        |
 
-Source: `packages/core/src/server/types.ts:273`
+Source: `packages/core/src/server/types.ts:293`
 
 ## RegisterOptions
 
@@ -436,11 +468,11 @@ export interface RegisterOptions {
 | ------ | ------------------------------------------------------------------------------------------------------ |
 | `name` | The plugin's name in boot errors (default the function's name, or `plugin #<n>` for an anonymous one). |
 
-Source: `packages/core/src/server/types.ts:468`
+Source: `packages/core/src/server/types.ts:506`
 
 ## ReservedHeaderName
 
-A response header name the engine owns: a framing or connection field, `set-cookie` or a CORS header.
+A response header name the engine owns: framing, connection, `set-cookie`, CORS or `x-request-id`.
 
 ```ts
 export type ReservedHeaderName =
@@ -453,10 +485,11 @@ export type ReservedHeaderName =
   | 'trailer'
   | 'upgrade'
   | 'set-cookie'
+  | 'x-request-id'
   | CorsHeaderName;
 ```
 
-Source: `packages/core/src/server/types.ts:151`
+Source: `packages/core/src/server/types.ts:157`
 
 ## RequestContext
 
@@ -471,6 +504,8 @@ export interface RequestContext {
   readonly signal: AbortSignal;
   readonly clientAddress: string;
   readonly rawCookies: RawCookies;
+  readonly log: Logger;
+  readonly requestId: string;
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
   setCookie(cookie: OutgoingCookie): void;
   send(reply: RawReply): void;
@@ -486,11 +521,13 @@ export interface RequestContext {
 | `signal`        | Aborted when the connection closes or the request times out.                                          |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
 | `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                    |
+| `log`           | The request's logger, shared with its handler and its other hooks; each record carries `requestId`.   |
+| `requestId`     | The request's local id, a version 4 UUID, also sent as the `x-request-id` response header.            |
 | `setHeader`     | Sets a header on the response.                                                                        |
 | `setCookie`     | Sets a cookie on the response, replacing a pending one of the same name, path and domain.             |
 | `send`          | Replies at once; later hooks and the handler do not run.                                              |
 
-Source: `packages/core/src/server/types.ts:283`
+Source: `packages/core/src/server/types.ts:303`
 
 ## ResponseContext
 
@@ -505,6 +542,8 @@ export interface ResponseContext {
   readonly signal: AbortSignal;
   readonly clientAddress: string;
   readonly rawCookies: RawCookies;
+  readonly log: Logger;
+  readonly requestId: string;
   readonly status: number;
   setHeader<N extends string>(name: AuthorHeaderName<N>, value: string | number | readonly string[]): void;
   setCookie(cookie: OutgoingCookie): void;
@@ -520,11 +559,13 @@ export interface ResponseContext {
 | `signal`        | Aborted when the connection closes or the request times out.                                          |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
 | `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                    |
+| `log`           | The request's logger, shared with its handler and its other hooks; each record carries `requestId`.   |
+| `requestId`     | The request's local id, a version 4 UUID, also sent as the `x-request-id` response header.            |
 | `status`        | The status being written.                                                                             |
 | `setHeader`     | Sets a header on the response.                                                                        |
 | `setCookie`     | Sets a cookie on the response, replacing a pending one of the same name, path and domain.             |
 
-Source: `packages/core/src/server/types.ts:326`
+Source: `packages/core/src/server/types.ts:350`
 
 ## RouteReply
 
@@ -553,7 +594,7 @@ export type RouteReply<R extends RouteDefinition> = {
 }[keyof R['responses']];
 ```
 
-Source: `packages/core/src/server/types.ts:208`
+Source: `packages/core/src/server/types.ts:228`
 
 ## RouteRequest
 
@@ -570,22 +611,28 @@ export interface RouteRequest<R extends RouteDefinition> {
   readonly signal: AbortSignal;
   readonly clientAddress: string;
   readonly rawCookies: RawCookies;
+  readonly log: Logger;
+  readonly requestId: string;
+  classified<P extends RequestPart>(part: P, key?: PartKey<R, P>): Classified;
 }
 ```
 
-| Field           | Summary                                                                                               |
-| --------------- | ----------------------------------------------------------------------------------------------------- |
-| `route`         | The matched route.                                                                                    |
-| `params`        | The path parameters, validated and converted to the declared kinds.                                   |
-| `query`         | The declared query parameters, validated and converted; undeclared keys are left out.                 |
-| `headers`       | The declared headers, validated; every raw header when the route declares none.                       |
-| `cookies`       | The declared cookies, validated, with `secret` values wrapped; empty when the route declares none.    |
-| `body`          | The parsed and validated body, with `secret` values wrapped in `Secret`.                              |
-| `signal`        | Aborted when the connection closes or the request times out, to stop work no client waits for.        |
-| `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
-| `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                    |
+| Field           | Summary                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `route`         | The matched route.                                                                                          |
+| `params`        | The path parameters, validated and converted to the declared kinds.                                         |
+| `query`         | The declared query parameters, validated and converted; undeclared keys are left out.                       |
+| `headers`       | The declared headers, validated; every raw header when the route declares none.                             |
+| `cookies`       | The declared cookies, validated, with `secret` values wrapped; empty when the route declares none.          |
+| `body`          | The parsed and validated body, with `secret` values wrapped in `Secret`.                                    |
+| `signal`        | Aborted when the connection closes or the request times out, to stop work no client waits for.              |
+| `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`.       |
+| `rawCookies`    | The request's cookies as sent; the header is parsed on first read.                                          |
+| `log`           | The request's logger, one per request and shared with its hooks; each record carries `requestId`.           |
+| `requestId`     | The request's local id, a version 4 UUID, also sent as the `x-request-id` response header.                  |
+| `classified`    | Pairs a request part, or one declared key of it, with the route's own schema for that part, for a log call. |
 
-Source: `packages/core/src/server/types.ts:183`
+Source: `packages/core/src/server/types.ts:197`
 
 ## RoutesOptions
 
@@ -611,7 +658,7 @@ export interface RoutesOptions<C extends ContractRoutes> {
 | `csrf`            | The cross-site check of these routes, replacing the server's `csrf` whole, never merged.                         |
 | `csrfExempt`      | Route names the cross-site check skips, such as a webhook that proves its sender another way.                    |
 
-Source: `packages/core/src/server/types.ts:239`
+Source: `packages/core/src/server/types.ts:259`
 
 ## Scope
 
@@ -622,6 +669,7 @@ Its methods throw BootError `REGISTRATION_CLOSED` once `listen` is called, or on
 ```ts
 export interface Scope {
   readonly signal: AbortSignal;
+  readonly log: Logger;
   onClose(callback: () => void | Promise<void>): void;
   routes<C extends ContractRoutes>(
     contract: C,
@@ -641,13 +689,14 @@ export interface Scope {
 | Field             | Summary                                                                                                       |
 | ----------------- | ------------------------------------------------------------------------------------------------------------- |
 | `signal`          | Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work.              |
+| `log`             | The server's logger, the same in every scope, plugins included; its records carry no request id.              |
 | `onClose`         | Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.      |
 | `routes`          | Adds a contract's routes to this scope, with one handler per route.                                           |
 | `addHook`         | Adds a hook to this scope; it runs for this scope's routes and its plugins' routes, after its parents' hooks. |
 | `setErrorHandler` | Sets this scope's error handler.                                                                              |
 | `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                   |
 
-Source: `packages/core/src/server/types.ts:428`
+Source: `packages/core/src/server/types.ts:464`
 
 ## Server
 
@@ -657,15 +706,17 @@ A service: the root scope, with `listen` and `close`.
 export interface Server extends Scope {
   listen(options: ListenOptions): Promise<ListeningAddress>;
   close(): Promise<void>;
+  logStats(): LogStats;
 }
 ```
 
-| Field    | Summary                                                                                           |
-| -------- | ------------------------------------------------------------------------------------------------- |
-| `listen` | Runs the plugins, checks and compiles every route, then listens; resolves with the bound address. |
-| `close`  | Stops accepting connections and resolves once every open one has closed.                          |
+| Field      | Summary                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------- |
+| `listen`   | Runs the plugins, checks and compiles every route, then listens; resolves with the bound address. |
+| `close`    | Stops accepting connections and resolves once every open one has closed.                          |
+| `logStats` | Returns this server's log counts; never throws, before `listen` and after `close` too.            |
 
-Source: `packages/core/src/server/types.ts:495`
+Source: `packages/core/src/server/types.ts:533`
 
 ## ServerOptions
 
@@ -691,6 +742,7 @@ export interface ServerOptions {
   readonly cors?: CorsPolicy | false;
   readonly publicOrigin?: string | readonly string[];
   readonly csrf?: CsrfPolicy;
+  readonly log?: LogOptions | false;
 }
 ```
 
@@ -712,8 +764,9 @@ export interface ServerOptions {
 | `cors`                 | The cross-origin policy of every route, unless a `routes()` group sets its own (default none: no CORS header).    |
 | `publicOrigin`         | The origins the service is reached at, each exactly as `new URL(x).origin` writes it (default none).              |
 | `csrf`                 | The cross-site check on POST, PUT, PATCH and DELETE, unless a `routes()` group sets its own (default `baseline`). |
+| `log`                  | The structured log on stdout or a sink; `false` writes no record and calls no sink (default: stdout, no options). |
 
-Source: `packages/core/src/server/types.ts:14`
+Source: `packages/core/src/server/types.ts:15`
 
 ## ValidatedContext
 
@@ -733,7 +786,7 @@ export interface ValidatedContext extends RequestContext {
 | `query`  | The validated query parameters. |
 | `body`   | The validated body.             |
 
-Source: `packages/core/src/server/types.ts:316`
+Source: `packages/core/src/server/types.ts:340`
 
 ## createServer
 
@@ -751,4 +804,4 @@ await server.listen({ port: 0 });
 await server.close();
 ```
 
-Source: `packages/core/src/server/server.ts:58`
+Source: `packages/core/src/server/server.ts:63`

@@ -21,6 +21,7 @@
     "pack-check": "node tools/check-pack-markers.ts --pack",
     "api-check": "node tools/api-reference/check.ts",
     "api-docs": "node tools/api-reference/generate.ts",
+    "consumer-check": "node tools/check-consumer-lib.ts",
     "differential": "node --conditions=skeld-source tests/schema/differential.ts"
   },
   "devDependencies": {

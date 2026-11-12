@@ -1,4 +1,4 @@
-// Does:  Starts a server as a child process, waits for its ready line and stops it.
+// Does:  Starts a server as a child process, waits for its ready line, counts its other stdout lines and stops it.
 // Holds: A child that does not announce ready in time fails the start, with the tail of its stderr.
 
 import { spawn } from 'node:child_process';
@@ -19,6 +19,7 @@ export interface Launch {
   readonly readyLabel: string;
   readonly args: readonly string[];
   readonly env: NodeJS.ProcessEnv;
+  readonly cwd?: string;
 }
 
 export interface ServerProcess {
@@ -27,6 +28,7 @@ export interface ServerProcess {
   readonly port: number;
   readonly startMs: number;
   readonly exited: Promise<ExitStatus>;
+  readonly stdoutLines: Promise<number>;
   exitStatus(): ExitStatus | null;
   stderrTail(): readonly string[];
   stop(): Promise<boolean>;
@@ -68,6 +70,7 @@ export async function startServer(launch: Launch, command: Command): Promise<Ser
   const [program, ...prefix] = command;
   const child = spawn(program, [...prefix, ...launch.args], {
     env: launch.env,
+    ...(launch.cwd === undefined ? {} : { cwd: launch.cwd }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const tail: string[] = [];
@@ -89,10 +92,22 @@ export async function startServer(launch: Launch, command: Command): Promise<Ser
     (error: unknown) => error,
   );
 
-  const firstLine = new Promise<ReadyOutcome>((resolve) => {
-    createInterface({ input: child.stdout }).once('line', (line) => {
-      resolve(parseReady(readyLabel, line));
-    });
+  const readyLine = Promise.withResolvers<ReadyOutcome>();
+  const stdoutLines = Promise.withResolvers<number>();
+  let ready = false;
+  let counted = 0;
+  const stdout = createInterface({ input: child.stdout });
+  // Why: Every other line is drained and counted, so a server that logs is known to have logged and never blocks.
+  stdout.on('line', (line) => {
+    if (!ready && readyLinePattern.test(line)) {
+      ready = true;
+      readyLine.resolve(parseReady(readyLabel, line));
+      return;
+    }
+    counted++;
+  });
+  stdout.once('close', () => {
+    stdoutLines.resolve(counted);
   });
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<ReadyOutcome>((resolve) => {
@@ -106,7 +121,7 @@ export async function startServer(launch: Launch, command: Command): Promise<Ser
     throw spawnError;
   }
   const outcome = await Promise.race([
-    firstLine,
+    readyLine.promise,
     exited.then((exit): ReadyOutcome => ({ kind: 'exited', status: exit })),
     timeout,
   ]);
@@ -155,6 +170,7 @@ export async function startServer(launch: Launch, command: Command): Promise<Ser
     port: outcome.port,
     startMs: readyMs,
     exited,
+    stdoutLines: stdoutLines.promise,
     exitStatus: () => status,
     stderrTail: () => [...tail],
     stop: async (): Promise<boolean> => {

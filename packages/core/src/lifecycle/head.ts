@@ -5,6 +5,7 @@ import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { event } from '#diag';
 import { type CorsGrant, writeGrant } from '../cors/grant.ts';
 import { checkRedirect } from '../redirect/redirect.ts';
+import { engineFault } from './engine-fault.ts';
 import type { RouteRuntime } from './types.ts';
 
 const FIRST_REDIRECT = 300;
@@ -28,7 +29,7 @@ function checkLocation(res: ServerResponse, route: RouteRuntime): void {
   if (verdict.kind === 'refused') {
     res.removeHeader('location');
     event('refuse.redirect', route.info.name);
-    throw new Error(`redirect refused at ${route.info.name}: ${verdict.reason}`);
+    throw engineFault('redirect_refused', `redirect refused at ${route.info.name}: ${verdict.reason}`, null);
   }
   res.setHeader('location', verdict.location);
 }

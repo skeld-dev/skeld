@@ -1,20 +1,19 @@
 // Does:  Contains author callbacks and assimilates their results across JavaScript realms.
 // Holds: A callback settles once; inspection, subscription and continuation failures stay inside the boundary.
 
-import { describeThrown, writeStderrLine } from './stderr.ts';
-
 export function authorResult<T>(
   call: () => T | Promise<T>,
   done: (value: T, asynchronous: boolean) => void,
   fault: (error: unknown, asynchronous: boolean) => void,
   waiting: () => void,
+  internal: (failure: unknown) => void,
 ): void {
   let asynchronous = false;
   const reject = (error: unknown): void => {
     try {
       fault(error, asynchronous);
     } catch (failure) {
-      writeStderrLine('CALLBACK', '', 500, 'internal', describeThrown(failure));
+      internal(failure);
     }
   };
   const accept = (value: T): void => {

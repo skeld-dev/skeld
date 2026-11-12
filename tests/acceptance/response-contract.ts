@@ -1,5 +1,5 @@
 // Does:  Proves that a response which breaks its schema is the fixed 500, and an undeclared key is dropped.
-// Holds: The stderr line names the route, the status and the schema location, never the value.
+// Holds: The error record names the route, the status, the reason and the schema location, never the value.
 
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -8,10 +8,11 @@ import { HttpError } from '@skeld/core/http-error';
 import * as t from '@skeld/core/schema';
 import { createServer } from '@skeld/core/server';
 import { check, conclude } from './support.ts';
+import { type LogObject, parseRecords } from './support-log.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'a response is written from its declared properties and any other value is the fixed 500 with a stderr line naming route, status and schema location and no value (AC-41); an HttpError whose details are wrong or throw is the fixed 500, one stderr line, and the server keeps serving (AC-45)';
+  'a response is written from its declared properties and any other value is the fixed 500 with one skeld.request.error record on stdout naming route, status, reason response_mismatch and schema location and no value (AC-41); an HttpError whose details are wrong or throw is the fixed 500, one response_mismatch record, and the server keeps serving (AC-45)';
 const fixed500 = '{"status":500,"code":"INTERNAL","message":"Internal Server Error"}';
 const exposeMarker = 'LEAKMARK9';
 
@@ -152,8 +153,13 @@ async function get(child: Child, path: string): Promise<Seen> {
   }
 }
 
-function linesFor(stderr: string, route: string, path: string): string[] {
-  return stderr.split('\n').filter((line) => line.startsWith(`skeld: GET ${path} `) && line.includes(` ${route}: `));
+function recordsFor(stdout: string, template: string, reason: string): LogObject[] {
+  return parseRecords(stdout).filter(
+    (record): record is LogObject =>
+      record?.event_name === 'skeld.request.error' &&
+      record['skeld.reason'] === reason &&
+      record['http.route'] === template,
+  );
 }
 
 const refusals: readonly (readonly [string, readonly string[]])[] = [
@@ -169,15 +175,20 @@ const refusals: readonly (readonly [string, readonly string[]])[] = [
 ];
 
 async function failCase(child: Child, mode: string, problems: string[], log: string[]): Promise<void> {
-  const offset = child.stderr().length;
+  const offset = child.stdout().length;
   const seen = await get(child, `/fail/${mode}`);
   await delay(60);
-  const lines = linesFor(child.stderr().slice(offset), 'fail', '/fail/:mode').filter((line) =>
-    /error body does not match/.test(line),
+  const records = recordsFor(child.stdout().slice(offset), '/fail/:mode', 'response_mismatch');
+  log.push(
+    `AC-45 ${mode}: ${seen.status} ${seen.body} | ${records.map((record) => JSON.stringify(record)).join(' // ')}`,
   );
-  log.push(`AC-45 ${mode}: ${seen.status} ${seen.body} | ${lines.join(' // ')}`);
   check(problems, seen.status === 500 && seen.body === fixed500, `${mode} answered ${seen.status} ${seen.body}`);
-  check(problems, lines.length === 1, `${mode} wrote ${lines.length} stderr lines saying the error body did not match`);
+  check(problems, records.length === 1, `${mode} wrote ${records.length} response_mismatch records`);
+  check(
+    problems,
+    records[0]?.['http.response.status_code'] === 500,
+    `${mode} record status is ${String(records[0]?.['http.response.status_code'])}`,
+  );
   const next = await get(child, '/ok');
   check(
     problems,
@@ -202,13 +213,13 @@ async function prove(): Promise<void> {
       '/either/no-member',
     ];
     const answers = new Map<string, Seen>();
-    const stderrByPath = new Map<string, string>();
+    const stdoutByPath = new Map<string, string>();
     for (const path of paths) {
-      const offset = child.stderr().length;
+      const offset = child.stdout().length;
       // biome-ignore lint/performance/noAwaitInLoops: one request at a time attributes template-only stderr to its case
       answers.set(path, await get(child, path));
       await delay(60);
-      stderrByPath.set(path, child.stderr().slice(offset));
+      stdoutByPath.set(path, child.stdout().slice(offset));
     }
     const answer = (path: string): Seen => answers.get(path) ?? { status: 0, body: 'no answer' };
 
@@ -222,24 +233,31 @@ async function prove(): Promise<void> {
 
     for (const [name, locations] of refusals) {
       const seen = answer(`/user/${name}`);
-      const lines = linesFor(stderrByPath.get(`/user/${name}`) ?? '', 'user', '/user/:case');
-      const line = lines[0] ?? '';
-      log.push(`${name}: ${seen.status} ${seen.body} | ${lines.join(' // ')}`);
+      const text = stdoutByPath.get(`/user/${name}`) ?? '';
+      const records = recordsFor(text, '/user/:case', 'response_mismatch');
+      log.push(
+        `${name}: ${seen.status} ${seen.body} | ${records.map((record) => JSON.stringify(record)).join(' // ')}`,
+      );
       check(problems, seen.status === 500 && seen.body === fixed500, `${name} answered ${seen.status} ${seen.body}`);
-      check(problems, lines.length === 1, `${name} wrote ${lines.length} stderr lines`);
-      check(problems, line.includes(' 500 user: '), `${name} stderr does not name 500 and the route user: ${line}`);
+      check(problems, records.length === 1, `${name} wrote ${records.length} response_mismatch records`);
       check(
         problems,
-        locations.some((location) => line.endsWith(` at ${location}`)),
-        `${name} stderr does not end with a location of ${locations.join(' or ')}: ${line}`,
+        records[0]?.['http.response.status_code'] === 500,
+        `${name} record status is ${String(records[0]?.['http.response.status_code'])}`,
+      );
+      const location = records[0]?.['skeld.schema_location'];
+      check(
+        problems,
+        typeof location === 'string' && locations.includes(location),
+        `${name} record skeld.schema_location is ${JSON.stringify(location)}, expected ${locations.join(' or ')}`,
       );
       const leaked = [exposeMarker, 'tgA1', 'NaN', '1970'].filter(
-        (value) => line.includes(value) || seen.body.includes(value),
+        (value) => text.includes(value) || seen.body.includes(value),
       );
       check(
         problems,
         leaked.length === 0,
-        `${name} stderr or body holds a returned value ${leaked.join(',')}: ${line}`,
+        `${name} stdout or body holds a returned value ${leaked.join(',')}: ${text}`,
       );
     }
 
@@ -273,9 +291,11 @@ async function prove(): Promise<void> {
     }
     for (const name of ['extra-key', 'no-member']) {
       const seen = answer(`/either/${name}`);
+      const records = recordsFor(stdoutByPath.get(`/either/${name}`) ?? '', '/either/:case', 'response_mismatch');
       log.push(
-        `union ${name}: ${seen.status} ${seen.body} | ${linesFor(stderrByPath.get(`/either/${name}`) ?? '', 'either', '/either/:case').join(' // ')}`,
+        `union ${name}: ${seen.status} ${seen.body} | ${records.map((record) => JSON.stringify(record)).join(' // ')}`,
       );
+      check(problems, records.length === 1, `union ${name} wrote ${records.length} response_mismatch records`);
       check(
         problems,
         seen.status === 500 && seen.body === fixed500,
@@ -292,6 +312,7 @@ async function prove(): Promise<void> {
       `stderr holds an uncaught exception or stack: ${everything}`,
     );
     log.push(`full stderr:\n${everything}`);
+    log.push(`full stdout:\n${child.stdout()}`);
   } finally {
     await child.stop();
   }

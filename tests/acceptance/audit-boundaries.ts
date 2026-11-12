@@ -1,4 +1,4 @@
-// Does:  Proves audit route identity, option ownership and classified-path diagnostic boundaries.
+// Does:  Proves audit route identity, option ownership and classified-path diagnostic and log boundaries.
 // Holds: Assertions inspect actual client/server exchanges and isolated diagnostic output files.
 
 import assert from 'node:assert/strict';
@@ -12,6 +12,7 @@ import { defineContract } from '@skeld/core/contract';
 import { HttpError } from '@skeld/core/http-error';
 import * as t from '@skeld/core/schema';
 import { createServer } from '@skeld/core/server';
+import { parseRecords, untilStdout } from './support-log.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const script = fileURLToPath(import.meta.url);
@@ -186,12 +187,40 @@ async function serverErrors(): Promise<void> {
         assert(!(await res.text()).includes(token));
       }
     }
+    await untilStdout(child, (found) =>
+      ['secret', 'personal'].every((sensitivity) =>
+        found.some((candidate) => candidate?.['http.route'] === `/${sensitivity}/wildcard/*`),
+      ),
+    );
   } finally {
     await child.stop();
   }
   const stderr = child.stderr();
-  assert(stderr.includes('/:token'), stderr);
+  const stdout = child.stdout();
+  const records = parseRecords(stdout);
+  const expected: readonly (readonly [string, string])[] = [
+    ['throw', 'skeld.request.error thrown'],
+    ['hook', 'skeld.request.error thrown'],
+    ['observer', 'skeld.hook.error on_response'],
+    ['timeout', 'skeld.request.error timeout'],
+    ['late', 'skeld.hook.error late_send'],
+    ['errorhook', 'skeld.hook.error on_error'],
+    ['wildcard', 'skeld.request.error thrown'],
+  ];
+  for (const sensitivity of ['secret', 'personal']) {
+    for (const [mode, event] of expected) {
+      const route = mode === 'wildcard' ? `/${sensitivity}/${mode}/*` : `/${sensitivity}/${mode}/:token`;
+      assert(
+        records.some(
+          (candidate) =>
+            `${candidate?.event_name} ${candidate?.['skeld.reason']}` === event && candidate?.['http.route'] === route,
+        ),
+        `no ${event} record for ${route} on stdout: ${stdout}`,
+      );
+    }
+  }
   assert(!stderr.includes(token), stderr);
+  assert(!stdout.includes(token), stdout);
 }
 
 async function diagChild(): Promise<void> {

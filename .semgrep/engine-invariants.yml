@@ -32,6 +32,7 @@ rules:
         - "/packages/core/src/"
       exclude:
         - "/packages/core/src/diag/"
+        - "/packages/core/src/log/stdout-writer.ts"
         - "**/dist/**"
         - "**/.tsout/**"
     patterns:
@@ -44,11 +45,77 @@ rules:
           - pattern: import $X = require('$MOD');
           - pattern: import('$MOD')
           - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
       - metavariable-regex:
           metavariable: $MOD
           regex: ^(node:)?(fs|fs/promises|child_process|vm|worker_threads)$
     metadata:
       category: security
+  - id: stdout-writer-imports-beyond-fs-write
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      log/stdout-writer.ts may import node:fs only as the named import write, and never node:fs/promises,
+      node:child_process, node:vm or node:worker_threads (ADR-048).
+    paths:
+      include:
+        - "/packages/core/src/log/stdout-writer.ts"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?(fs|fs/promises|child_process|vm|worker_threads)$
+      - pattern-not-regex: (?m)^import \{ write \} from 'node:fs';$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/048-write-log-records-to-fd-1-with-fs-write-one-operation-per-process.md"
+  - id: diagnostics-channel-outside-diag
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      node:diagnostics_channel is imported outside packages/core/src/diag/; lifecycle points are internal
+      calls with no subscriber list (ADR-056).
+    paths:
+      include:
+        - "/packages/core/src/"
+      exclude:
+        - "/packages/core/src/diag/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?diagnostics_channel$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/056-fire-five-internal-lifecycle-points-before-any-threshold.md"
   - id: json-parse-outside-the-parsers
     languages: [ typescript ]
     severity: ERROR
@@ -129,19 +196,24 @@ rules:
     languages: [ typescript ]
     severity: ERROR
     message: >-
-      process.stderr, process.stdout or console is used outside lifecycle/stderr.ts, the one writer
-      that escapes control characters.
+      process.stderr, process.stdout or console is used in the engine. Records leave through the log
+      module, which escapes every string and writes to fd 1 itself.
     paths:
       include:
         - "/packages/core/src/"
       exclude:
-        - "/packages/core/src/lifecycle/stderr.ts"
         - "/packages/core/src/diag/"
         - "**/dist/**"
         - "**/.tsout/**"
     pattern-either:
       - pattern: process.stderr
       - pattern: process.stdout
+      - pattern: process['stderr']
+      - pattern: process['stdout']
+      - pattern: "{ ..., stderr, ... } = process"
+      - pattern: "{ ..., stdout, ... } = process"
+      - pattern: "{ ..., stderr: $V, ... } = process"
+      - pattern: "{ ..., stdout: $V, ... } = process"
       - pattern: console.$M(...)
     metadata:
       category: security

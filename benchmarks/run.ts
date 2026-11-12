@@ -13,6 +13,7 @@ import {
   scenarioTarget,
   serverTarget,
   startTarget,
+  type Target,
 } from './diag/builds.ts';
 import { readRecorderFolder } from './diag/diag-files.ts';
 import {
@@ -38,12 +39,20 @@ import {
   resolvePackages,
 } from './environment.ts';
 import { loadAutocannon } from './load.ts';
+import {
+  decideSession,
+  loggingReadoutPath,
+  sessionVerdictLine,
+  type VisitLines,
+  writeLoggingReadout,
+} from './logging/readout.ts';
+import { loggingCommandLines, loggingTarget } from './logging/targets.ts';
 import { type Lock, takeLock } from './lock.ts';
 import { helpText, parseOptions, wantsHelp } from './options.ts';
 import { pinRunner } from './pinning.ts';
 import { reportFile, writeRunFiles } from './report.ts';
 import { runSchedule } from './rounds.ts';
-import { estimatedMinutes } from './schedule.ts';
+import { estimatedMinutes, loggingBuilds, sessionBuilds } from './schedule.ts';
 import type { ServerProcess } from './server-process.ts';
 import { summarize } from './statistics.ts';
 import {
@@ -55,14 +64,16 @@ import {
   inheritedDiagWarning,
   isoSeconds,
   killedWarning,
+  loggingStartLines,
+  loggingSummaryLines,
   nonConformingWarning,
   staleLockWarning,
   startLines,
   summaryLines,
 } from './terminal.ts';
-import type { BenchSample, BenchVerdict, RunOptions } from './types.ts';
+import type { BenchSample, BenchVerdict, LoggingBuildId, LoggingSession, RunOptions } from './types.ts';
 import { busyLoadAverage, connections, host, workers } from './values.ts';
-import { decideVerdict, deviations, notAssessedReason, type RunEnding } from './verdict.ts';
+import { decideVerdict, deviations, diagReason, loggingReason, notAssessedReason, type RunEnding } from './verdict.ts';
 
 const out = (line: string): void => {
   process.stdout.write(`${line}\n`);
@@ -159,12 +170,16 @@ const hooks: CheckHooks = {
   },
 };
 
+const sessionTargets = (session: LoggingSession): readonly Target[] =>
+  sessionBuilds(session).map((build) => loggingTarget(session, build));
+
 const runCheckMode = async (): Promise<never> => {
-  const rows = await checkServers(options.servers.map(serverTarget), options.routes, pinning.serverCommand, hooks);
+  const targets = options.logging === null ? options.servers.map(serverTarget) : sessionTargets(options.logging);
+  const rows = await checkServers(targets, options.routes, pinning.serverCommand, hooks);
   if (interrupted()) {
     process.exit(130);
   }
-  for (const line of checkLines(rows, options.servers.length, options.routes.length)) {
+  for (const line of checkLines(rows, targets.length, options.routes.length)) {
     out(line);
   }
   process.exit(rows.every((row) => row.passed) ? 0 : 3);
@@ -221,7 +236,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
 
   const finish = (ending: RunEnding): { verdict: BenchVerdict; written: boolean } => {
     const summary = summarize(samples, options.servers, options.routes);
-    const verdict = decideVerdict(ending, found, samples, summary, options.diag);
+    const verdict = decideVerdict(ending, found, samples, summary, null);
     let written = true;
     try {
       writeRunFiles(runDirectory, {
@@ -239,6 +254,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
           servers: options.servers,
           routes: options.routes,
           diag: options.diag,
+          logging: null,
         },
         conforming: found.length === 0,
         deviations: found,
@@ -624,6 +640,7 @@ const writeDiagFiles = (
           servers: options.servers,
           routes: options.routes,
           diag: true,
+          logging: null,
         },
         conforming: run.found.length === 0,
         deviations: run.found,
@@ -631,7 +648,7 @@ const writeDiagFiles = (
         software: run.software,
         samples,
         summary,
-        verdict: decideVerdict(stage.ending, run.found, samples, summary, true),
+        verdict: decideVerdict(stage.ending, run.found, samples, summary, diagReason),
         warnings,
       });
     }
@@ -713,11 +730,191 @@ const runDiag = async (packages: Packages): Promise<never> => {
   process.exit(diagExitCode(security.findings.length, stage.failure, stage.ending, written));
 };
 
+interface CountedVisit {
+  readonly build: LoggingBuildId;
+  readonly lines: Promise<number>;
+}
+
+const loggingBuild = (build: string): LoggingBuildId => {
+  const found = loggingBuilds.find((candidate) => candidate === build);
+  if (found === undefined) {
+    throw new Error(`${build} is not an entrant of the logging session`);
+  }
+  return found;
+};
+
+const loggingExitCode = (failure: BenchError | null, ending: RunEnding, written: boolean, over: boolean): number => {
+  if (failure !== null) {
+    return failure.exitCode;
+  }
+  if (ending.status === 'interrupted') {
+    return 130;
+  }
+  if (!written) {
+    return 4;
+  }
+  return over ? 1 : 0;
+};
+
+const checkLoggingEntrants = async (session: LoggingSession): Promise<void> => {
+  const targets = sessionTargets(session);
+  const rows = await checkServers(targets, options.routes, pinning.serverCommand, hooks);
+  if (interrupted()) {
+    err('Interrupted during the start checks. Servers stopped; nothing was measured.');
+    process.exit(130);
+  }
+  for (const line of checkLines(rows, targets.length, options.routes.length)) {
+    err(line);
+  }
+  if (!rows.every((row) => row.passed)) {
+    process.exit(3);
+  }
+};
+
+const measureLogging = async (
+  session: LoggingSession,
+  samples: BenchSample[],
+  visits: CountedVisit[],
+): Promise<Stage> => {
+  try {
+    const result = await runSchedule({
+      options,
+      autocannon: loadAutocannon(),
+      serverCommand: pinning.serverCommand,
+      target: (visit) => loggingTarget(session, loggingBuild(visit.build)),
+      samples,
+      interruption: interruption.promise,
+      interrupted,
+      track: (server) => {
+        current = server;
+        if (server !== null) {
+          visits.push({ build: loggingBuild(server.name), lines: server.stdoutLines });
+        }
+      },
+      enterRound: (entered) => {
+        round = entered;
+      },
+      warn,
+      progress: err,
+    });
+    return result === 'complete' ? completed : { ending: { status: 'interrupted', round }, failure: null };
+  } catch (error) {
+    if (!(error instanceof BenchError)) {
+      throw error;
+    }
+    return interrupted() ? { ending: { status: 'interrupted', round }, failure: null } : failedStage(error);
+  }
+};
+
+const runLogging = async (packages: Packages, session: LoggingSession): Promise<never> => {
+  const startedAt = new Date();
+  const id = `${isoSeconds(startedAt).replaceAll(':', '-')}-p${options.pipelining}-logging${session.controlOnly ? '-control' : ''}`;
+  const outFolder = resolve(options.out);
+  const runDirectory = join(outFolder, id);
+  createRunDirectory(outFolder, runDirectory);
+  const loadAverageStart = loadAverage();
+  const machine = captureMachine(loadAverageStart, pinning);
+  const software = captureSoftware(packages, pinning, null);
+  const found = deviations(options, {
+    node: process.version,
+    fastify: packages.fastify,
+    nodeOptions: nodeOptions(),
+    pinning: pinning.deviation,
+  });
+  const entrants = sessionBuilds(session);
+  for (const line of loggingStartLines(options, entrants, runDirectory, estimatedMinutes(options), pinning.deviation)) {
+    err(line);
+  }
+  if (found.length > 0) {
+    warn(nonConformingWarning(found));
+  }
+  if (loadAverageStart > busyLoadAverage) {
+    warn(busyWarning(loadAverageStart));
+  }
+  await checkLoggingEntrants(session);
+
+  const samples: BenchSample[] = [];
+  const visits: CountedVisit[] = [];
+  const stage = await measureLogging(session, samples, visits);
+  const lines: readonly VisitLines[] = await Promise.all(
+    visits.map(async (visit) => ({ build: visit.build, lines: await visit.lines })),
+  );
+  const summary = summarize(samples, options.servers, options.routes);
+  const result = decideSession(samples, session, notAssessedReason(stage.ending, found, samples));
+  let written = true;
+  try {
+    writeRunFiles(runDirectory, {
+      id,
+      status: stage.ending.status,
+      startedAt: isoSeconds(startedAt),
+      finishedAt: isoSeconds(new Date()),
+      options: {
+        connections,
+        workers,
+        pipelining: options.pipelining,
+        warmUpSeconds: options.warmUpSeconds,
+        durationSeconds: options.durationSeconds,
+        rounds: options.rounds,
+        servers: options.servers,
+        routes: options.routes,
+        diag: false,
+        logging: session,
+      },
+      conforming: found.length === 0,
+      deviations: found,
+      machine: { ...machine, loadAverageEnd: loadAverage() },
+      software,
+      samples,
+      summary,
+      verdict: decideVerdict(stage.ending, found, samples, summary, loggingReason),
+      warnings,
+    });
+    writeLoggingReadout(runDirectory, {
+      runId: id,
+      status: stage.ending.status,
+      revision: software.revision,
+      node: process.version,
+      session,
+      commandLines: loggingCommandLines(session),
+      rounds: options.rounds,
+      routes: options.routes,
+      deviations: found,
+      result,
+      samples,
+      summary,
+      lines,
+      warnings,
+    });
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === null) {
+      throw error;
+    }
+    err(`error: cannot write the run's files in ${displayPath(runDirectory)}/: ${code}.`);
+    written = false;
+  }
+  for (const line of loggingSummaryLines(summary, sessionVerdictLine(result), loggingReadoutPath(runDirectory))) {
+    out(line);
+  }
+  if (stage.failure !== null) {
+    printError(stage.failure);
+  }
+  if (stage.ending.status === 'interrupted') {
+    err(
+      `Interrupted in round ${round}. Servers stopped; the partial readout is in ${displayPath(loggingReadoutPath(runDirectory))}.`,
+    );
+  }
+  process.exit(loggingExitCode(stage.failure, stage.ending, written, result.verdict === 'over'));
+};
+
 const runMode = (packages: Packages): Promise<never> => {
   if (options.diag) {
     return runDiag(packages);
   }
-  return options.check ? runCheckMode() : runMeasure(packages);
+  if (options.check) {
+    return runCheckMode();
+  }
+  return options.logging === null ? runMeasure(packages) : runLogging(packages, options.logging);
 };
 
 try {

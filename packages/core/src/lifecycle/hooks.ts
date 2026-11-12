@@ -3,8 +3,9 @@
 
 import { authorResult } from './author-result.ts';
 import type { OutgoingHttpHeaders } from 'node:http';
-import { contain, end, event, leave, resume, type Slot, track, wrote } from '#diag';
+import { contain, end, event, leave, resume, track, wrote } from '#diag';
 import type { OutgoingCookie, RouteInfo } from '../contract/types.ts';
+import type { Logger } from '../log/types.ts';
 import type {
   CompletedContext,
   ErrorContext,
@@ -20,9 +21,10 @@ import { setAuthorHeader, setAuthorHeaders } from './author-header.ts';
 import { clientAddressOf } from './client-address.ts';
 import { collectCookie, rawCookiesOf } from './cookies.ts';
 import { settle, signalOf } from './deadline.ts';
+import { engineFault } from './engine-fault.ts';
 import type { Exchange } from './exchange.ts';
 import { finishHead } from './head.ts';
-import { describeThrown, writeStderrLine } from './stderr.ts';
+import { loggerOf, pointHookFailed } from './points.ts';
 
 const ALREADY_SENT = 'Response already sent';
 // Why: The statuses a contract can declare; Node's writeHead truncates a number to 32 bits, so others could become 3xx.
@@ -34,14 +36,13 @@ function replyStatus(reply: RawReply): number {
   const { status } = reply;
   if (!Number.isInteger(status) || status < FIRST_STATUS || status > LAST_STATUS) {
     event('err.send_status');
-    throw new Error(`send status must be an integer from ${FIRST_STATUS} to ${LAST_STATUS}`);
+    throw engineFault('send_status', `send status must be an integer from ${FIRST_STATUS} to ${LAST_STATUS}`, null);
   }
   return status;
 }
 
 // Does:  Writes a reply a hook sends in place of the handler's; a second send throws and is reported once.
 function sendReply(exchange: Exchange, reply: RawReply): void {
-  const { res, method } = exchange;
   // Why: The timeout already answered; a hook that wakes later is not at fault for replying.
   if (exchange.state === 'timed-out') {
     return;
@@ -50,9 +51,10 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
     event('err.already_sent');
     const error = new Error(ALREADY_SENT);
     exchange.lateSendError = error;
-    writeStderrLine(method, exchange.route.info.path, res.statusCode, exchange.route.info.name, ALREADY_SENT);
+    pointHookFailed(exchange, 'late_send', error);
     throw error;
   }
+  const { res, method } = exchange;
   const status = replyStatus(reply);
   if (reply.headers !== undefined) {
     setAuthorHeaders(res, reply.headers);
@@ -104,6 +106,14 @@ export class ErrorContextRecord implements ErrorContext {
 
   get rawCookies(): RawCookies {
     return rawCookiesOf(this.#exchange);
+  }
+
+  get log(): Logger {
+    return loggerOf(this.#exchange);
+  }
+
+  get requestId(): string {
+    return this.#exchange.log.id;
   }
 }
 
@@ -211,6 +221,7 @@ export function runStage<H>(
         }
       },
       () => exchange.runtime.deadlines.wait(exchange),
+      (failure) => pointHookFailed(exchange, 'internal', failure),
     );
   };
   step(0);
@@ -218,7 +229,7 @@ export function runStage<H>(
 
 // Does:  Calls every hook in order even when one throws, until stopped; each failure is reported and the rest run.
 export function runObservers<H>(
-  slot: Slot,
+  exchange: Exchange,
   hooks: readonly H[],
   call: (hook: H) => void | Promise<void>,
   report: (error: unknown) => void,
@@ -234,13 +245,13 @@ export function runObservers<H>(
     }
     const advance = (asynchronous: boolean): void => {
       if (asynchronous) {
-        resume(slot);
+        resume(exchange.diag);
       }
       try {
         step(index + 1);
       } finally {
         if (asynchronous) {
-          leave(slot);
+          leave(exchange.diag);
         }
       }
     };
@@ -252,6 +263,7 @@ export function runObservers<H>(
         advance(asynchronous);
       },
       waiting,
+      (failure) => pointHookFailed(exchange, 'internal', failure),
     );
   };
   step(0);
@@ -276,6 +288,14 @@ class CompletedContextRecord implements CompletedContext {
 
   get clientAddress(): string {
     return clientAddressOf(this.#exchange);
+  }
+
+  get log(): Logger {
+    return loggerOf(this.#exchange);
+  }
+
+  get requestId(): string {
+    return this.#exchange.log.id;
   }
 }
 
@@ -303,17 +323,10 @@ export function watchCompletion(exchange: Exchange, hooks: readonly OnResponseHo
     contain('completed', context);
     const span = track('req.hook.on_response');
     runObservers(
-      exchange.diag,
+      exchange,
       hooks,
       (hook) => hook(context),
-      (error) =>
-        writeStderrLine(
-          exchange.method,
-          exchange.route.info.path,
-          res.statusCode,
-          exchange.route.info.name,
-          `onResponse hook threw: ${describeThrown(error)}`,
-        ),
+      (error) => pointHookFailed(exchange, 'on_response', error),
       ignoreWait,
       neverStopped,
       () => {

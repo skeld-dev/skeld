@@ -7,6 +7,7 @@ import type { Serializer } from '../compile/types.ts';
 import { setAuthorHeaders } from './author-header.ts';
 import { collectCookies } from './cookies.ts';
 import { settle } from './deadline.ts';
+import { engineFault } from './engine-fault.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { ResponseContextRecord, runStage } from './hooks.ts';
@@ -19,7 +20,10 @@ const NOT_MODIFIED = 304;
 const SCHEMA_MISMATCH = 'response does not match its schema';
 
 function mismatch(location: string | undefined): Error {
-  return new Error(location === undefined || location === '' ? SCHEMA_MISMATCH : `${SCHEMA_MISMATCH} at ${location}`);
+  if (location === undefined || location === '') {
+    return engineFault('response_mismatch', SCHEMA_MISMATCH, null);
+  }
+  return engineFault('response_mismatch', `${SCHEMA_MISMATCH} at ${location}`, location);
 }
 
 function writePayload(exchange: Exchange, status: number, serialized: string): void {
@@ -41,7 +45,7 @@ function writePayload(exchange: Exchange, status: number, serialized: string): v
       exchange.cors,
     );
   } catch (error) {
-    fail(exchange, error, true);
+    fail(exchange, error);
     return;
   }
   end(exchange.stage);
@@ -73,7 +77,7 @@ function writeEmpty(exchange: Exchange, status: number): void {
       exchange.cors,
     );
   } catch (error) {
-    fail(exchange, error, true);
+    fail(exchange, error);
     return;
   }
   res.writeHead(status, head);
@@ -103,7 +107,7 @@ function sendThrough(exchange: Exchange, status: number, serialized: string): vo
       writePayload(exchange, status, serialized);
     },
     (error) => {
-      fail(exchange, error, true);
+      fail(exchange, error);
     },
   );
 }
@@ -123,7 +127,7 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
     const declared = exchange.route.serializers.get(status);
     if (declared === undefined) {
       event('err.undeclared_status', status);
-      fail(exchange, new Error(`handler returned undeclared status ${status}`), false);
+      fail(exchange, engineFault('undeclared_status', `handler returned undeclared status ${status}`, null));
       return;
     }
     serializer = declared;
@@ -135,7 +139,7 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
       exchange.pendingCookies = collectCookies(exchange.pendingCookies, cookies);
     }
   } catch (error) {
-    fail(exchange, error, true);
+    fail(exchange, error);
     return;
   }
   const serialize = start('req.respond.serialize');
@@ -150,14 +154,14 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
   } catch (error) {
     end(serialize);
     event('err.serialize');
-    fail(exchange, error, true);
+    fail(exchange, error);
     return;
   }
   end(serialize);
   // Why: A number is the index of the schema location that refused the value, never the value itself.
   if (typeof written === 'number') {
     event('err.serialize');
-    fail(exchange, mismatch(serializer.refusals[written]), true);
+    fail(exchange, mismatch(serializer.refusals[written]));
     return;
   }
   sendThrough(exchange, status, written);

@@ -4,7 +4,9 @@
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { count, event, wrote } from '#diag';
 import { grantOf } from '../cors/grant.ts';
+import type { RequestLog } from '../log/shapes.ts';
 import { finishHead } from './head.ts';
+import { pointRefused } from './points.ts';
 import type { EngineRuntime } from './types.ts';
 import { CROSS_ORIGIN_BODY, writeErrorBody } from './wire.ts';
 
@@ -16,6 +18,7 @@ export function answerPreflight(
   req: IncomingMessage,
   res: ServerResponse,
   path: string,
+  request: RequestLog,
 ): boolean {
   const { headers } = req;
   const requested = headers['access-control-request-method'];
@@ -31,6 +34,14 @@ export function answerPreflight(
   const grant = grantOf(cors, headers.origin);
   if (grant.allowOrigin === null) {
     event('refuse.preflight', info.name);
+    pointRefused(
+      runtime.log,
+      request,
+      'skeld.refuse.preflight',
+      CROSS_ORIGIN_BODY.status,
+      CROSS_ORIGIN_BODY.code,
+      null,
+    );
     writeErrorBody(runtime, res, 'OPTIONS', CROSS_ORIGIN_BODY, false, null, grant);
     return true;
   }

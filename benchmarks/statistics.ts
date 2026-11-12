@@ -1,6 +1,7 @@
-// Does:  Reduces the measured samples to a median and range per server and route, with ratios to Fastify.
+// Does:  Reduces the measured samples to a median and range per server, build and route, with ratios to Fastify.
 // Holds: A group's CPU figure is null unless every one of its rounds has one.
 
+import { loggingBuilds } from './schedule.ts';
 import type { BenchSample, BenchSpread, BenchSummary, BuildId, RouteId, ServerId } from './types.ts';
 
 export function median(values: readonly number[]): number {
@@ -45,7 +46,7 @@ const cpuSpread = (samples: readonly BenchSample[]): BenchSpread | null => {
   return values.length === samples.length ? spread(values) : null;
 };
 
-const builds: readonly BuildId[] = ['skeld', 'skeld-diag'];
+const builds: readonly BuildId[] = ['skeld', 'skeld-diag', ...loggingBuilds];
 
 export function summarize(
   samples: readonly BenchSample[],

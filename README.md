@@ -4,6 +4,10 @@ Skeld is a TypeScript framework for services on Node 26: one contract declares e
 
 The package, its install and its example are documented in [`packages/core/README.md`](packages/core/README.md).
 
+## Logging
+
+A server writes structured JSON lines to stdout. The options, the record format, the events and Collector ingestion are documented in [`docs/logging/`](docs/logging/logging.md).
+
 ## Repository
 
 An npm workspaces monorepo. Source runs unbuilt with `node --conditions=skeld-source`, which resolves `@skeld/core` to `packages/core/src`.

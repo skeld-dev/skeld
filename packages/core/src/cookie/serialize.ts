@@ -8,7 +8,7 @@ import { isCookieName } from './name.ts';
 const MAX_AGE_LIMIT = 34_560_000;
 // Why: RFC 6265bis draft 22 section 5.6 has user agents ignore a cookie whose name and value exceed 4,096 octets.
 const MAX_PAIR_BYTES = 4096;
-// Why: An error message names at most this much of a cookie's name, so a long name cannot flood stderr.
+// Why: An error message names at most this much of a cookie's name, so a long name cannot flood the log.
 const NAME_SHOWN = 64;
 // Why: RFC 6265bis draft 22 section 5.6 has user agents ignore an attribute value longer than 1,024 octets.
 const MAX_ATTRIBUTE_BYTES = 1024;

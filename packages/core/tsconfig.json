@@ -3,6 +3,7 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    "lib": ["es2025", "esnext.error"],
     "declarationMap": false,
     "tsBuildInfoFile": "./.tsbuildinfo"
   },

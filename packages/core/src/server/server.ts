@@ -1,9 +1,11 @@
-// Does:  Defines createServer: the root scope, listen and close.
+// Does:  Defines createServer: the root scope, its log, listen and close.
 // Holds: listen runs at most once, and a server that was closed never starts listening.
 
 import { closed as closeDiagnostics, end, open, start } from '#diag';
 import { handleRequest } from '../lifecycle/handle-request.ts';
 import type { EngineRuntime } from '../lifecycle/types.ts';
+import { resolveLog } from '../log/options.ts';
+import { createServerLog } from '../log/server-log.ts';
 import { BootError } from './boot-error.ts';
 import { bootPlugins } from './boot.ts';
 import { dispose } from './disposal.ts';
@@ -11,9 +13,11 @@ import { createHttpServer } from './listen.ts';
 import { resolveListenOptions, resolveServerOptions, resolveTrustProxy } from './options.ts';
 import { buildRuntime } from './runtime.ts';
 import { createScope, createScopeState } from './scope.ts';
+import type { LogStats } from '../log/types.ts';
 import type { HttpServerHandle, ListeningAddress, ListenOptions, Server, ServerOptions } from './types.ts';
 
 export type { Empty, OutgoingCookie, RouteInfo } from '../contract/types.ts';
+export type { RequestPart } from '../log/types.ts';
 export type {
   AuthorHeaderName,
   CompletedContext,
@@ -32,6 +36,7 @@ export type {
   OnResponseHook,
   OnSendHook,
   OutgoingHeaders,
+  PartKey,
   Plugin,
   PreHandlerHook,
   RawCookies,
@@ -58,7 +63,8 @@ export type {
 export function createServer(options: ServerOptions = {}): Server {
   const resolved = resolveServerOptions(options);
   const trustProxy = resolveTrustProxy(options.trustProxy);
-  const root = createScopeState('root', null);
+  const log = createServerLog(resolveLog(options.log));
+  const root = createScopeState('root', null, log.logger(null));
   let listenCalled = false;
   let closing = false;
   let closed: Promise<void> | null = null;
@@ -78,7 +84,9 @@ export function createServer(options: ServerOptions = {}): Server {
     root.sealed = true;
     startup = startListening(target.host, target.port);
     try {
-      return await startup;
+      const address = await startup;
+      log.listening(address.host, address.port);
+      return address;
     } catch (cause) {
       try {
         await close();
@@ -105,7 +113,7 @@ export function createServer(options: ServerOptions = {}): Server {
     if (closing) {
       throw new BootError('SERVER_CLOSED', 'Server closed during startup', null, null);
     }
-    const built = buildRuntime(root, resolved, trustProxy, () => closing);
+    const built = buildRuntime(root, resolved, trustProxy, () => closing, log);
     runtime = built;
     handle = createHttpServer(resolved, (req, res) => handleRequest(built, req, res));
     return handle.listen(host, port, root.disposal.abort.signal);
@@ -126,6 +134,8 @@ export function createServer(options: ServerOptions = {}): Server {
       runtime?.deadlines.stop();
     }
     failures.push(...(await dispose(root.disposal, resolved.pluginCloseTimeoutMs)));
+    // Why: Last before diag, so the closed record counts every record the transport and disposers made.
+    await log.close();
     closeDiagnostics();
     if (failures.length !== 0) {
       throw new AggregateError(failures, 'Server shutdown failed');
@@ -143,5 +153,9 @@ export function createServer(options: ServerOptions = {}): Server {
     return closed;
   }
 
-  return { ...createScope(root), listen, close };
+  function logStats(): LogStats {
+    return log.stats();
+  }
+
+  return { ...createScope(root), listen, close, logStats };
 }

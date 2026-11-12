@@ -10,10 +10,11 @@ import { createServer, type OutgoingCookie, type RequestContext } from '@skeld/c
 import { check, conclude, rawExchange } from './support.ts';
 import { compileProbes } from './support-compile.ts';
 import { startDiagChild } from './support-diag.ts';
+import { parseRecords } from './support-log.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'a cookie with only name and value goes out as one Set-Cookie line with Path=/, HttpOnly, Secure and SameSite=Lax; three cookies are three lines; a later cookie of the same name, path and domain replaces the earlier, also across a hook and the reply; maxAge 0 sends Max-Age=0; every invalid name, value, path (also one not starting with /, and one over 1,024 bytes), domain (also one over 1,024 bytes), prefix, sameSite, maxAge and size throws from setCookie and is the fixed 500 from a reply, with no cookie on the wire and the value in no stderr line or diag file; set-cookie in any letter case is a compile error at setHeader, a reply and a send and a runtime throw or the fixed 500; a thrown plain error after setCookie sends no cookie; an HttpError naming cookies sends exactly those; the fixed 500 sends none';
+  'a cookie with only name and value goes out as one Set-Cookie line with Path=/, HttpOnly, Secure and SameSite=Lax; three cookies are three lines; a later cookie of the same name, path and domain replaces the earlier, also across a hook and the reply; maxAge 0 sends Max-Age=0; every invalid name, value, path (also one not starting with /, and one over 1,024 bytes), domain (also one over 1,024 bytes), prefix, sameSite, maxAge and size throws from setCookie and is the fixed 500 from a reply, with no cookie on the wire and the value in no stderr or stdout line or diag file; set-cookie in any letter case is a compile error at setHeader, a reply and a send and a runtime throw or the fixed 500; a thrown plain error after setCookie sends no cookie; an HttpError naming cookies sends exactly those; the fixed 500 sends none';
 
 const fixed500 = '{"status":500,"code":"INTERNAL","message":"Internal Server Error"}';
 const marker = `zq${randomBytes(6).toString('hex')}`;
@@ -317,9 +318,9 @@ import { createServer } from '@skeld/core/server';
 const contract = defineContract({ item: { method: 'GET', path: '/item', responses: { 200: t.object({ ok: t.boolean() }) } } });
 const server = createServer();
 server.addHook('onRequest', (context) => {
-  context.setHeader('x-request-id', 'a');
+  context.setHeader('x-app-ref', 'a');
   context.setCookie({ name: 'a', value: 'b', maxAge: 0, sameSite: 'None', partitioned: true });
-  context.send({ status: 200, headers: { 'x-request-id': 'a' }, payload: '{}' });
+  context.send({ status: 200, headers: { 'x-app-ref': 'a' }, payload: '{}' });
 });
 server.addHook('onSend', (context) => { context.setCookie({ name: 'a', value: 'b' }); });
 server.routes(contract, { item: () => { if (Math.random() > 2) { throw new HttpError(401, 'NO', 'no', { cookies: [{ name: 'a', value: 'b' }] }); } return { status: 200, body: { ok: true }, cookies: [{ name: 'a', value: 'b', domain: 'example.com', path: '/x', httpOnly: false, secure: true }] }; } });
@@ -610,10 +611,18 @@ async function prove(): Promise<void> {
   }
   const stderr = child.stderr();
   check(problems, !stderr.includes(marker), 'a refused cookie value appears in stderr');
+  const stdout = child.stdout();
+  check(problems, !stdout.includes(marker), 'a refused cookie value appears in stdout');
   check(
     problems,
-    stderr.includes('/reply 500'),
-    'stderr held no line for the refused cookies, so its value check proves nothing',
+    parseRecords(stdout).some(
+      (record) =>
+        record?.event_name === 'skeld.request.error' &&
+        record['skeld.reason'] === 'invalid_cookie' &&
+        record['http.route'] === '/reply' &&
+        record['http.response.status_code'] === 500,
+    ),
+    'stdout held no invalid_cookie record for the refused cookies, so its value check proves nothing',
   );
 
   const diagChild = await startDiagChild(fileURLToPath(import.meta.url));
@@ -621,6 +630,7 @@ async function prove(): Promise<void> {
   const files = await diagChild.stopAndRead();
   check(problems, !files.text.includes(marker), 'a refused cookie value appears in a diag file');
   check(problems, !diagChild.stderr().includes(marker), 'a refused cookie value appears in the diag child stderr');
+  check(problems, !diagChild.stdout().includes(marker), 'a refused cookie value appears in the diag child stdout');
   check(problems, files.text.includes('err.cookie'), 'the diag files hold no err.cookie event');
 
   const sources = Object.values(probeSources);

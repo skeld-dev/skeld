@@ -1,5 +1,5 @@
 // Does:  Proves the cross-site check on POST, PUT, PATCH and DELETE: the Origin and Sec-Fetch-Site table and its effects.
-// Holds: A refused request reaches no hook, error handler or handler, and no refused origin is in stderr or a diag file.
+// Holds: A refused request reaches no hook, error handler or handler, and no refused origin is in stderr, stdout or a diag file.
 // biome-ignore-all lint/performance/noAwaitInLoops: Serial requests keep each case's wire bytes apart.
 
 import { randomBytes } from 'node:crypto';
@@ -12,11 +12,12 @@ import * as t from '@skeld/core/schema';
 import { createServer, type CsrfPolicy, type RoutesOptions, type ServerOptions } from '@skeld/core/server';
 import { check, conclude } from './support.ts';
 import { startDiagChild } from './support-diag.ts';
+import { parseRecords } from './support-log.ts';
 import { jsonOf, request, type Wire } from './support-wire.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'for POST, PUT, PATCH and DELETE an Origin in publicOrigin or the route trustedOrigins passes whatever Sec-Fetch-Site says; any other Origin, null or garbage, another scheme or port, passes only with same-origin; no Origin passes with same-origin or none and is refused with any other value; neither header passes in baseline and is refused in strict; Origin equal to Host with no publicOrigin is refused and one stderr line says so once; an origin listed only in cors is refused and group trustedOrigins replace the server list; a refusal is 403 CROSS_ORIGIN with one body, connection close, reaches no hook (onResponse included), error handler or handler while an accepted request runs onRequest, preHandler, onSend and onResponse, and the next connection is served; GET and HEAD are never refused; csrfExempt routes pass every row; a group or server csrf mode that is null, a number, an unknown string or (under strict) undefined, and a null trustedOrigins or credentials, are refused; a route whose method accessor changes between reads is either refused or registered and served under GET, and a LOCK to it is never 2xx and never reaches the handler; routes named constructor and __proto__ are served; a route method other than GET, POST, PUT, PATCH or DELETE is refused when declared and a cross-site LOCK is never answered 200; under a strict server a group csrf object must state its mode, a baseline or strict group behaves as stated and one without csrf inherits; strict without publicOrigin, an unknown exempt name and a malformed origin are refused at boot; no refused origin is in stderr or a diag file';
+  'for POST, PUT, PATCH and DELETE an Origin in publicOrigin or the route trustedOrigins passes whatever Sec-Fetch-Site says; any other Origin, null or garbage, another scheme or port, passes only with same-origin; no Origin passes with same-origin or none and is refused with any other value; neither header passes in baseline and is refused in strict; Origin equal to Host with no publicOrigin is refused and one skeld.config.public_origin record on stdout says so once; an origin listed only in cors is refused and group trustedOrigins replace the server list; a refusal is 403 CROSS_ORIGIN with one body, connection close, reaches no hook (onResponse included), error handler or handler while an accepted request runs onRequest, preHandler, onSend and onResponse, and the next connection is served; GET and HEAD are never refused; csrfExempt routes pass every row; a group or server csrf mode that is null, a number, an unknown string or (under strict) undefined, and a null trustedOrigins or credentials, are refused; a route whose method accessor changes between reads is either refused or registered and served under GET, and a LOCK to it is never 2xx and never reaches the handler; routes named constructor and __proto__ are served; a route method other than GET, POST, PUT, PATCH or DELETE is refused when declared and a cross-site LOCK is never answered 200; under a strict server a group csrf object must state its mode, a baseline or strict group behaves as stated and one without csrf inherits; strict without publicOrigin, an unknown exempt name and a malformed origin are refused at boot; no refused origin is in stderr or a diag file';
 
 const PUBLIC = 'https://api.example';
 const TRUSTED = 'https://trusted.example';
@@ -541,24 +542,21 @@ async function noOrigin(problems: string[]): Promise<void> {
   } finally {
     await child.stop();
   }
-  const lines = child
-    .stderr()
-    .split('\n')
-    .filter((line) => line.includes('publicOrigin'));
+  const hints = parseRecords(child.stdout()).filter((record) => record?.event_name === 'skeld.config.public_origin');
   check(
     problems,
-    lines.length === 1,
-    `${lines.length} stderr lines mention publicOrigin, expected exactly 1: ${lines.join(' | ')}`,
-  );
-  check(
-    problems,
-    lines[0]?.includes('post') === true || lines[0]?.includes('put') === true,
-    `the stderr hint does not name the route: ${lines[0]}`,
+    hints.length === 1,
+    `${hints.length} skeld.config.public_origin records on stdout, expected exactly 1: ${hints.map((hint) => JSON.stringify(hint)).join(' | ')}`,
   );
   check(
     problems,
     !child.stderr().includes(marker) && !child.stderr().includes('127.0.0.1:'),
     'an origin appears in stderr',
+  );
+  check(
+    problems,
+    !child.stdout().includes(marker) && !child.stdout().includes('127.0.0.1:'),
+    'an origin appears in stdout',
   );
 }
 
@@ -609,6 +607,7 @@ async function prove(): Promise<void> {
     `refusals answered ${bodies.size} different bodies: ${[...bodies].join(' | ').slice(0, 300)}`,
   );
   check(problems, !child.stderr().includes(marker), 'a refused origin appears in stderr');
+  check(problems, !child.stdout().includes(marker), 'a refused origin appears in stdout');
 
   const diagChild = await startDiagChild(fileURLToPath(import.meta.url));
   const diagTally = await matrix([], diagChild.port, new Set());
@@ -616,6 +615,7 @@ async function prove(): Promise<void> {
   check(problems, diagTally.refused > 0, 'the diag child refused nothing');
   check(problems, !files.text.includes(marker), 'a refused origin appears in a diag file');
   check(problems, !diagChild.stderr().includes(marker), 'a refused origin appears in the diag child stderr');
+  check(problems, !diagChild.stdout().includes(marker), 'a refused origin appears in the diag child stdout');
   check(problems, files.text.includes('refuse.csrf'), 'the diag files hold no refuse.csrf event');
 
   await noOrigin(problems);

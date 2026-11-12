@@ -1,9 +1,10 @@
-// Does:  Sets the response headers an author names, refusing the framing, connection, cookie and CORS fields.
+// Does:  Sets the response headers an author names, refusing framing, connection, cookie, CORS and request-id fields.
 // Holds: A reserved name in any letter case throws before any header of the call is set.
 
 import type { ServerResponse } from 'node:http';
 import { event, header } from '#diag';
 import type { OutgoingHeaders, ReservedHeaderName } from '../server/types.ts';
+import { engineFault } from './engine-fault.ts';
 
 // Why: Connection-specific fields per RFC 9110 section 7.6.1; RFC 9112 section 6.2 bars two framing headers at once.
 const RESERVED_NAMES = {
@@ -24,6 +25,8 @@ const RESERVED_NAMES = {
   'access-control-allow-methods': true,
   'access-control-allow-headers': true,
   'access-control-max-age': true,
+  // Why: The engine sets the request id on every response, so a log line and its response always carry the same id.
+  'x-request-id': true,
 } as const satisfies Record<ReservedHeaderName, true>;
 const RESERVED: ReadonlySet<string> = new Set(Object.keys(RESERVED_NAMES));
 
@@ -39,7 +42,7 @@ function refuseReserved(name: string): void {
   if (RESERVED.has(lower)) {
     event('err.reserved_header', name);
     const hint = refusalHint(lower);
-    throw new Error(`header ${name} is reserved for the engine${hint}`);
+    throw engineFault('reserved_header', `header ${name} is reserved for the engine${hint}`, null);
   }
 }
 

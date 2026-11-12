@@ -34,6 +34,7 @@ The package has no root export; import each part from its own subpath. Import th
 | `@skeld/core/redact`       | `redact`, which copies a value with its `secret` and `personal` fields replaced                                                                                                                                                          |
 | `@skeld/core/json-schema`  | `toJsonSchema`, which exports a schema as JSON Schema 2020-12, and the `JsonSchema` type                                                                                                                                                 |
 | `@skeld/core/redirect`     | `checkRedirect`, the engine's check of a redirect target, and its result types                                                                                                                                                           |
+| `@skeld/core/log`          | `classified`, which pairs a value with a schema for a log field, and the logger types (`LogOptions`, `Logger`, `LogStats`, …)                                                                                                            |
 | `@skeld/core/package.json` | the manifest                                                                                                                                                                                                                             |
 
 ## Example
@@ -84,11 +85,11 @@ server.routes(helloContract, {
 });
 
 await server.listen({ port: 3000, host: '127.0.0.1' });
-process.stdout.write('hello listening on http://127.0.0.1:3000\n');
+server.log.info('hello listening', { url: 'http://127.0.0.1:3000' });
 
 await Promise.race([once(process, 'SIGINT'), once(process, 'SIGTERM')]);
+server.log.info('hello stopping');
 await server.close();
-process.stdout.write('hello stopped\n');
 ```
 
 `client.ts`:
@@ -117,14 +118,14 @@ node hello.ts
 node client.ts
 ```
 
-The server prints `hello listening on http://127.0.0.1:3000`. The client prints:
+The server writes its records to stdout as JSON lines: `skeld.server.listening`, then its own `hello listening` record. The client prints:
 
 ```text
 Hello, Ada!
 Olá, Ada
 ```
 
-Node runs the `.ts` files directly by stripping their types. Stop the server with Ctrl-C; it finishes in-flight responses and prints `hello stopped`.
+Node runs the `.ts` files directly by stripping their types. Stop the server with Ctrl-C; it logs `hello stopping`, finishes in-flight responses and writes `skeld.server.closed`.
 
 `message` is bounded at 72: the longest reply the handlers build is `Hello, ` (7 UTF-16 code units) plus a name at its `maxLength` of 64 plus `!` (1). Change a handler to return a body without `message`, or `client.ts` to read `greeting.body.message` without checking `status`, and `tsc` reports a type error: the contract types both sides.
 
@@ -148,11 +149,11 @@ A schema with `sensitivity: 'secret'` (a password, a token, a key) hands the han
 
 ### Union responses
 
-An object response drops any key the handler returns that its schema does not declare. A union response (`200: t.union([...])`) does not: the value is matched member by member and object members are closed, so a value with an undeclared key matches no member, and the request is answered with the fixed 500 body below and one stderr line. A handler whose response is a union returns only the declared keys, for example by picking them out of a database row.
+An object response drops any key the handler returns that its schema does not declare. A union response (`200: t.union([...])`) does not: the value is matched member by member and object members are closed, so a value with an undeclared key matches no member, and the request is answered with the fixed 500 body below and a `skeld.request.error` record with reason `response_mismatch`. A handler whose response is a union returns only the declared keys, for example by picking them out of a database row.
 
 ## Timeouts, client address and headers
 
-`handlerTimeoutMs` in the server options (default 30,000) bounds each request from its route match to its response: `onRequest` hooks, the body read, `preHandler` hooks, the handler and `onSend` hooks. Past it the request is answered 503 `TIMEOUT` with `connection: close`, `request.signal` (and every hook context's `signal`) is aborted, and whatever the handler returns later is dropped. No `onError` hook or error handler is started for a timeout, and an error path the timeout interrupts calls no further hook or handler; one stderr line records it. The check runs every tenth of the shortest limit, and never more often than every 10 ms, so a timeout is answered at most a tenth of its limit or 10 ms late, whichever is greater. Each limit is at most 2,147,483,647 ms, Node's timer maximum, as are `pluginTimeoutMs` and `closeTimeoutMs`. `handlerTimeouts` in the options of `routes` sets a route's own limit, in either direction:
+`handlerTimeoutMs` in the server options (default 30,000) bounds each request from its route match to its response: `onRequest` hooks, the body read, `preHandler` hooks, the handler and `onSend` hooks. Past it the request is answered 503 `TIMEOUT` with `connection: close`, `request.signal` (and every hook context's `signal`) is aborted, and whatever the handler returns later is dropped. No `onError` hook or error handler is started for a timeout, and an error path the timeout interrupts calls no further hook or handler; a `skeld.request.error` record with reason `timeout` records it. The check runs every tenth of the shortest limit, and never more often than every 10 ms, so a timeout is answered at most a tenth of its limit or 10 ms late, whichever is greater. Each limit is at most 2,147,483,647 ms, Node's timer maximum, as are `pluginTimeoutMs` and `closeTimeoutMs`. `handlerTimeouts` in the options of `routes` sets a route's own limit, in either direction:
 
 ```ts
 server.routes(contract, handlers, { handlerTimeouts: { hello: 2_000 } });
@@ -164,7 +165,7 @@ Every response the engine writes carries `x-content-type-options: nosniff`, `con
 
 ## Redirects and cookies
 
-The engine checks the final `Location` of every 3xx response, whichever of the handler's `headers`, a hook's `setHeader` or a hook's `send` set it. A value that starts with `/` must stay on this service: `//host`, `/\host`, `/<tab>/host` and `/.//host` are refused, as is any value starting with `//`. Any other value must be an absolute `http` or `https` URL with no username or password whose origin is listed in `redirectOrigins`, exactly as `new URL(x).origin` writes it: `https://id.example.com` allows neither `http://id.example.com`, another port nor a subdomain. Whitespace around the value, a control character or a backslash anywhere are refused first. A refused redirect is answered with the fixed 500 body; its message, `redirect refused at <route>: <reason>`, goes to stderr like any thrown message and never holds the target. `publicOrigin` is not a redirect origin: an absolute redirect to the service's own origin needs that origin in `redirectOrigins`, while a local path needs nothing. `redirectOrigins` in the server options applies to every route (default none); in the options of `routes` it replaces the server's list for those routes, never adding to it. A 201's `Location` is not checked. `checkRedirect` from `@skeld/core/redirect` gives the engine's verdict for a value.
+The engine checks the final `Location` of every 3xx response, whichever of the handler's `headers`, a hook's `setHeader` or a hook's `send` set it. A value that starts with `/` must stay on this service: `//host`, `/\host`, `/<tab>/host` and `/.//host` are refused, as is any value starting with `//`. Any other value must be an absolute `http` or `https` URL with no username or password whose origin is listed in `redirectOrigins`, exactly as `new URL(x).origin` writes it: `https://id.example.com` allows neither `http://id.example.com`, another port nor a subdomain. Whitespace around the value, a control character or a backslash anywhere are refused first. A refused redirect is answered with the fixed 500 body and a `skeld.request.error` record with reason `redirect_refused`; neither holds the target. `publicOrigin` is not a redirect origin: an absolute redirect to the service's own origin needs that origin in `redirectOrigins`, while a local path needs nothing. `redirectOrigins` in the server options applies to every route (default none); in the options of `routes` it replaces the server's list for those routes, never adding to it. A 201's `Location` is not checked. `checkRedirect` from `@skeld/core/redirect` gives the engine's verdict for a value.
 
 `request.rawCookies`, and `rawCookies` on the `onRequest`, `preHandler`, `onSend` and `onError` contexts, reads the `Cookie` header exactly as sent: no percent-decoding, no quote removal, names case-sensitive. `get(name)` returns a value only when the name was sent once, so a second cookie of the same name, such as one a sibling subdomain planted, makes it read as absent; `getAll(name)` returns every value in order. The header is parsed once per request, on first read. A route can also declare `cookies: t.object({ ... })` in its contract: the declared cookies are validated like headers and arrive typed on `request.cookies`, other cookies are ignored, and a declared name sent twice is a 400. A declared name must be an HTTP token. The typed client sends no cookies.
 
@@ -198,7 +199,7 @@ Every POST, PUT, PATCH and DELETE route is checked for cross-site requests after
 | absent                           | anything else            | 403                                   |
 | absent                           | absent                   | passes in `baseline`, 403 in `strict` |
 
-A refusal is a fixed 403 `{"status":403,"code":"CROSS_ORIGIN","message":"Cross-origin request refused"}` with `connection: close`; no hook, error handler or handler runs. When a request is refused because it has `Origin`, no `Sec-Fetch-Site` and no `publicOrigin` is set, one stderr line per server says that origin verification needs `publicOrigin`. `csrf` in the options of `routes` replaces the server's whole, never merged; when the server's mode is `strict`, a group's `csrf` must state its `mode`, or `listen` refuses it with `INVALID_OPTION`, so a group cannot fall back to `baseline` unnoticed. `csrfExempt: ['routeName']` skips the check for those routes (an unknown name is refused). There is no option that turns the check off for the whole server. `mode: 'strict'` without `publicOrigin` is refused with `INVALID_OPTION`.
+A refusal is a fixed 403 `{"status":403,"code":"CROSS_ORIGIN","message":"Cross-origin request refused"}` with `connection: close`; no hook, error handler or handler runs. When a request is refused because it has `Origin`, no `Sec-Fetch-Site` and no `publicOrigin` is set, one `skeld.config.public_origin` record per server says that origin verification needs `publicOrigin`. `csrf` in the options of `routes` replaces the server's whole, never merged; when the server's mode is `strict`, a group's `csrf` must state its `mode`, or `listen` refuses it with `INVALID_OPTION`, so a group cannot fall back to `baseline` unnoticed. `csrfExempt: ['routeName']` skips the check for those routes (an unknown name is refused). There is no option that turns the check off for the whole server. `mode: 'strict'` without `publicOrigin` is refused with `INVALID_OPTION`.
 
 What this means in practice:
 
@@ -227,9 +228,15 @@ curl -s -X POST -H 'content-type: application/json' -d '{"name":"Ada","language"
 
 No message holds a value the client sent. A JSON body that holds an own `__proto__` key, or a `constructor` key whose value holds an own `prototype` key, at any depth, is refused by the body reader with 400 `BAD_REQUEST` and no `details` before validation runs (`Request body contains a forbidden key: __proto__`). A body schema that declares a property so named can therefore never be satisfied by a request.
 
-An unknown path gets `{"status":404,"code":"NOT_FOUND","message":"Route GET /nope not found"}`. A handler sends its own error by throwing `new HttpError(status, code, message)` from `@skeld/core/http-error`. Anything else a handler throws becomes `{"status":500,"code":"INTERNAL","message":"Internal Server Error"}`; the thrown message goes to stderr as one `skeld: <method> <path> <status> <route>: <message>` line when no `onError` hook is registered, never to the client.
+An unknown path gets `{"status":404,"code":"NOT_FOUND","message":"Route GET /nope not found"}`. A handler sends its own error by throwing `new HttpError(status, code, message)` from `@skeld/core/http-error`. Anything else a handler throws becomes `{"status":500,"code":"INTERNAL","message":"Internal Server Error"}`; the request's `skeld.request.error` record carries the error's listed class and code, and its message only with the `errorText` log option; nothing of it goes to the client.
 
 The engine's codes are `BAD_REQUEST`, `VALIDATION`, `NOT_FOUND`, `PAYLOAD_TOO_LARGE`, `URI_TOO_LONG`, `UNSUPPORTED_MEDIA_TYPE`, `CROSS_ORIGIN`, `TIMEOUT` and `INTERNAL`. The client rejects with an `HttpError` whose `status` is `null` and whose `code` is `NETWORK` (no response), `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`. `INVALID_RESPONSE` means, for a status the contract declares with a schema, a body that is missing, not JSON or does not pass the schema, with details under `/body`; for any other status, a JSON body that does not parse. `RESPONSE_TOO_LARGE` means the body passed the call's limit, counted in decoded bytes as it arrives and checked first against `Content-Length`: for a declared status, twice the largest JSON encoding its schema admits plus 1,024 bytes, and 1,048,576 bytes for an `unbounded` or `open` schema or any other status. `maxResponseBytes` in the client options replaces every limit.
+
+## Logging
+
+The server writes structured records as JSON lines to stdout, one per line, or hands them to a `sink` given in the `log` server option. With no option it writes the server's start and stop, the engine's error records and the refusals at `warn`; the access log, inbound correlation headers, the client address and error text each need an option. Every request the engine answers carries an `x-request-id` response header, and the request's records carry the same id. `server.log`, `request.log` and `log` on every hook context and plugin scope are loggers with one method per severity; `server.logStats()` returns the server's record counts. Records can be dropped when the destination falls behind or fails, and every drop is counted.
+
+The reference is in [`docs/logging/`](../../docs/logging/logging.md): the options and guarantees, the [record format](../../docs/logging/record-format.md), the [events](../../docs/logging/events.md), [errors in records](../../docs/logging/errors.md) and [ingestion with the OpenTelemetry Collector](../../docs/logging/collector.md).
 
 ## License
 

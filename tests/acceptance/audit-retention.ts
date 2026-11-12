@@ -7,6 +7,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { defineContract } from '@skeld/core/contract';
 import { createServer } from '@skeld/core/server';
 import { handleRequest } from '../../packages/core/dist/lifecycle/handle-request.js';
+import { resolveLog } from '../../packages/core/dist/log/options.js';
+import { createServerLog } from '../../packages/core/dist/log/server-log.js';
 import { createHttpServer } from '../../packages/core/dist/server/listen.js';
 import { resolveServerOptions } from '../../packages/core/dist/server/options.js';
 import { buildRuntime } from '../../packages/core/dist/server/runtime.js';
@@ -16,7 +18,8 @@ const contract = defineContract({ pending: { method: 'GET', path: '/pending', re
 
 async function retention(stage: 'handler' | 'hook', disconnect: boolean): Promise<void> {
   const options = resolveServerOptions({ handlerTimeoutMs: 60_000, closeTimeoutMs: 10 });
-  const root = createScopeState('root', null);
+  const log = createServerLog(resolveLog(false));
+  const root = createScopeState('root', null, log.logger(null));
   const scope = createScope(root);
   const entered = Promise.withResolvers<AbortSignal>();
   const unblock = Promise.withResolvers<void>();
@@ -32,7 +35,7 @@ async function retention(stage: 'handler' | 'hook', disconnect: boolean): Promis
       return unblock.promise.then(() => ({ status: 204 }));
     },
   });
-  const runtime = buildRuntime(root, options, null, () => false);
+  const runtime = buildRuntime(root, options, null, () => false, log);
   const queue = runtime.deadlines.queue(options.handlerTimeoutMs);
   const transport = createHttpServer(options, (req, res) => handleRequest(runtime, req, res));
   const address = await transport.listen('127.0.0.1', 0, root.disposal.abort.signal);

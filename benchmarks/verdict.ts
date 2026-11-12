@@ -9,6 +9,7 @@ import {
   defaultRounds,
   defaultWarmUpSeconds,
   keepLinePercent,
+  loggingRounds,
   protocolFastify,
   protocolNode,
   serverCores,
@@ -39,20 +40,24 @@ export function deviations(options: RunOptions, installed: Installed): readonly 
   if (options.durationSeconds !== defaultDurationSeconds) {
     found.push(`-d ${options.durationSeconds}, not -d ${defaultDurationSeconds}`);
   }
-  if (options.rounds !== defaultRounds) {
-    found.push(`${roundsText(options.rounds)}, not ${defaultRounds}`);
+  const protocolRounds = options.logging === null ? defaultRounds : loggingRounds;
+  if (protocolRounds === null) {
+    found.push(`${roundsText(options.rounds)}; the logging round count is not measured yet`);
+  } else if (options.rounds !== protocolRounds) {
+    found.push(`${roundsText(options.rounds)}, not ${protocolRounds}`);
   }
+  const comparesFrameworks = !options.diag && options.logging === null;
   const missing = defaultServerIds.filter((server) => !options.servers.includes(server));
-  if (!options.diag && missing.length > 0) {
+  if (comparesFrameworks && missing.length > 0) {
     found.push(`servers ${options.servers.join(',')} only`);
   }
-  if (!options.diag && options.routes.length !== routeIds.length) {
+  if (comparesFrameworks && options.routes.length !== routeIds.length) {
     found.push(`route ${options.routes.join(',')} only`);
   }
   if (installed.node !== protocolNode) {
     found.push(`Node ${installed.node.replace(/^v/, '')}, not ${protocolNode.replace(/^v/, '')}`);
   }
-  if (!options.diag && installed.fastify !== protocolFastify) {
+  if (comparesFrameworks && installed.fastify !== protocolFastify) {
     found.push(`Fastify ${installed.fastify}, not ${protocolFastify}`);
   }
   if (installed.nodeOptions !== null) {
@@ -83,7 +88,8 @@ const endingReason = (ending: RunEnding): string | null => {
   return null;
 };
 
-const diagReason = 'Diag mode compares builds, not frameworks.';
+export const diagReason = 'Diag mode compares builds, not frameworks.';
+export const loggingReason = 'The logging session compares builds, not frameworks; its verdict is in the readout.';
 
 export function notAssessedReason(
   ending: RunEnding,
@@ -115,12 +121,12 @@ export function decideVerdict(
   found: readonly string[],
   samples: readonly BenchSample[],
   summary: readonly BenchSummary[],
-  diag: boolean,
+  buildsReason: string | null,
 ): BenchVerdict {
   const hello = skeldPercent(summary, 'hello');
   const echo = skeldPercent(summary, 'echo');
   const reason =
-    (diag ? (endingReason(ending) ?? diagReason) : notAssessedReason(ending, found, samples)) ??
+    (buildsReason === null ? notAssessedReason(ending, found, samples) : (endingReason(ending) ?? buildsReason)) ??
     (echo === null ? 'The server CPU per request could not be read on this system.' : null);
   const generatorBoundRounds = samples.filter(
     (sample) => sample.kind === 'measured' && sample.bound === 'generator',

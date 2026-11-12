@@ -2,7 +2,7 @@
 // Holds: An example that fails to compile, fails to run or runs past 10 s is a finding, never a skip.
 
 import { spawn } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { display, type Entry, namespaceSubpath, type PublicSymbol, type Refusal, root } from './walk.ts';
 
@@ -137,15 +137,34 @@ function failure(result: Run): string | undefined {
   return result.status === 0 ? undefined : `exit ${result.status}: ${errorLine(result.stderr)}`;
 }
 
+function coreLib(): readonly string[] | undefined {
+  const parsed: unknown = JSON.parse(readFileSync(join(root, 'packages', 'core', 'tsconfig.json'), 'utf8'));
+  if (typeof parsed !== 'object' || parsed === null || !('compilerOptions' in parsed)) {
+    return undefined;
+  }
+  const options: unknown = parsed.compilerOptions;
+  if (typeof options !== 'object' || options === null || !('lib' in options)) {
+    return undefined;
+  }
+  const lib: unknown = options.lib;
+  return Array.isArray(lib) && lib.every((name): name is string => typeof name === 'string') ? lib : undefined;
+}
+
 async function compile(
   examples: readonly Example[],
   scratch: string,
   abort: AbortSignal,
 ): Promise<Map<string, string> | Refusal> {
+  const lib = coreLib();
+  if (lib === undefined) {
+    return { refused: 'packages/core/tsconfig.json declares no compilerOptions.lib list of strings' };
+  }
   const config = join(scratch, 'tsconfig.json');
+  // Why: The examples' program type-checks core's source, so it needs core's own lib.
+  const compilerOptions = { lib };
   writeFileSync(
     config,
-    `${JSON.stringify({ extends: join(root, 'tsconfig.base.json'), files: examples.map((example) => example.file) }, null, 2)}\n`,
+    `${JSON.stringify({ extends: join(root, 'tsconfig.base.json'), compilerOptions, files: examples.map((example) => example.file) }, null, 2)}\n`,
   );
   const result = await runNode([tsc, '-p', config, '--noEmit', '--pretty', 'false'], abort, undefined);
   if (result.error !== undefined) {

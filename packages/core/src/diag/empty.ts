@@ -59,7 +59,17 @@ export type TrackName =
   | 'client.fetch'
   | 'client.read'
   | 'client.validate';
-export type CountName = 'refuse.not_found' | 'err.http_error' | 'cors.preflight';
+export type CountName =
+  | 'refuse.not_found'
+  | 'err.http_error'
+  | 'cors.preflight'
+  | 'point.start'
+  | 'point.routed'
+  | 'point.refused'
+  | 'point.failed'
+  | 'point.closed'
+  | 'log.dropped'
+  | 'log.suppressed';
 export type EventName =
   | 'refuse.close'
   | 'refuse.framing'

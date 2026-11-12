@@ -1,5 +1,5 @@
 // Does:  Writes JSON bodies and the engine's own error bodies, completing each head through finishHead.
-// Holds: An engine-written error keeps no author header; it carries only the cookies and CORS grant it is given.
+// Holds: An engine-written error keeps no earlier header but the request id; it adds only the cookies and grant given.
 
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { end, start, wrote } from '#diag';
@@ -9,6 +9,7 @@ import { finishHead } from './head.ts';
 import type { EngineRuntime, RouteRuntime } from './types.ts';
 
 const JSON_CONTENT_TYPE = 'application/json; charset=utf-8';
+const REQUEST_ID_HEADER = 'x-request-id';
 
 export const INTERNAL_BODY: ErrorBody = { status: 500, code: 'INTERNAL', message: 'Internal Server Error' };
 export const CROSS_ORIGIN_BODY: ErrorBody = {
@@ -76,7 +77,10 @@ export function writeErrorBody(
   const closing = close || runtime.isClosing();
   // Why: A header set before the failure (a cookie, a cache directive) must not ride out on the error.
   for (const name of res.getHeaderNames()) {
-    res.removeHeader(name);
+    // Why: The request id is the engine's own header, set at the first step; every error must still carry it.
+    if (name !== REQUEST_ID_HEADER) {
+      res.removeHeader(name);
+    }
   }
   // Why: removeHeader('date') turns sendDate off, which would leave the error without Node's Date header.
   res.sendDate = true;

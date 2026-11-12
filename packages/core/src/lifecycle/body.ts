@@ -4,6 +4,7 @@
 import { event } from '#diag';
 import type { IncomingMessage } from 'node:http';
 import { HttpError } from '../contract/http-error.ts';
+import type { RefusalEvent } from '../log/events.ts';
 import { readBody } from '../request/body.ts';
 import { parseJsonBody } from '../request/json.ts';
 import { parseMediaType } from '../request/media-type.ts';
@@ -11,7 +12,7 @@ import type { BodyReadResult } from '../request/types.ts';
 
 export type BodyOutcome =
   | { readonly kind: 'value'; readonly value: unknown }
-  | { readonly kind: 'refused'; readonly error: HttpError; readonly close: boolean }
+  | { readonly kind: 'refused'; readonly refusal: RefusalEvent; readonly error: HttpError; readonly close: boolean }
   | { readonly kind: 'aborted' }
   | { readonly kind: 'failed'; readonly error: unknown };
 
@@ -19,8 +20,8 @@ const JSON_TYPE = 'application/json';
 const TEXT_TYPE = 'text/plain';
 const ABSENT: BodyOutcome = { kind: 'value', value: undefined };
 
-function refused(status: number, code: string, message: string): BodyOutcome {
-  return { kind: 'refused', error: new HttpError(status, code, message), close: false };
+function refused(refusal: RefusalEvent, status: number, code: string, message: string): BodyOutcome {
+  return { kind: 'refused', refusal, error: new HttpError(status, code, message), close: false };
 }
 
 // Does:  Turns a finished read into an outcome; only an oversized body asks for the connection to close.
@@ -31,6 +32,7 @@ function decode(result: BodyReadResult, type: string, limit: number): BodyOutcom
     case 'too-large':
       return {
         kind: 'refused',
+        refusal: 'skeld.refuse.body_limit',
         error: new HttpError(413, 'PAYLOAD_TOO_LARGE', `Request body exceeds the limit of ${limit} bytes`),
         // Why: The rest of the body is unread, so the connection cannot carry another request.
         close: true,
@@ -47,13 +49,18 @@ function decode(result: BodyReadResult, type: string, limit: number): BodyOutcom
       return { kind: 'value', value: parsed.value };
     case 'invalid-json':
       event('refuse.body_json');
-      return refused(400, 'BAD_REQUEST', 'Request body is not valid JSON');
+      return refused('skeld.refuse.body_json', 400, 'BAD_REQUEST', 'Request body is not valid JSON');
     case 'too-deep':
       event('refuse.body_depth');
-      return refused(400, 'BAD_REQUEST', 'Request body is nested too deeply');
+      return refused('skeld.refuse.body_depth', 400, 'BAD_REQUEST', 'Request body is nested too deeply');
     case 'forbidden-key':
       event('refuse.forbidden_key', parsed.key);
-      return refused(400, 'BAD_REQUEST', `Request body contains a forbidden key: ${parsed.key}`);
+      return refused(
+        'skeld.refuse.forbidden_key',
+        400,
+        'BAD_REQUEST',
+        `Request body contains a forbidden key: ${parsed.key}`,
+      );
   }
 }
 
@@ -81,10 +88,20 @@ export function readRouteBody(
   switch (media.kind) {
     case 'missing':
       event('refuse.media_type');
-      return refused(415, 'UNSUPPORTED_MEDIA_TYPE', 'Request has a body but no Content-Type');
+      return refused(
+        'skeld.refuse.media_type',
+        415,
+        'UNSUPPORTED_MEDIA_TYPE',
+        'Request has a body but no Content-Type',
+      );
     case 'invalid':
       event('refuse.media_type');
-      return refused(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type is not a valid media type');
+      return refused(
+        'skeld.refuse.media_type',
+        415,
+        'UNSUPPORTED_MEDIA_TYPE',
+        'Content-Type is not a valid media type',
+      );
     case 'ok':
       break;
   }
@@ -92,6 +109,7 @@ export function readRouteBody(
   if (type !== JSON_TYPE && type !== TEXT_TYPE) {
     event('refuse.media_type');
     return refused(
+      'skeld.refuse.media_type',
       415,
       'UNSUPPORTED_MEDIA_TYPE',
       `Unsupported media type ${type}; send application/json or text/plain`,

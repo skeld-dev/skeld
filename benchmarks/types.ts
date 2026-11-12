@@ -3,10 +3,16 @@
 
 export type ServerId = 'skeld' | 'fastify' | 'node-http' | 'hono' | 'express' | 'light';
 export type RouteId = 'hello' | 'echo';
-export type BuildId = 'skeld' | 'skeld-diag';
+export type LoggingBuildId = 'before-a' | 'before-b' | 'off' | 'default' | 'access';
+export type BuildId = 'skeld' | 'skeld-diag' | LoggingBuildId;
 type RunStatus = 'complete' | 'invalid' | 'interrupted';
 export type Bound = 'server' | 'generator' | 'neither' | 'unknown';
 type VerdictKind = 'keep' | 'below' | 'not-assessed';
+
+export interface LoggingSession {
+  readonly baseline: string;
+  readonly controlOnly: boolean;
+}
 
 export interface RunOptions {
   readonly pipelining: number;
@@ -18,6 +24,7 @@ export interface RunOptions {
   readonly out: string;
   readonly check: boolean;
   readonly diag: boolean;
+  readonly logging: LoggingSession | null;
   readonly stepN: number;
   readonly cpuN: number;
 }
@@ -32,6 +39,7 @@ export interface BenchOptions {
   readonly servers: readonly ServerId[];
   readonly routes: readonly RouteId[];
   readonly diag: boolean;
+  readonly logging: LoggingSession | null;
 }
 
 export interface BenchMachine {

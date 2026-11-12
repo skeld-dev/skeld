@@ -5,6 +5,7 @@ import type { HttpError } from '../contract/http-error.ts';
 import type { ContractRoutes, Empty, OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { ResolvedCors } from '../cors/policy.ts';
 import type { ResolvedCsrf } from '../csrf/policy.ts';
+import type { Classified, Logger, LogOptions, LogStats, RequestPart } from '../log/types.ts';
 import type { Infer, Schema, Wire } from '../schema/types.ts';
 
 /**
@@ -77,6 +78,11 @@ export interface ServerOptions {
    * A refused request is answered 403 `CROSS_ORIGIN`; `strict` without `publicOrigin` is BootError `INVALID_OPTION`.
    */
   readonly csrf?: CsrfPolicy;
+  /**
+   * The structured log on stdout or a sink; `false` writes no record and calls no sink (default: stdout, no options).
+   * `createServer` throws BootError `INVALID_OPTION` for an unknown key or a malformed value.
+   */
+  readonly log?: LogOptions | false;
 }
 
 /**
@@ -147,7 +153,7 @@ export type CorsHeaderName =
   | 'access-control-allow-headers'
   | 'access-control-max-age';
 
-/** A response header name the engine owns: a framing or connection field, `set-cookie` or a CORS header. */
+/** A response header name the engine owns: framing, connection, `set-cookie`, CORS or `x-request-id`. */
 export type ReservedHeaderName =
   | 'transfer-encoding'
   | 'content-length'
@@ -158,6 +164,7 @@ export type ReservedHeaderName =
   | 'trailer'
   | 'upgrade'
   | 'set-cookie'
+  | 'x-request-id'
   | CorsHeaderName;
 
 /** A header name an author may set: the name itself, or a message type naming it when it is a `ReservedHeaderName`. */
@@ -173,11 +180,18 @@ export type AuthorHeaderName<N extends string> = N extends unknown
 
 /**
  * Response headers to set, by name.
- * A `ReservedHeaderName` (framing, connection, `set-cookie`, `access-control-*`) fails to compile as a lower-case key; in any letter case at runtime it is answered with the fixed 500.
+ * A `ReservedHeaderName` (framing, connection, `set-cookie`, `access-control-*`, `x-request-id`) fails to compile as a lower-case key; in any letter case at runtime it is answered with the fixed 500.
  */
 export type OutgoingHeaders = { readonly [name: string]: string | number | readonly string[] } & {
   readonly [K in ReservedHeaderName]?: never;
 };
+
+/** The string keys of the schema a route declares for one request part; `never` when it declares none. */
+export type PartKey<R extends RouteDefinition, P extends RequestPart> = R extends {
+  readonly [Q in P]: infer S extends Schema;
+}
+  ? keyof Infer<S> & string
+  : never;
 
 /** What a handler receives: the route and its request parts, validated and typed by the contract. */
 export interface RouteRequest<R extends RouteDefinition> {
@@ -199,6 +213,12 @@ export interface RouteRequest<R extends RouteDefinition> {
   readonly clientAddress: string;
   /** The request's cookies as sent; the header is parsed on first read. */
   readonly rawCookies: RawCookies;
+  /** The request's logger, one per request and shared with its hooks; each record carries `requestId`. */
+  readonly log: Logger;
+  /** The request's local id, a version 4 UUID, also sent as the `x-request-id` response header. */
+  readonly requestId: string;
+  /** Pairs a request part, or one declared key of it, with the route's own schema for that part, for a log call. */
+  classified<P extends RequestPart>(part: P, key?: PartKey<R, P>): Classified;
 }
 
 /**
@@ -295,6 +315,10 @@ export interface RequestContext {
   readonly clientAddress: string;
   /** The request's cookies as sent; the header is parsed on first read. */
   readonly rawCookies: RawCookies;
+  /** The request's logger, shared with its handler and its other hooks; each record carries `requestId`. */
+  readonly log: Logger;
+  /** The request's local id, a version 4 UUID, also sent as the `x-request-id` response header. */
+  readonly requestId: string;
   /**
    * Sets a header on the response.
    * A reserved name of `OutgoingHeaders` fails to compile as a literal and otherwise throws `Error`; an error response the engine writes keeps no header set here.
@@ -338,6 +362,10 @@ export interface ResponseContext {
   readonly clientAddress: string;
   /** The request's cookies as sent; the header is parsed on first read. */
   readonly rawCookies: RawCookies;
+  /** The request's logger, shared with its handler and its other hooks; each record carries `requestId`. */
+  readonly log: Logger;
+  /** The request's local id, a version 4 UUID, also sent as the `x-request-id` response header. */
+  readonly requestId: string;
   /** The status being written. */
   readonly status: number;
   /**
@@ -366,6 +394,10 @@ export interface CompletedContext {
   readonly completed: boolean;
   /** The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. */
   readonly clientAddress: string;
+  /** The request's logger, shared with its handler and its other hooks; each record carries `requestId`. */
+  readonly log: Logger;
+  /** The request's local id, a version 4 UUID, also sent as the `x-request-id` response header. */
+  readonly requestId: string;
 }
 
 /** What an `onError` hook and an error handler receive. */
@@ -384,6 +416,10 @@ export interface ErrorContext {
   readonly clientAddress: string;
   /** The request's cookies as sent; the header is parsed on first read. */
   readonly rawCookies: RawCookies;
+  /** The request's logger, shared with its handler and its other hooks; each record carries `requestId`. */
+  readonly log: Logger;
+  /** The request's local id, a version 4 UUID, also sent as the `x-request-id` response header. */
+  readonly requestId: string;
 }
 
 /**
@@ -403,12 +439,12 @@ export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>
 export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 /**
  * A hook run once the response is done or its connection closed, to observe the outcome.
- * A throw is written to stderr and changes nothing; it does not run after `send` or a cross-site refusal.
+ * A throw is logged as `skeld.hook.error` and changes nothing; it does not run after `send` or a cross-site refusal.
  */
 export type OnResponseHook = (context: CompletedContext) => void | Promise<void>;
 /**
  * A hook that observes a failed request's error before the error handlers run.
- * It cannot change the reply; a throw is written to stderr.
+ * It cannot change the reply; a throw is logged as `skeld.hook.error`.
  */
 export type OnErrorHook = (context: ErrorContext, error: unknown) => void | Promise<void>;
 
@@ -428,6 +464,8 @@ export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'o
 export interface Scope {
   /** Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work. */
   readonly signal: AbortSignal;
+  /** The server's logger, the same in every scope, plugins included; its records carry no request id. */
+  readonly log: Logger;
   /**
    * Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.
    * Each callback runs once under pluginCloseTimeoutMs; registration after sealing throws REGISTRATION_CLOSED.
@@ -503,6 +541,11 @@ export interface Server extends Scope {
    * Idle connections close at once; others are forced after `closeTimeoutMs`, then disposers run; failures reject AggregateError and every call returns the same promise.
    */
   close(): Promise<void>;
+  /**
+   * Returns this server's log counts; never throws, before `listen` and after `close` too.
+   * @example const server = createServer(); console.log(server.logStats().dropped.queue_full);
+   */
+  logStats(): LogStats;
 }
 
 export interface HttpServerHandle {

@@ -9,10 +9,11 @@ import * as t from '@skeld/core/schema';
 import { createServer, type RequestContext } from '@skeld/core/server';
 import { check, conclude, type RawResponse, rawExchange } from './support.ts';
 import { startDiagChild } from './support-diag.ts';
+import { parseRecords } from './support-log.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'a local path in a 3xx Location is sent as written; //host, /\\host, /<tab>/host, /.//host, a control character, surrounding whitespace, javascript:, userinfo, an http URL when only its https origin is listed, another port and a subdomain each become the fixed 500 with no Location on the wire; any value starting // is refused whatever host follows; a hook send with a status that is not an integer from 200 to 599 throws and puts nothing of its reply on the wire; an absolute redirect to the publicOrigin is the fixed 500 unless that origin is in redirectOrigins, and a local path needs neither; a listed origin passes on its group only; a Location set by a hook setHeader, send or onSend is checked the same way; stderr and the diag record hold the route and a reason and never the target; checkRedirect gives the engine verdict for every case; a 201 Location is untouched';
+  'a local path in a 3xx Location is sent as written; //host, /\\host, /<tab>/host, /.//host, a control character, surrounding whitespace, javascript:, userinfo, an http URL when only its https origin is listed, another port and a subdomain each become the fixed 500 with no Location on the wire; any value starting // is refused whatever host follows; a hook send with a status that is not an integer from 200 to 599 throws and puts nothing of its reply on the wire; an absolute redirect to the publicOrigin is the fixed 500 unless that origin is in redirectOrigins, and a local path needs neither; a listed origin passes on its group only; a Location set by a hook setHeader, send or onSend is checked the same way; the log record on stdout and the diag record hold the route and a reason and never the target; checkRedirect gives the engine verdict for every case; a 201 Location is untouched';
 
 const fixed500 = '{"status":500,"code":"INTERNAL","message":"Internal Server Error"}';
 const defaultOrigin = 'https://default.example';
@@ -386,14 +387,26 @@ async function prove(): Promise<void> {
     await child.stop();
   }
   const stderr = child.stderr();
+  const stdout = child.stdout();
   check(problems, !stderr.includes(marker), 'a refused target (marker) appears in stderr');
   check(problems, !stderr.includes('example.com/cb'), 'a refused URL appears in stderr');
-  const refusalLines = stderr.split('\n').filter((line) => line.includes('redirect refused at '));
+  check(problems, !stdout.includes(marker), 'a refused target (marker) appears in stdout');
+  check(problems, !stdout.includes('example.com/cb'), 'a refused URL appears in stdout');
+  const refusalRecords = parseRecords(stdout).filter(
+    (record) => record?.event_name === 'skeld.request.error' && record['skeld.reason'] === 'redirect_refused',
+  );
   check(
     problems,
-    refusalLines.length > 0 &&
-      refusalLines.every((line) => /redirect refused at (go|hookset|hooksend|onsend|list|num): \S/.test(line)),
-    `stderr refusal lines are not "redirect refused at <route>: <reason>": ${refusalLines.slice(0, 2).join(' | ')}`,
+    refusalRecords.length > 0 &&
+      refusalRecords.every(
+        (record) =>
+          record?.['http.response.status_code'] === 500 &&
+          /^\/[a-d]\/(go|hookset|hooksend|onsend|list|num)$/.test(String(record['http.route'])),
+      ),
+    `stdout redirect_refused records are not 500 records of a redirect route: ${refusalRecords
+      .slice(0, 2)
+      .map((record) => JSON.stringify(record))
+      .join(' | ')}`,
   );
 
   const diagChild = await startDiagChild(fileURLToPath(import.meta.url));
@@ -414,6 +427,7 @@ async function prove(): Promise<void> {
   );
   check(problems, diag.text.includes('refuse.redirect'), 'the diag files hold no refuse.redirect event');
   check(problems, !diagChild.stderr().includes(marker), 'the target appears in the diag child stderr');
+  check(problems, !diagChild.stdout().includes(marker), 'the target appears in the diag child stdout');
 
   process.stderr.write(`${JSON.stringify({ ...summary, badStatuses, probes: probes.length, diagRefusals })}\n`);
   conclude(statement, problems);

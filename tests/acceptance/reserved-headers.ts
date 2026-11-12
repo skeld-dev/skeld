@@ -1,4 +1,4 @@
-// Does:  Proves the fifteen engine-owned response headers are refused at four author sites and ordinary headers pass.
+// Does:  Proves the sixteen engine-owned response headers are refused at four author sites and ordinary headers pass.
 // Holds: Responses are read as raw socket bytes, so a duplicate or an application framing header cannot hide.
 
 import { spawnSync } from 'node:child_process';
@@ -12,7 +12,7 @@ import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 
 const statement =
-  'each of the fifteen engine-owned headers, lower or mixed case, set at an onRequest, preHandler or onSend hook, a hook send or a handler reply answers the fixed 500 INTERNAL with no application header and no application value on the wire, ordinary headers pass at the same four sites, a reserved name fails to compile at setHeader, a reply and a send while ordinary names compile, and the next connection is answered';
+  'each of the sixteen engine-owned headers, lower or mixed case, set at an onRequest, preHandler or onSend hook, a hook send or a handler reply answers the fixed 500 INTERNAL with no application header and no application value on the wire, ordinary headers pass at the same four sites, a reserved name fails to compile at setHeader, a reply and a send while ordinary names compile, and the next connection is answered';
 
 const reserved: Record<string, string> = {
   'transfer-encoding': 'chunked',
@@ -30,9 +30,10 @@ const reserved: Record<string, string> = {
   'access-control-allow-methods': 'PURGE',
   'access-control-allow-headers': 'x-probe-allow',
   'access-control-max-age': '99999',
+  'x-request-id': 'req-7f3a',
 };
 const ordinary: Record<string, string> = {
-  'x-request-id': 'req-7f3a',
+  'x-app-ref': 'req-7f3a',
   'cache-control': 'no-store',
 };
 const sites = ['onrequest', 'prehandler', 'onsend', 'hooksend', 'handler'] as const;
@@ -163,7 +164,7 @@ function compile(folder: string, source: string): { status: number | null; outpu
       compilerOptions: {
         target: 'es2025',
         module: 'nodenext',
-        lib: ['es2025'],
+        lib: ['es2025', 'esnext.error'],
         types: ['node'],
         strict: true,
         noEmit: true,
@@ -232,6 +233,17 @@ const probes: { name: string; source: string; compiles: boolean }[] = [
   {
     name: 'setHeader x-request-id',
     source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('x-request-id', 'a'); });\n`,
+    compiles: false,
+  },
+  { name: 'reply headers x-request-id', source: reply("{ 'x-request-id': 'a' }"), compiles: false },
+  {
+    name: 'send headers x-request-id',
+    source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { 'x-request-id': 'a' } }); });\n`,
+    compiles: false,
+  },
+  {
+    name: 'setHeader x-app-ref',
+    source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('x-app-ref', 'a'); });\n`,
     compiles: true,
   },
   { name: 'reply headers cache-control', source: reply("{ 'cache-control': 'no-store' }"), compiles: true },

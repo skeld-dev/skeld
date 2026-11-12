@@ -80,6 +80,11 @@
       "types": "./dist/redirect/redirect.d.ts",
       "default": "./dist/redirect/redirect.js"
     },
+    "./log": {
+      "skeld-source": "./src/log/log.ts",
+      "types": "./dist/log/log.d.ts",
+      "default": "./dist/log/log.js"
+    },
     "./generated-check": {
       "skeld-source": "./src/compile/generate.ts"
     },

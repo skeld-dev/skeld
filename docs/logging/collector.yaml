@@ -1,0 +1,48 @@
+receivers:
+  file_log:
+    include:
+      - "${env:SKELD_LOG_FILE}"
+    start_at: beginning
+    include_file_name: false
+    operators:
+      - type: json_parser
+        parse_ints: true
+        timestamp:
+          parse_from: attributes.time
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.000Z07:00"
+      - type: trace_parser
+        if: attributes.trace_id != nil
+        trace_id:
+          parse_from: attributes.trace_id
+        span_id:
+          parse_from: attributes.span_id
+        trace_flags:
+          parse_from: attributes.trace_flags
+
+processors:
+  transform:
+    error_mode: propagate
+    log_statements:
+      - context: log
+        statements:
+          - set(log.severity_number, log.attributes["severity_number"])
+          - set(log.severity_text, log.attributes["severity_text"])
+          - set(log.event_name, log.attributes["event_name"])
+          - set(log.body, log.attributes["message"]) where log.attributes["message"] != nil
+          - set(log.body, nil) where log.attributes["message"] == nil
+          - delete_matching_keys(log.attributes, "^(time|severity_text|severity_number|event_name|message|trace_id|trace_flags)$")
+
+exporters:
+  file:
+    path: "${env:SKELD_OTEL_OUT}"
+
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    logs:
+      receivers: [ file_log ]
+      processors: [ transform ]
+      exporters: [ file ]

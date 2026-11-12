@@ -9,10 +9,11 @@ import { check, conclude, parseRaw, rawExchange, type RawResponse } from './supp
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'an engine-written 400, 413 and 500 under a CORS policy carry exactly the engine access-control-allow-origin and vary Origin and no set-cookie, cache-control or custom header and no name outside the seven kept names, with a current date; the 200, a declared 404 and a context.send 401 carry every header set for them';
+  'an engine-written 400, 413 and 500 under a CORS policy carry exactly the engine access-control-allow-origin and vary Origin and no set-cookie, cache-control or custom header and no name outside the kept names (x-request-id among them), with a current date; the 200, a declared 404 and a context.send 401 carry every header set for them';
 const origin = 'https://app.example';
 const hookDate = 'Thu, 01 Jan 1970 00:00:00 GMT';
 const keptNames = new Set([
+  'x-request-id',
   'content-type',
   'content-length',
   'date',
@@ -104,7 +105,7 @@ function checkEngineError(problems: string[], label: string, response: RawRespon
     );
   }
   const stray = [...response.headers.keys()].filter((name) => !engineGrant.has(name) && !keptNames.has(name));
-  check(problems, stray.length === 0, `${label} carries names outside the kept seven: ${stray.join(', ')}`);
+  check(problems, stray.length === 0, `${label} carries names outside the kept names: ${stray.join(', ')}`);
   const date = Date.parse(response.headers.get('date') ?? '');
   check(
     problems,

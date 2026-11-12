@@ -45,6 +45,7 @@ export function chunked(data: string | Buffer): Buffer {
 export interface ServerChild {
   port: number;
   stderr: () => string;
+  stdout: () => string;
   stop: () => Promise<void>;
 }
 
@@ -58,8 +59,8 @@ export async function startServerChild(script: string, ...serveArgs: string[]): 
     stderr += text;
   });
   const exited = new Promise<void>((resolve) => child.on('close', () => resolve()));
+  let stdout = '';
   const port = await new Promise<number>((resolve, reject) => {
-    let stdout = '';
     const timer = setTimeout(() => reject(new Error('the server child did not report a port within 20 s')), 20_000);
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (text: string) => {
@@ -78,6 +79,7 @@ export async function startServerChild(script: string, ...serveArgs: string[]): 
   return {
     port,
     stderr: () => stderr,
+    stdout: () => stdout,
     stop: async () => {
       child.kill('SIGTERM');
       await exited;

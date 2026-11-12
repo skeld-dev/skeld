@@ -1,6 +1,7 @@
 // Does:  Finds a request's client address: the socket peer, or the nearest untrusted X-Forwarded-For hop behind it.
 // Holds: The header is read only when the peer is trusted, and the walk stops at the first entry that is not an IP.
 
+import type { IncomingMessage } from 'node:http';
 import type { BlockList } from 'node:net';
 import { isIP } from 'node:net';
 import { limit } from '#diag';
@@ -37,11 +38,10 @@ function forwardedClient(list: BlockList, peer: string, header: string): string 
   return client;
 }
 
-function resolveClient(exchange: Exchange): string {
-  const { req } = exchange;
+// Does:  Resolves a request's client address from its socket peer and, behind a trusted peer, its X-Forwarded-For.
+export function resolveClient(req: IncomingMessage, list: BlockList | null): string {
   // Why: The address is cached on the socket by the first read, which happens before the request can wait.
   const peer = req.socket.remoteAddress ?? '';
-  const list = exchange.runtime.trustProxy;
   if (list === null) {
     return peer;
   }
@@ -59,7 +59,7 @@ function resolveClient(exchange: Exchange): string {
 // Does:  Returns the request's client address, computed on first read and kept for every later read.
 export function clientAddressOf(exchange: Exchange): string {
   if (exchange.clientAddress === null) {
-    exchange.clientAddress = resolveClient(exchange);
+    exchange.clientAddress = resolveClient(exchange.req, exchange.runtime.trustProxy);
   }
   return exchange.clientAddress;
 }

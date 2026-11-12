@@ -31,8 +31,8 @@ export async function startDiagChild(script: string): Promise<DiagChild> {
     stderr += text;
   });
   const exited = new Promise<void>((resolve) => child.on('close', () => resolve()));
+  let stdout = '';
   const port = await new Promise<number>((resolve, reject) => {
-    let stdout = '';
     const timer = setTimeout(() => reject(new Error('the diag child did not report a port within 20 s')), 20_000);
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (text: string) => {
@@ -56,6 +56,7 @@ export async function startDiagChild(script: string): Promise<DiagChild> {
     port,
     dir,
     stderr: () => stderr,
+    stdout: () => stdout,
     stop,
     stopAndRead: async () => {
       await stop();

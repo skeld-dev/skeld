@@ -1,5 +1,5 @@
 // Does:  Proves rawCookies gives one frozen set of raw cookie values in the handler and each hook, parsed only on read.
-// Holds: A cookie value planted in a request is read back exactly and is in no stderr line or diag file.
+// Holds: A cookie value planted in a request is read back exactly and is in no stderr or stdout line or diag file.
 
 import { randomBytes } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -9,10 +9,11 @@ import * as t from '@skeld/core/schema';
 import { createServer, type RawCookies } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 import { startDiagChild } from './support-diag.ts';
+import { parseRecords } from './support-log.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'rawCookies returns the same values in the handler and in the onRequest, preHandler, onSend and onError hooks; a name sent twice, also across two Cookie header lines, gives undefined from get and every value in order from getAll; __proto__ and constructor are plain entries; values are exactly as sent; the object and its arrays cannot be modified; a request that never reads cookies parses nothing and one that reads in the handler and three hooks parses once; no cookie value appears in stderr or a diag file';
+  'rawCookies returns the same values in the handler and in the onRequest, preHandler, onSend and onError hooks; a name sent twice, also across two Cookie header lines, gives undefined from get and every value in order from getAll; __proto__ and constructor are plain entries; values are exactly as sent; the object and its arrays cannot be modified; a request that never reads cookies parses nothing and one that reads in the handler and three hooks parses once; no cookie value appears in stderr, stdout or a diag file';
 
 const names = [
   'a',
@@ -322,9 +323,21 @@ async function parseCounts(problems: string[]): Promise<{ quiet: number; reading
   await delay(50);
   const busyFiles = await busy.stopAndRead();
   const stderr = busy.stderr();
-  check(problems, stderr.includes('/boom 500'), 'stderr held no line for the 500, so its cookie check proves nothing');
+  check(
+    problems,
+    parseRecords(busy.stdout()).some(
+      (record) =>
+        record?.event_name === 'skeld.request.error' &&
+        record['skeld.reason'] === 'thrown' &&
+        record['http.route'] === '/boom' &&
+        record['http.response.status_code'] === 500,
+    ),
+    'stdout held no skeld.request.error record for the 500, so its cookie check proves nothing',
+  );
   check(problems, !stderr.includes(mark), 'a cookie value appears in stderr');
+  check(problems, !busy.stdout().includes(mark), 'a cookie value appears in stdout');
   check(problems, !idle.stderr().includes(mark), 'a cookie value appears in the idle child stderr');
+  check(problems, !idle.stdout().includes(mark), 'a cookie value appears in the idle child stdout');
   check(problems, !busyFiles.text.includes(mark), 'a cookie value appears in a diag file');
   check(problems, !idleFiles.text.includes(mark), 'a cookie value appears in the idle child diag files');
   return { quiet: parseSpans(idleFiles.snapshot), reading: parseSpans(busyFiles.snapshot) };

@@ -1,8 +1,9 @@
 // Does:  Parses and checks the benchmark's command-line options.
 // Holds: A value outside its range is a usage error with exit 2; nothing starts on a bad option.
 
+import { resolve } from 'node:path';
 import { BenchError } from './bench-error.ts';
-import type { RouteId, RunOptions, ServerId } from './types.ts';
+import type { LoggingSession, RouteId, RunOptions, ServerId } from './types.ts';
 import {
   defaultCpuN,
   defaultDurationSeconds,
@@ -12,6 +13,7 @@ import {
   defaultStepN,
   defaultWarmUpSeconds,
   durationRange,
+  loggingRounds,
   pipeliningRange,
   roundsRange,
   stepRange,
@@ -43,6 +45,15 @@ Options:
                      (default 8; needs --diag)
   --cpu-n <n>        diag build: read CPU on 1 in n requests, 1 to 1024
                      (default 32; needs --diag)
+  --logging          the logging session: the commit before the feature
+                     twice (before-a, before-b) beside the variants off,
+                     default and access, judged by round-paired medians;
+                     skeld only; needs --baseline
+  --baseline <dir>   logging session: the worktree of the commit before the
+                     feature, built; its benchmarks/servers/skeld.ts runs
+                     from that folder (needs --logging)
+  --control-only     logging session: before-a and before-b on echo only
+                     (needs --logging)
   --help             show this help
 
 Only a run with every default, pinned on a host with 8 or more vCPUs, is the
@@ -64,9 +75,10 @@ const valueOptions = [
   '--out',
   '--step-n',
   '--cpu-n',
+  '--baseline',
 ] as const;
 type ValueOption = (typeof valueOptions)[number];
-const flagOptions = ['--check', '--diag', '--help'] as const;
+const flagOptions = ['--check', '--diag', '--logging', '--control-only', '--help'] as const;
 type FlagOption = (typeof flagOptions)[number];
 
 const wholeNumber = /^\d+$/;
@@ -161,6 +173,52 @@ const parseServers = (text: string | undefined, diag: boolean): readonly ServerI
   return servers;
 };
 
+const parseLogging = (
+  values: ReadonlyMap<ValueOption, string>,
+  flags: ReadonlySet<FlagOption>,
+): LoggingSession | null => {
+  const baseline = values.get('--baseline');
+  const controlOnly = flags.has('--control-only');
+  if (!flags.has('--logging')) {
+    if (baseline !== undefined || controlOnly) {
+      throw usage(`${baseline === undefined ? '--control-only' : '--baseline'} needs --logging.`);
+    }
+    return null;
+  }
+  if (flags.has('--diag')) {
+    throw usage('--logging and --diag are separate sessions; choose one.');
+  }
+  const fixed = ['--servers', '--routes'] as const;
+  const given = fixed.find((name) => values.has(name));
+  if (given !== undefined) {
+    throw usage(`the logging session sets its own entrants and routes; remove ${given}.`);
+  }
+  if (baseline === undefined) {
+    throw usage('--logging needs --baseline <dir>, the built worktree of the commit before the feature.');
+  }
+  return { baseline: resolve(baseline), controlOnly };
+};
+
+const parseRounds = (text: string | undefined, logging: LoggingSession | null): number => {
+  if (text !== undefined) {
+    return parseInteger('--rounds', text, roundsRange);
+  }
+  if (logging === null) {
+    return defaultRounds;
+  }
+  if (loggingRounds === null) {
+    throw usage('the logging round count is not measured yet; give --rounds <n>.');
+  }
+  return loggingRounds;
+};
+
+const parseRoutes = (logging: LoggingSession | null, text: string | undefined): readonly RouteId[] => {
+  if (logging !== null) {
+    return logging.controlOnly ? ['echo'] : routeIds;
+  }
+  return text === undefined ? routeIds : parseList('--routes', text, routeIds, 'route');
+};
+
 export function wantsHelp(argv: readonly string[]): boolean {
   return argv.includes('--help');
 }
@@ -168,10 +226,10 @@ export function wantsHelp(argv: readonly string[]): boolean {
 export function parseOptions(argv: readonly string[]): RunOptions {
   const { values, flags } = readValues(argv);
   const diag = flags.has('--diag');
+  const logging = parseLogging(values, flags);
   const pipelining = values.get('--pipelining');
   const warmUp = values.get('--warm-up');
   const duration = values.get('--duration');
-  const rounds = values.get('--rounds');
   const routes = values.get('--routes');
   return {
     pipelining:
@@ -179,12 +237,13 @@ export function parseOptions(argv: readonly string[]): RunOptions {
     warmUpSeconds: warmUp === undefined ? defaultWarmUpSeconds : parseInteger('--warm-up', warmUp, durationRange),
     durationSeconds:
       duration === undefined ? defaultDurationSeconds : parseInteger('--duration', duration, durationRange),
-    rounds: rounds === undefined ? defaultRounds : parseInteger('--rounds', rounds, roundsRange),
-    servers: parseServers(values.get('--servers'), diag),
-    routes: routes === undefined ? routeIds : parseList('--routes', routes, routeIds, 'route'),
+    rounds: parseRounds(values.get('--rounds'), logging),
+    servers: logging === null ? parseServers(values.get('--servers'), diag) : ['skeld'],
+    routes: parseRoutes(logging, routes),
     out: values.get('--out') ?? defaultOut,
     check: flags.has('--check'),
     diag,
+    logging,
     stepN: parseSampling('--step-n', values.get('--step-n'), diag, defaultStepN),
     cpuN: parseSampling('--cpu-n', values.get('--cpu-n'), diag, defaultCpuN),
   };

@@ -1,4 +1,4 @@
-// Does:  Proves that a secret or personal value a client sends never appears in a 400, a 500 or stderr.
+// Does:  Proves that a secret or personal value a client sends never appears in a 400, a 500, stderr or stdout.
 // Holds: Random tokens are sent as the values, so any echo of one is detected.
 
 import { randomBytes } from 'node:crypto';
@@ -7,10 +7,11 @@ import { defineContract } from '@skeld/core/contract';
 import * as t from '@skeld/core/schema';
 import { createServer } from '@skeld/core/server';
 import { check, conclude } from './support.ts';
+import { parseRecords, untilStdout } from './support-log.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'a secret token and a personal token sent in a request never appear in its 400 body, its 500 body or any stderr line; the secret token appears in no response; the personal token appears only in the 200 body that declares the field';
+  'a secret token and a personal token sent in a request never appear in its 400 body, its 500 body or any stderr or stdout line; the secret token appears in no response; the personal token appears only in the 200 body that declares the field';
 
 const contract = defineContract({
   accept: {
@@ -97,17 +98,27 @@ async function main(): Promise<void> {
     check(problems, narrow.status === 400, `the request with over-long sensitive fields answered ${narrow.status}`);
     check(problems, !narrow.text.includes(secretToken), 'the secret token appears in the 400 of its own field');
     check(problems, !narrow.text.includes(personalToken), 'the personal token appears in the 400 of its own field');
+    await untilStdout(child, (records) => records.some((record) => record?.['http.route'] === '/explode'));
   } finally {
     await child.stop();
   }
   const stderr = child.stderr();
+  const stdout = child.stdout();
   check(
     problems,
-    stderr.includes('/explode 500'),
-    'stderr held no line for the 500, so its token check proves nothing',
+    parseRecords(stdout).some(
+      (record) =>
+        record?.event_name === 'skeld.request.error' &&
+        record['skeld.reason'] === 'thrown' &&
+        record['http.route'] === '/explode' &&
+        record['http.response.status_code'] === 500,
+    ),
+    'stdout held no skeld.request.error record for the 500, so its token check proves nothing',
   );
   check(problems, !stderr.includes(secretToken), 'the secret token appears in stderr');
   check(problems, !stderr.includes(personalToken), 'the personal token appears in stderr');
+  check(problems, !stdout.includes(secretToken), 'the secret token appears in stdout');
+  check(problems, !stdout.includes(personalToken), 'the personal token appears in stdout');
   conclude(statement, problems);
 }
 

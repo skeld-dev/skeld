@@ -104,6 +104,20 @@ export function diagStartLines(
   ];
 }
 
+export function loggingStartLines(
+  options: RunOptions,
+  entrants: readonly string[],
+  runDirectory: string,
+  minutes: number,
+  unpinnedReason: string | null,
+): readonly string[] {
+  return [
+    `Skeld logging session: ${entrants.join(', ')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
+    `Cores: ${coresText(unpinnedReason)}`,
+    `Results: ${displayPath(runDirectory)}/`,
+  ];
+}
+
 const progressLabelWidth = 14;
 
 export function entrantLabel(entrant: { readonly server: ServerId; readonly build: BuildId }): string {
@@ -253,32 +267,41 @@ const diagSummaryColumns: readonly Column[] = [
   { header: 'Median p99 ms', align: 'right' },
 ];
 
+const buildsTable = (summary: readonly BenchSummary[]): readonly string[] =>
+  summary.length === 0
+    ? []
+    : [
+        ...renderTable(
+          diagSummaryColumns,
+          summary.map((group) => [
+            entrantLabel(group),
+            group.route,
+            String(group.rounds),
+            formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.median ?? null),
+            formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.min ?? null),
+            formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.max ?? null),
+            formatRate(group.requestsPerSecond.median),
+            formatMs(group.latencyP99Ms.median),
+          ]),
+        ),
+        '',
+      ];
+
 export function diagSummaryLines(
   summary: readonly BenchSummary[],
   overhead: string,
   security: string,
   readoutPath: string,
 ): readonly string[] {
-  const table =
-    summary.length === 0
-      ? []
-      : [
-          ...renderTable(
-            diagSummaryColumns,
-            summary.map((group) => [
-              entrantLabel(group),
-              group.route,
-              String(group.rounds),
-              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.median ?? null),
-              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.min ?? null),
-              formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.max ?? null),
-              formatRate(group.requestsPerSecond.median),
-              formatMs(group.latencyP99Ms.median),
-            ]),
-          ),
-          '',
-        ];
-  return [...table, overhead, security, `Readout: ${displayPath(readoutPath)}`];
+  return [...buildsTable(summary), overhead, security, `Readout: ${displayPath(readoutPath)}`];
+}
+
+export function loggingSummaryLines(
+  summary: readonly BenchSummary[],
+  verdict: string,
+  readoutPath: string,
+): readonly string[] {
+  return [...buildsTable(summary), verdict, `Readout: ${displayPath(readoutPath)}`];
 }
 
 export function nonConformingWarning(found: readonly string[]): string {

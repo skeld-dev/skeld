@@ -658,7 +658,7 @@ const compileSources: [string, string][] = [
   [
     'control',
     probeSource(
-      `server.addHook('onRequest', (context) => {\n  context.setHeader('x-request-id', 'a');\n  context.setHeader('vary', 'accept-encoding');\n  context.send({ status: 200, headers: { 'x-request-id': 'a' } });\n});\nserver.routes(contract, { item: () => ({ status: 200, body: { ok: true }, headers: { vary: 'accept' } }) });`,
+      `server.addHook('onRequest', (context) => {\n  context.setHeader('x-app-ref', 'a');\n  context.setHeader('vary', 'accept-encoding');\n  context.send({ status: 200, headers: { 'x-app-ref': 'a' } });\n});\nserver.routes(contract, { item: () => ({ status: 200, body: { ok: true }, headers: { vary: 'accept' } }) });`,
     ),
   ],
 ];

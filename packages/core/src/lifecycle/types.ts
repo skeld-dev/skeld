@@ -5,6 +5,8 @@ import type { BlockList } from 'node:net';
 import type { OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { CorsRoute } from '../cors/grant.ts';
 import type { CsrfRoute } from '../csrf/check.ts';
+import type { PartSchemas, ServerLog } from '../log/shapes.ts';
+import type { Classified, Logger, RequestPart } from '../log/types.ts';
 import type { Router } from '../router/types.ts';
 import type { RequestValidators, ResponseSerializers, Serializer } from '../compile/types.ts';
 import type {
@@ -27,6 +29,9 @@ export interface RuntimeRequest {
   readonly cookies: unknown;
   readonly body: unknown;
   readonly signal: AbortSignal;
+  readonly log: Logger;
+  readonly requestId: string;
+  readonly classified: (part: RequestPart, key?: string) => Classified;
 }
 
 export interface RuntimeReply {
@@ -61,8 +66,8 @@ export interface RouteRuntime {
   readonly waiting: Set<Exchange>;
   readonly hooks: HookChains;
   readonly errorHandlers: readonly ErrorHandler[];
-  readonly hasOnError: boolean;
   readonly scopeName: string;
+  readonly partSchemas: PartSchemas;
 }
 
 export interface EngineRuntime {
@@ -75,6 +80,7 @@ export interface EngineRuntime {
   readonly securityHeaders: boolean;
   readonly preflight: boolean;
   readonly notices: Notices;
+  readonly log: ServerLog;
 }
 
 // Does:  The operator notices a server writes once in its life, each marked here once written.

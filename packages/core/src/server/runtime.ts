@@ -10,6 +10,8 @@ import { type CsrfRoute, csrfRoute, isUnsafeMethod } from '../csrf/check.ts';
 import { createDeadlines, type Deadlines } from '../lifecycle/deadline.ts';
 import { expire } from '../lifecycle/error-path.ts';
 import type { EngineRuntime, HookChains, RouteRuntime } from '../lifecycle/types.ts';
+import { partSchemasOf } from '../log/classified.ts';
+import type { ServerLog } from '../log/shapes.ts';
 import { createRouter } from '../router/router.ts';
 import type { Router } from '../router/types.ts';
 import { derivedBodyCap } from '../compile/body-cap.ts';
@@ -162,9 +164,20 @@ function toRouteRuntime(
     waiting: deadlines.queue(timeoutMs),
     hooks,
     errorHandlers,
-    hasOnError: hooks.onError.length > 0,
     scopeName: state.name,
+    partSchemas: partSchemasOf(definition),
   });
+}
+
+// Does:  Adds the path template of every route of a scope and its plugins to the set.
+function addTemplates(state: ScopeState, templates: Set<string>): Set<string> {
+  for (const route of state.routes) {
+    templates.add(route.info.path);
+  }
+  for (const child of state.children) {
+    addTemplates(child.state, templates);
+  }
+  return templates;
 }
 
 function addScope(
@@ -207,6 +220,7 @@ export function buildRuntime(
   options: ResolvedServerOptions,
   trustProxy: BlockList | null,
   isClosing: () => boolean,
+  log: ServerLog,
 ): EngineRuntime {
   const span = start('boot.runtime');
   mark();
@@ -219,6 +233,7 @@ export function buildRuntime(
     const router = createRouter<RouteRuntime>();
     const deadlines = createDeadlines(expire);
     const preflight = addScope(router, root, NO_HOOKS, [], options, deadlines);
+    log.ready([...addTemplates(root, new Set())], process.cwd());
     const errorSerializerSpan = start('boot.error_serializer');
     mark();
     const errorSerializer = getErrorBodySerializer();
@@ -234,6 +249,7 @@ export function buildRuntime(
       securityHeaders: options.securityHeaders,
       preflight,
       notices: { publicOrigin: false },
+      log,
     });
   } finally {
     end(span);

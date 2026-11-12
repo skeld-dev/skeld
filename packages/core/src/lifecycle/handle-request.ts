@@ -7,21 +7,37 @@ import { begin, contain, destroyed, end, event, leave, next, resume, routed, sta
 import { HttpError } from '../contract/http-error.ts';
 import type { RouteInfo } from '../contract/types.ts';
 import { checkCrossOrigin } from '../csrf/check.ts';
+import { makeClassified } from '../log/classified.ts';
+import type { PartSchemas } from '../log/shapes.ts';
+import type { Classified, Logger, RequestPart } from '../log/types.ts';
 import type { RawCookies } from '../server/types.ts';
 import { type BodyOutcome, declaresOverLimit, readRouteBody } from './body.ts';
 import { stageBodyRefusal, stopRefusedPipeline } from './body-refusal.ts';
 import { clientAddressOf } from './client-address.ts';
 import { rawCookiesOf } from './cookies.ts';
 import { settle, signalOf } from './deadline.ts';
-import { fail, refuseCrossSite } from './error-path.ts';
+import { fail, refuse, refuseCrossSite } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { RequestContextRecord, runStage, ValidatedContextRecord, watchCompletion } from './hooks.ts';
+import { loggerOf, pointHookFailed, pointRouted, pointStart } from './points.ts';
 import { preRoute } from './pre-route.ts';
 import { respond } from './respond.ts';
 import type { EngineRuntime, RuntimeReply, RuntimeRequest } from './types.ts';
 import { type ValidatedParts, validateRequest } from './validate.ts';
 
-// Why: Prototype getters keep the signal, address and cookies lazy; a getter in a per-request literal costs a closure.
+// Does:  Pairs a validated request part, or one declared key of it, with the route's schema; anything else has none.
+function classifyPart(schema: PartSchemas[RequestPart], value: unknown, key: string | undefined): Classified {
+  if (key === undefined) {
+    return makeClassified(schema === null ? null : schema.whole, value);
+  }
+  const member = schema?.keys?.get(key);
+  if (member === undefined || typeof value !== 'object' || value === null) {
+    return makeClassified(null, undefined);
+  }
+  return makeClassified(member, Object.getOwnPropertyDescriptor(value, key)?.value);
+}
+
+// Why: Prototype getters keep the signal, address, cookies and logger lazy; a getter in a literal costs a closure.
 class HandlerRequest implements RuntimeRequest {
   readonly route: RouteInfo;
   readonly params: unknown;
@@ -51,6 +67,23 @@ class HandlerRequest implements RuntimeRequest {
 
   get rawCookies(): RawCookies {
     return rawCookiesOf(this.#exchange);
+  }
+
+  get log(): Logger {
+    return loggerOf(this.#exchange);
+  }
+
+  get requestId(): string {
+    return this.#exchange.log.id;
+  }
+
+  get classified(): (part: RequestPart, key?: string) => Classified {
+    const schemas = this.#exchange.route.partSchemas;
+    // Why: An untyped caller can name any part; one outside the five pairs with no schema and no value, never a throw.
+    return (part, key) =>
+      typeof part === 'string' && Object.hasOwn(schemas, part)
+        ? classifyPart(schemas[part], this[part], key)
+        : makeClassified(null, undefined);
   }
 }
 
@@ -83,7 +116,7 @@ function runHandler(exchange: Exchange, parts: ValidatedParts): void {
         resume(exchange.diag);
       }
       try {
-        fail(exchange, error, true);
+        fail(exchange, error);
       } finally {
         if (asynchronous) {
           leave(exchange.diag);
@@ -91,13 +124,14 @@ function runHandler(exchange: Exchange, parts: ValidatedParts): void {
       }
     },
     () => exchange.runtime.deadlines.wait(exchange),
+    (failure) => pointHookFailed(exchange, 'internal', failure),
   );
 }
 
 function validateStage(exchange: Exchange, body: unknown): void {
   const parts = validateRequest(exchange, body);
   if (parts instanceof HttpError) {
-    fail(exchange, parts, false);
+    refuse(exchange, 'skeld.refuse.validation', parts);
     return;
   }
   const hooks = exchange.route.hooks.preHandler;
@@ -113,7 +147,7 @@ function validateStage(exchange: Exchange, body: unknown): void {
     hooks,
     (hook) => hook(context),
     () => runHandler(exchange, parts),
-    (error) => fail(exchange, error, true),
+    (error) => fail(exchange, error),
   );
 }
 
@@ -132,7 +166,7 @@ function bodyRead(exchange: Exchange, outcome: BodyOutcome): void {
         exchange.closeConnection = true;
         stageBodyRefusal(exchange.req);
       }
-      fail(exchange, outcome.error, false);
+      refuse(exchange, outcome.refusal, outcome.error);
       return;
     case 'aborted':
       // Why: The client went away mid-body, so there is no one left to answer.
@@ -143,7 +177,7 @@ function bodyRead(exchange: Exchange, outcome: BodyOutcome): void {
       destroyed();
       return;
     case 'failed':
-      fail(exchange, outcome.error, false);
+      fail(exchange, outcome.error);
       return;
   }
 }
@@ -173,13 +207,15 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
   if (stopRefusedPipeline(req)) {
     return;
   }
+  const request = pointStart(runtime, req, res);
   const diag = begin(req, res);
-  const exchange = preRoute(runtime, req, res, diag);
+  const exchange = preRoute(runtime, req, res, diag, request);
   if (exchange === null) {
     leave(diag);
     return;
   }
   routed(exchange.route.info);
+  pointRouted(request, exchange.route);
   const { csrf, hooks } = exchange.route;
   // Why: A refused request must reach no application code, so the check runs before onResponse observers attach.
   if (csrf !== null) {
@@ -213,7 +249,7 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
     hooks.onRequest,
     (hook) => hook(context),
     () => readStage(exchange),
-    (error) => fail(exchange, error, true),
+    (error) => fail(exchange, error),
   );
   leave(diag);
 }

@@ -9,10 +9,11 @@ import { createServer } from '@skeld/core/server';
 import { check, conclude, type RawResponse, rawExchange } from './support.ts';
 import { compileProbes } from './support-compile.ts';
 import { startDiagChild } from './support-diag.ts';
+import { parseRecords } from './support-log.ts';
 import { startServerChild } from './support-typesystem.ts';
 
 const statement =
-  'a declared cookie arrives typed and validated; a missing required cookie, a wrong value, a wrong-case name and a name sent twice are each 400; undeclared cookies, also __proto__ and constructor, are ignored; a secret cookie value is in no error body, stderr line or diag file; an invalid cookie name in the contract is refused at boot; request.cookies is typed from the schema and the client call type accepts no cookie';
+  'a declared cookie arrives typed and validated; a missing required cookie, a wrong value, a wrong-case name and a name sent twice are each 400; undeclared cookies, also __proto__ and constructor, are ignored; a secret cookie value is in no error body, stderr or stdout line or diag file; an invalid cookie name in the contract is refused at boot; request.cookies is typed from the schema and the client call type accepts no cookie';
 
 const noteBody = t.object({ ok: t.boolean() });
 const profileSchema = t.object({
@@ -264,6 +265,16 @@ await client.item({ query: { n: 1 } });
 `,
 };
 
+function hasExplodeRecord(stdout: string): boolean {
+  return parseRecords(stdout).some(
+    (record) =>
+      record?.event_name === 'skeld.request.error' &&
+      record['skeld.reason'] === 'thrown' &&
+      record['http.route'] === '/explode' &&
+      record['http.response.status_code'] === 500,
+  );
+}
+
 async function prove(): Promise<void> {
   const problems: string[] = [];
   const summary = { rows: 0, bootRefused: 0, bootAccepted: 0, probes: 0 };
@@ -275,23 +286,33 @@ async function prove(): Promise<void> {
   }
   check(
     problems,
-    child.stderr().includes('/explode 500'),
-    'stderr held no line for the 500, so its secret check proves nothing',
+    hasExplodeRecord(child.stdout()),
+    'stdout held no skeld.request.error record for the 500, so its secret check proves nothing',
   );
   check(
     problems,
     !child.stderr().includes(secret) && !child.stderr().includes(longSecret),
     'the secret value appears in stderr',
   );
+  check(
+    problems,
+    !child.stdout().includes(secret) && !child.stdout().includes(longSecret),
+    'the secret value appears in stdout',
+  );
 
   const diagChild = await startDiagChild(fileURLToPath(import.meta.url));
   summary.rows += await exercise(problems, diagChild.port, 'diag');
   const files = await diagChild.stopAndRead();
-  check(problems, diagChild.stderr().includes('/explode 500'), 'diag child stderr held no line for the 500');
+  check(problems, hasExplodeRecord(diagChild.stdout()), 'diag child stdout held no record for the 500');
   check(
     problems,
     !diagChild.stderr().includes(secret) && !diagChild.stderr().includes(longSecret),
     'the secret value appears in the diag child stderr',
+  );
+  check(
+    problems,
+    !diagChild.stdout().includes(secret) && !diagChild.stdout().includes(longSecret),
+    'the secret value appears in the diag child stdout',
   );
   check(
     problems,

@@ -6,6 +6,7 @@ import type { ContractRoutes, RouteDefinition, RouteInfo } from '../contract/typ
 import { type ResolvedCors, resolveCors } from '../cors/policy.ts';
 import { type ResolvedCsrf, resolveCsrf } from '../csrf/policy.ts';
 import type { RuntimeHandler } from '../lifecycle/types.ts';
+import type { Logger } from '../log/types.ts';
 import { BootError } from './boot-error.ts';
 import type { DisposalState } from './disposal.ts';
 import { MAX_TIMER_MS, resolveOrigins } from './options.ts';
@@ -52,6 +53,7 @@ export interface ChildScope {
 export interface ScopeState {
   readonly name: string;
   readonly disposal: DisposalState;
+  readonly log: Logger;
   readonly parent: ScopeState | null;
   readonly children: ChildScope[];
   readonly routes: RouteRecord[];
@@ -64,10 +66,11 @@ interface ErasedHandlers {
   readonly [name: string]: RuntimeHandler;
 }
 
-export function createScopeState(name: string, parent: ScopeState | null): ScopeState {
+export function createScopeState(name: string, parent: ScopeState | null, log: Logger): ScopeState {
   return {
     name,
     disposal: parent?.disposal ?? { abort: new AbortController(), callbacks: [] },
+    log,
     parent,
     children: [],
     routes: [],
@@ -245,6 +248,7 @@ function snapshotContract(contract: ContractRoutes): ContractRoutes {
 export function createScope(state: ScopeState): Scope {
   return {
     signal: state.disposal.abort.signal,
+    log: state.log,
     onClose(callback) {
       assertOpen(state, 'onClose');
       if (typeof callback !== 'function') {
@@ -283,7 +287,7 @@ export function createScope(state: ScopeState): Scope {
     register(plugin, options) {
       assertOpen(state, 'register');
       const name = options?.name ?? (plugin.name === '' ? `plugin #${state.children.length + 1}` : plugin.name);
-      state.children.push({ plugin, state: createScopeState(name, state) });
+      state.children.push({ plugin, state: createScopeState(name, state, state.log) });
     },
   };
 }

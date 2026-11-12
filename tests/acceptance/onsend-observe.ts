@@ -61,7 +61,7 @@ function compile(folder: string, source: string): { status: number | null; outpu
       compilerOptions: {
         target: 'es2025',
         module: 'nodenext',
-        lib: ['es2025'],
+        lib: ['es2025', 'esnext.error'],
         types: ['node'],
         strict: true,
         noEmit: true,
