@@ -145,9 +145,9 @@ function readPackage(packageDir: string): Manifest | Refusal {
     if (!isRecord(target) || !('default' in target)) {
       continue;
     }
-    const source = target['darkstart-source'];
+    const source = target['skeld-source'];
     if (typeof source !== 'string') {
-      return { refused: `export ${subpath} of ${display(manifestPath)} has no darkstart-source file` };
+      return { refused: `export ${subpath} of ${display(manifestPath)} has no skeld-source file` };
     }
     const file = resolve(packageDir, source);
     const config = owningConfig(file);

@@ -1,4 +1,4 @@
-# @darkstart/core/contract
+# @skeld/core/contract
 
 ## ContractRoutes
 
@@ -47,7 +47,7 @@ Source: `packages/core/src/contract/types.ts:87`
 
 ## ErrorBody
 
-The one error body every DarkStart server writes.
+The one error body every Skeld server writes.
 
 ```ts
 export interface ErrorBody {
@@ -139,7 +139,7 @@ Source: `packages/core/src/contract/types.ts:18`
 
 ## errorBodySchema
 
-The schema of the error body every DarkStart server writes: `{ status, code, message, details? }`.
+The schema of the error body every Skeld server writes: `{ status, code, message, details? }`.
 
 Its strings and its `details` are `unbounded`, so a client accepts a server's error message of any length.
 

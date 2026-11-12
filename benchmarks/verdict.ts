@@ -64,8 +64,8 @@ export function deviations(options: RunOptions, installed: Installed): readonly 
   return found;
 }
 
-const darkstartPercent = (summary: readonly BenchSummary[], route: RouteId): number | null =>
-  summary.find((group) => group.server === 'darkstart' && group.route === route)?.cpuPercentOfFastify ?? null;
+const skeldPercent = (summary: readonly BenchSummary[], route: RouteId): number | null =>
+  summary.find((group) => group.server === 'skeld' && group.route === route)?.cpuPercentOfFastify ?? null;
 
 export function generatorBottleneckText(generatorBound: number, measured: number): string {
   return `the load generator was the bottleneck in ${generatorBound} of ${measured} measured rounds`;
@@ -117,8 +117,8 @@ export function decideVerdict(
   summary: readonly BenchSummary[],
   diag: boolean,
 ): BenchVerdict {
-  const hello = darkstartPercent(summary, 'hello');
-  const echo = darkstartPercent(summary, 'echo');
+  const hello = skeldPercent(summary, 'hello');
+  const echo = skeldPercent(summary, 'echo');
   const reason =
     (diag ? (endingReason(ending) ?? diagReason) : notAssessedReason(ending, found, samples)) ??
     (echo === null ? 'The server CPU per request could not be read on this system.' : null);

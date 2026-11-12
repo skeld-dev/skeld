@@ -3,10 +3,10 @@
 
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
-import { BootError } from '@darkstart/core/boot-error';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { BootError } from '@skeld/core/boot-error';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, parseRaw } from './support.ts';
 
 const statement =

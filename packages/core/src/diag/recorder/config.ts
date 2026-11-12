@@ -1,4 +1,4 @@
-// Does:  Reads the recorder's settings from the DARKSTART_DIAG_* environment variables.
+// Does:  Reads the recorder's settings from the SKELD_DIAG_* environment variables.
 // Holds: A setting that is present and malformed refuses the boot; the canary's value is never echoed, only its length.
 
 import { BootError } from '../../server/boot-error.ts';
@@ -39,30 +39,28 @@ function readWholeNumber(name: string, fallback: number): number {
 }
 
 function readCanary(): string | null {
-  const value = process.env.DARKSTART_DIAG_CANARY;
+  const value = process.env.SKELD_DIAG_CANARY;
   if (value === undefined) {
     return null;
   }
   if (!CANARY_TOKEN.test(value)) {
     throw refuse(
-      `DARKSTART_DIAG_CANARY must be 16 to 128 characters of A-Z, a-z, 0-9, _ and -; got ${value.length} characters`,
+      `SKELD_DIAG_CANARY must be 16 to 128 characters of A-Z, a-z, 0-9, _ and -; got ${value.length} characters`,
     );
   }
   return value;
 }
 
 export function readSettings(): DiagSettings {
-  const dir = process.env.DARKSTART_DIAG_DIR;
+  const dir = process.env.SKELD_DIAG_DIR;
   if (dir === undefined || dir === '') {
-    throw refuse(
-      'DARKSTART_DIAG_DIR is not set; the diag build writes run.json, snapshot.jsonl and journal.jsonl into it',
-    );
+    throw refuse('SKELD_DIAG_DIR is not set; the diag build writes run.json, snapshot.jsonl and journal.jsonl into it');
   }
   return {
     dir,
-    stepN: readWholeNumber('DARKSTART_DIAG_STEP_N', 8),
-    cpuN: readWholeNumber('DARKSTART_DIAG_CPU_N', 32),
-    blockMs: readWholeNumber('DARKSTART_DIAG_BLOCK_MS', 20),
+    stepN: readWholeNumber('SKELD_DIAG_STEP_N', 8),
+    cpuN: readWholeNumber('SKELD_DIAG_CPU_N', 32),
+    blockMs: readWholeNumber('SKELD_DIAG_BLOCK_MS', 20),
     canary: readCanary(),
   };
 }

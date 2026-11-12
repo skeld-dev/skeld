@@ -59,7 +59,7 @@ function isAlive(pid: number): boolean {
 }
 
 const notWritable = (dir: string, error: unknown): Error =>
-  refuse(`DARKSTART_DIAG_DIR ${dir} is not writable: ${errorCode(error)}`);
+  refuse(`SKELD_DIAG_DIR ${dir} is not writable: ${errorCode(error)}`);
 
 function takeOver(dir: string, run: string, header: string): void {
   let pid: number | null;
@@ -69,7 +69,7 @@ function takeOver(dir: string, run: string, header: string): void {
     throw notWritable(dir, error);
   }
   if (pid !== null && isAlive(pid)) {
-    throw refuse(`DARKSTART_DIAG_DIR ${dir} holds the run of live process ${pid}; give each diag run its own folder`);
+    throw refuse(`SKELD_DIAG_DIR ${dir} holds the run of live process ${pid}; give each diag run its own folder`);
   }
   try {
     writeFileSync(run, header);
@@ -82,7 +82,7 @@ export function claimFolder(dir: string, header: string): void {
   try {
     mkdirSync(dir, { recursive: true });
   } catch (error) {
-    throw refuse(`DARKSTART_DIAG_DIR ${dir} cannot be created: ${errorCode(error)}`);
+    throw refuse(`SKELD_DIAG_DIR ${dir} cannot be created: ${errorCode(error)}`);
   }
   const paths: Paths = {
     run: join(dir, RUN_FILE),
@@ -118,7 +118,7 @@ function guarded(file: string, write: (paths: Paths) => void): void {
     const code = errorCode(error);
     files.stopped = true;
     writeFailed.total += 1;
-    process.stderr.write(`darkstart diag: writing ${file} failed: ${code}; diag files stop here\n`);
+    process.stderr.write(`skeld diag: writing ${file} failed: ${code}; diag files stop here\n`);
   }
 }
 

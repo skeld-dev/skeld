@@ -1,9 +1,9 @@
 // Does:  Proves that a route's body limit is the smaller of bodyLimit and the cap derived from its schema.
 // Holds: Each case is sent over a raw socket, both with a declared length and with chunked encoding.
 
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, type RawResponse, rawExchange } from './support.ts';
 import { chunked, flush, openSocket, settle } from './support-typesystem.ts';
 

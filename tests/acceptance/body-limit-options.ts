@@ -2,10 +2,10 @@
 // Holds: A refused registration is atomic, inherited options are ignored and prototype names remain valid routes.
 
 import assert from 'node:assert/strict';
-import { BootError } from '@darkstart/core/boot-error';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { BootError } from '@skeld/core/boot-error';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 
 const body = t.object({ text: t.string({ maxLength: 256 }) });
 const contract = defineContract({

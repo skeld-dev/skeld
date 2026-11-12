@@ -1,5 +1,5 @@
 import { once } from 'node:events';
-import { createServer } from '@darkstart/core/server';
+import { createServer } from '@skeld/core/server';
 import { helloContract } from './contract.ts';
 
 const server = createServer();

@@ -3,9 +3,9 @@
 
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude } from './support.ts';
 import { startServerChild } from './support-typesystem.ts';
 

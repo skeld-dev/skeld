@@ -1,4 +1,4 @@
-# @darkstart/core/boot-error
+# @skeld/core/boot-error
 
 ## BootErrorCode
 

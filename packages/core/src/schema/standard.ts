@@ -14,7 +14,7 @@ function buildStandard(schema: Schema): StandardProps<unknown, unknown> {
   const finish = compileFinish(schema, 'wrap');
   return Object.freeze({
     version: 1,
-    vendor: 'darkstart',
+    vendor: 'skeld',
     validate: (value: unknown) => {
       if (!check(value)) {
         const issues = explain(schema, value, 100);

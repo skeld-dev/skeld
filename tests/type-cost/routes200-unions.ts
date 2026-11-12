@@ -1,7 +1,7 @@
-import { createClient } from '@darkstart/core/client';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { createClient } from '@skeld/core/client';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 
 const contract = defineContract({
   r0: {

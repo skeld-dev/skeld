@@ -11,7 +11,7 @@ import { startServerChild } from './support-typesystem.ts';
 const statement =
   'with headersTimeout 2000 and requestTimeout 4000 half a request line is answered 408 within 2000 to 3250 ms and half a body within 4000 to 5250 ms; with 20000 and 40000 unfinished headers within 20000 to 22250 ms; at the defaults the connection check runs every 6000 ms';
 const defaultInterval = 6000;
-const settingsKey = 'DARKSTART_PROBE_TIMEOUTS';
+const settingsKey = 'SKELD_PROBE_TIMEOUTS';
 const slackAfterMs = 5000;
 
 function intervalOf(server: http.Server | undefined): number {
@@ -27,9 +27,9 @@ async function serve(): Promise<void> {
     return captured;
   });
   syncBuiltinESMExports();
-  const { defineContract } = await import('@darkstart/core/contract');
-  const t = await import('@darkstart/core/schema');
-  const { createServer } = await import('@darkstart/core/server');
+  const { defineContract } = await import('@skeld/core/contract');
+  const t = await import('@skeld/core/schema');
+  const { createServer } = await import('@skeld/core/server');
   const contract = defineContract({
     interval: {
       method: 'GET',

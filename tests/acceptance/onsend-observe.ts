@@ -6,9 +6,9 @@ import { mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 
 const statement =
@@ -65,7 +65,7 @@ function compile(folder: string, source: string): { status: number | null; outpu
         types: ['node'],
         strict: true,
         noEmit: true,
-        customConditions: ['darkstart-source'],
+        customConditions: ['skeld-source'],
         allowImportingTsExtensions: true,
       },
       files: ['probe.ts'],
@@ -75,7 +75,7 @@ function compile(folder: string, source: string): { status: number | null; outpu
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
-const header = "import { createServer } from '@darkstart/core/server';\nconst server = createServer();\n";
+const header = "import { createServer } from '@skeld/core/server';\nconst server = createServer();\n";
 const probes = {
   voidHook: `${header}server.addHook('onSend', () => undefined);\n`,
   asyncVoidHook: `${header}server.addHook('onSend', async () => undefined);\n`,
@@ -107,7 +107,7 @@ check(
   `async hook: content-length was ${asyncHook.length}, expected ${Buffer.byteLength(expectedBody)}`,
 );
 
-const scratch = mkdtempSync(join(tmpdir(), 'darkstart-onsend-'));
+const scratch = mkdtempSync(join(tmpdir(), 'skeld-onsend-'));
 try {
   symlinkSync(repoModules, join(scratch, 'node_modules'));
   for (const [name, source] of Object.entries(probes)) {

@@ -1,47 +1,47 @@
-# @darkstart/core
+# @skeld/core
 
 A TypeScript framework for services on Node with its own engine, modeled on Fastify, Elysia and Hono where each is right. A service is one typed declaration: its routes, their input and output schemas, and their responses by status. The types flow end to end, from the schema to the handler to the client, with no build step that generates types and no hand-kept `.d.ts`.
 
-The engine is everything above `node:http`: the router, the request lifecycle, plugins, body parsing, validation and serialization compiled from the schema, and errors. Node's HTTP server and parser are the floor and are not rewritten. Schemas are built with the package's own builders from `@darkstart/core/schema` and compiled once when the server starts listening; nothing from a request is ever compiled.
+The engine is everything above `node:http`: the router, the request lifecycle, plugins, body parsing, validation and serialization compiled from the schema, and errors. Node's HTTP server and parser are the floor and are not rewritten. Schemas are built with the package's own builders from `@skeld/core/schema` and compiled once when the server starts listening; nothing from a request is ever compiled.
 
 ## Install
 
 Requires an ES module project (`"type": "module"` in your `package.json`).
 
 ```sh
-npm install @darkstart/core
+npm install @skeld/core
 ```
 
 The package has no runtime dependency: the server generates its own validators and response serializers from the contract.
 
 ### Where each subpath runs
 
-`@darkstart/core/schema`, `/secret`, `/redact`, `/json-schema`, `/contract` and `/client` run on Node 22 and later and in browsers, so one contract file serves the server and its clients. `@darkstart/core/server` needs Node 26.12 or later: it runs on `node:http` and compiles its validators and serializers by code generation at `listen`, so under `node --disallow-code-generation-from-strings` `listen` rejects with `BootError` code `CODEGEN_UNAVAILABLE`. The package's `engines` field (`node >=26.12.0`) covers the whole package: on an older Node, npm prints an engine warning and installs it anyway unless `engine-strict` is set.
+`@skeld/core/schema`, `/secret`, `/redact`, `/json-schema`, `/contract` and `/client` run on Node 22 and later and in browsers, so one contract file serves the server and its clients. `@skeld/core/server` needs Node 26.12 or later: it runs on `node:http` and compiles its validators and serializers by code generation at `listen`, so under `node --disallow-code-generation-from-strings` `listen` rejects with `BootError` code `CODEGEN_UNAVAILABLE`. The package's `engines` field (`node >=26.12.0`) covers the whole package: on an older Node, npm prints an engine warning and installs it anyway unless `engine-strict` is set.
 
 ## Subpaths
 
-The package has no root export; import each part from its own subpath. Import the builders as one namespace, `import * as t from '@darkstart/core/schema'`, and call them as `t.string(...)`, `t.object(...)`, `t.null()`.
+The package has no root export; import each part from its own subpath. Import the builders as one namespace, `import * as t from '@skeld/core/schema'`, and call them as `t.string(...)`, `t.object(...)`, `t.null()`.
 
-| Import                         | Exports                                                                                                                                                                                                                                  |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@darkstart/core/contract`     | `defineContract`, `errorBodySchema`, and the contract types (`RouteDefinition`, `ContractRoutes`, `ErrorBody`, …)                                                                                                                        |
-| `@darkstart/core/http-error`   | `HttpError`, thrown by handlers, the engine and the client                                                                                                                                                                               |
-| `@darkstart/core/server`       | `createServer` and the server, scope, handler, hook and plugin types                                                                                                                                                                     |
-| `@darkstart/core/boot-error`   | `BootError`, thrown or rejected when a server refuses to start                                                                                                                                                                           |
-| `@darkstart/core/client`       | `createClient` and the client types                                                                                                                                                                                                      |
-| `@darkstart/core/schema`       | the sixteen builders (`string`, `integer`, `number`, `boolean`, `null`, `literal`, `object`, `array`, `record`, `union`, `optional`, `exposed`, `pick`, `omit`, `partial`, `extend`) and the schema types (`Schema`, `Infer`, `Wire`, …) |
-| `@darkstart/core/secret`       | `Secret`, the wrapper a handler receives for a `secret` field, and `expose`, which returns its value                                                                                                                                     |
-| `@darkstart/core/redact`       | `redact`, which copies a value with its `secret` and `personal` fields replaced                                                                                                                                                          |
-| `@darkstart/core/json-schema`  | `toJsonSchema`, which exports a schema as JSON Schema 2020-12, and the `JsonSchema` type                                                                                                                                                 |
-| `@darkstart/core/package.json` | the manifest                                                                                                                                                                                                                             |
+| Import                     | Exports                                                                                                                                                                                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@skeld/core/contract`     | `defineContract`, `errorBodySchema`, and the contract types (`RouteDefinition`, `ContractRoutes`, `ErrorBody`, …)                                                                                                                        |
+| `@skeld/core/http-error`   | `HttpError`, thrown by handlers, the engine and the client                                                                                                                                                                               |
+| `@skeld/core/server`       | `createServer` and the server, scope, handler, hook and plugin types                                                                                                                                                                     |
+| `@skeld/core/boot-error`   | `BootError`, thrown or rejected when a server refuses to start                                                                                                                                                                           |
+| `@skeld/core/client`       | `createClient` and the client types                                                                                                                                                                                                      |
+| `@skeld/core/schema`       | the sixteen builders (`string`, `integer`, `number`, `boolean`, `null`, `literal`, `object`, `array`, `record`, `union`, `optional`, `exposed`, `pick`, `omit`, `partial`, `extend`) and the schema types (`Schema`, `Infer`, `Wire`, …) |
+| `@skeld/core/secret`       | `Secret`, the wrapper a handler receives for a `secret` field, and `expose`, which returns its value                                                                                                                                     |
+| `@skeld/core/redact`       | `redact`, which copies a value with its `secret` and `personal` fields replaced                                                                                                                                                          |
+| `@skeld/core/json-schema`  | `toJsonSchema`, which exports a schema as JSON Schema 2020-12, and the `JsonSchema` type                                                                                                                                                 |
+| `@skeld/core/package.json` | the manifest                                                                                                                                                                                                                             |
 
 ## Example
 
 `contract.ts`:
 
 ```ts
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
 
 const Name = t.string({ minLength: 1, maxLength: 64 });
 const Greeting = t.object({ message: t.string({ maxLength: 72 }) });
@@ -67,7 +67,7 @@ export const helloContract = defineContract({
 
 ```ts
 import { once } from 'node:events';
-import { createServer } from '@darkstart/core/server';
+import { createServer } from '@skeld/core/server';
 import { helloContract } from './contract.ts';
 
 const server = createServer();
@@ -93,7 +93,7 @@ process.stdout.write('hello stopped\n');
 `client.ts`:
 
 ```ts
-import { createClient } from '@darkstart/core/client';
+import { createClient } from '@skeld/core/client';
 import { helloContract } from './contract.ts';
 
 const client = createClient(helloContract, { baseUrl: 'http://127.0.0.1:3000' });
@@ -139,7 +139,7 @@ Arrays and objects in a JSON body nest at most 64 deep. Deeper text is refused w
 
 ### Secret and personal fields
 
-A schema with `sensitivity: 'secret'` (a password, a token, a key) hands the handler a `Secret<T>` in place of `T`: it is not assignable to `T`, and a template literal, `String()`, `JSON.stringify` and `util.inspect` all give `[secret]`. `expose(value)` from `@darkstart/core/secret` returns the raw value. A response schema that reaches a `secret` field makes `listen` reject with `BootError` code `SECRET_IN_RESPONSE`, unless the field is wrapped `t.exposed(field, '<reason>')`; the handler then returns the raw value, so writing a secret into a response takes an `expose` call in the handler and a `t.exposed` in the contract. A schema with `sensitivity: 'personal'` (an email, a name, an address) stays a plain value in the handler and is allowed in responses. A 400 never names a key or item below a field marked either way: a failure inside it is one detail at the field's path (`is not valid` when the failure is further down). `redact(schema, value)` from `@darkstart/core/redact` returns a copy of the value with each `secret` field replaced by `[secret]` and each `personal` field by `[personal]`, for logs. `toJsonSchema` exports both classes as `x-sensitivity`, and `secret` also as `writeOnly: true`. A record's key schema cannot carry a class; mark the record.
+A schema with `sensitivity: 'secret'` (a password, a token, a key) hands the handler a `Secret<T>` in place of `T`: it is not assignable to `T`, and a template literal, `String()`, `JSON.stringify` and `util.inspect` all give `[secret]`. `expose(value)` from `@skeld/core/secret` returns the raw value. A response schema that reaches a `secret` field makes `listen` reject with `BootError` code `SECRET_IN_RESPONSE`, unless the field is wrapped `t.exposed(field, '<reason>')`; the handler then returns the raw value, so writing a secret into a response takes an `expose` call in the handler and a `t.exposed` in the contract. A schema with `sensitivity: 'personal'` (an email, a name, an address) stays a plain value in the handler and is allowed in responses. A 400 never names a key or item below a field marked either way: a failure inside it is one detail at the field's path (`is not valid` when the failure is further down). `redact(schema, value)` from `@skeld/core/redact` returns a copy of the value with each `secret` field replaced by `[secret]` and each `personal` field by `[personal]`, for logs. `toJsonSchema` exports both classes as `x-sensitivity`, and `secret` also as `writeOnly: true`. A record's key schema cannot carry a class; mark the record.
 
 ### Composition
 
@@ -180,7 +180,7 @@ curl -s -X POST -H 'content-type: application/json' -d '{"name":"Ada","language"
 
 No message holds a value the client sent. A JSON body that holds an own `__proto__` key, or a `constructor` key whose value holds an own `prototype` key, at any depth, is refused by the body reader with 400 `BAD_REQUEST` and no `details` before validation runs (`Request body contains a forbidden key: __proto__`). A body schema that declares a property so named can therefore never be satisfied by a request.
 
-An unknown path gets `{"status":404,"code":"NOT_FOUND","message":"Route GET /nope not found"}`. A handler sends its own error by throwing `new HttpError(status, code, message)` from `@darkstart/core/http-error`. Anything else a handler throws becomes `{"status":500,"code":"INTERNAL","message":"Internal Server Error"}`; the thrown message goes to stderr as one `darkstart: <method> <path> <status> <route>: <message>` line when no `onError` hook is registered, never to the client.
+An unknown path gets `{"status":404,"code":"NOT_FOUND","message":"Route GET /nope not found"}`. A handler sends its own error by throwing `new HttpError(status, code, message)` from `@skeld/core/http-error`. Anything else a handler throws becomes `{"status":500,"code":"INTERNAL","message":"Internal Server Error"}`; the thrown message goes to stderr as one `skeld: <method> <path> <status> <route>: <message>` line when no `onError` hook is registered, never to the client.
 
 The engine's codes are `BAD_REQUEST`, `VALIDATION`, `NOT_FOUND`, `PAYLOAD_TOO_LARGE`, `URI_TOO_LONG`, `UNSUPPORTED_MEDIA_TYPE`, `TIMEOUT` and `INTERNAL`. The client rejects with an `HttpError` whose `status` is `null` and whose `code` is `NETWORK` (no response), `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`. `INVALID_RESPONSE` means, for a status the contract declares with a schema, a body that is missing, not JSON or does not pass the schema, with details under `/body`; for any other status, a JSON body that does not parse. `RESPONSE_TOO_LARGE` means the body passed the call's limit, counted in decoded bytes as it arrives and checked first against `Content-Length`: for a declared status, twice the largest JSON encoding its schema admits plus 1,024 bytes, and 1,048,576 bytes for an `unbounded` or `open` schema or any other status. `maxResponseBytes` in the client options replaces every limit.
 

@@ -47,7 +47,7 @@ import { endSpan, nextSpan, startSpan, trackSpan } from './spans.ts';
 
 export type { Slot, Token } from '../empty.ts';
 
-export const RECORDER_MARKER = 'darkstart:diag-recorder';
+export const RECORDER_MARKER = 'skeld:diag-recorder';
 
 interface RunState {
   status: 'booting' | 'listening' | 'closed';

@@ -49,7 +49,7 @@ export interface ServerChild {
 }
 
 export async function startServerChild(script: string): Promise<ServerChild> {
-  const child = spawn(process.execPath, ['--conditions=darkstart-source', script, 'serve'], {
+  const child = spawn(process.execPath, ['--conditions=skeld-source', script, 'serve'], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stderr = '';

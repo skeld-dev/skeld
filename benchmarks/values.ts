@@ -44,4 +44,4 @@ export const tasksetPath = '/usr/bin/taskset';
 export const serverCores = '7';
 export const runnerCores = '3-6';
 export const minimumHostCores = 8;
-export const lockFile = join(tmpdir(), 'darkstart-bench.lock');
+export const lockFile = join(tmpdir(), 'skeld-bench.lock');

@@ -6,15 +6,15 @@ import { readdirSync } from 'node:fs';
 import { loadavg } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-// biome-ignore lint/correctness/noUnresolvedImports: the seam carries only the darkstart-source condition, which Biome's resolver does not set (ADR-028)
-import { generateSerializer } from '@darkstart/core/generated-check';
-import { toJsonSchema } from '@darkstart/core/json-schema';
-import type { Schema } from '@darkstart/core/schema';
-import * as t from '@darkstart/core/schema';
+// biome-ignore lint/correctness/noUnresolvedImports: the seam carries only the skeld-source condition, which Biome's resolver does not set (ADR-028)
+import { generateSerializer } from '@skeld/core/generated-check';
+import { toJsonSchema } from '@skeld/core/json-schema';
+import type { Schema } from '@skeld/core/schema';
+import * as t from '@skeld/core/schema';
 
 const shapes = ['S1', 'S2', 'S3', 'S4', 'union', 'record', 'escapes'] as const;
 type Shape = (typeof shapes)[number];
-const candidate = 'darkstart';
+const candidate = 'skeld';
 const poolSize = 16;
 const pinnedCpu = '7';
 const stringBound = 64;
@@ -278,7 +278,7 @@ function runChild(script: string, folder: string, engine: string, shape: Shape, 
       pinnedCpu,
       process.execPath,
       '--expose-gc',
-      '--conditions=darkstart-source',
+      '--conditions=skeld-source',
       script,
       '--child',
       engine,

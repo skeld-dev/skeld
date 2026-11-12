@@ -4,9 +4,9 @@
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { defineContract } from '@darkstart/core/contract';
-import { createServer } from '@darkstart/core/server';
-import * as t from '@darkstart/core/schema';
+import { defineContract } from '@skeld/core/contract';
+import { createServer } from '@skeld/core/server';
+import * as t from '@skeld/core/schema';
 import { check, conclude, parseRaw, rawExchange } from './support.ts';
 import { startServerChild } from './support-typesystem.ts';
 

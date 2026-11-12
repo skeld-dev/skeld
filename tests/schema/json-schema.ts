@@ -2,9 +2,9 @@
 // Holds: Schemas whose export is knowingly weaker are counted and printed, never silently skipped.
 
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import type { Schema } from '@darkstart/core/schema';
-import * as t from '@darkstart/core/schema';
-import { toJsonSchema } from '@darkstart/core/json-schema';
+import type { Schema } from '@skeld/core/schema';
+import * as t from '@skeld/core/schema';
+import { toJsonSchema } from '@skeld/core/json-schema';
 import { corpus, declaresKey, hasAstral, hasOpenMinimum } from './corpus.ts';
 import type { Json } from './diverse-fixture.ts';
 
@@ -355,7 +355,7 @@ function main(argv: readonly string[]): void {
   const agreement = proveAgreement(schemas, seed, all);
   const agreed = agreement.divergences === 0;
   process.stdout.write(
-    `excluded: ${agreement.excludedSchemas} schemas (a key __proto__ or "" that Ajv 2020 ignores or mishandles)\nopen-minimum: ${agreement.openSchemas} schemas, ${agreement.openPairs} pairs, ${agreement.openDiffer} differ (the export accepts, DarkStart refuses; the reverse fails)\n`,
+    `excluded: ${agreement.excludedSchemas} schemas (a key __proto__ or "" that Ajv 2020 ignores or mishandles)\nopen-minimum: ${agreement.openSchemas} schemas, ${agreement.openPairs} pairs, ${agreement.openDiffer} differ (the export accepts, Skeld refuses; the reverse fails)\n`,
   );
   process.stdout.write(
     `${agreed ? 'pass' : 'fail'} Ajv 2020 on the export agrees with the closure check ${JSON.stringify({ ...agreement, seed })}\n`,

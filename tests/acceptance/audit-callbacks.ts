@@ -4,9 +4,9 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { runInNewContext } from 'node:vm';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer, type HookName } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer, type HookName } from '@skeld/core/server';
 
 function foreign(source: string): never {
   const value: unknown = runInNewContext(source);

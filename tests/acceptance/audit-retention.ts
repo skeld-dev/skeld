@@ -4,8 +4,8 @@
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
-import { defineContract } from '@darkstart/core/contract';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import { createServer } from '@skeld/core/server';
 import { handleRequest } from '../../packages/core/dist/lifecycle/handle-request.js';
 import { createHttpServer } from '../../packages/core/dist/server/listen.js';
 import { resolveServerOptions } from '../../packages/core/dist/server/options.js';

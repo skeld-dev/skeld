@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createServer } from '@darkstart/core/server';
+import { createServer } from '@skeld/core/server';
 
 const events: string[] = [];
 const server = createServer();

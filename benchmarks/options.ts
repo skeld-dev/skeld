@@ -19,7 +19,7 @@ import {
 
 export const helpText = `Usage: node benchmarks/run.ts [options]
 
-Measures DarkStart, Fastify and node:http on the same two routes with
+Measures Skeld, Fastify and node:http on the same two routes with
 autocannon on this machine, and writes a report. Each server runs on core 7
 and the runner (autocannon's 3 workers) on cores 3-6, pinned with taskset.
 The judged figure is the server's CPU time per request over the measured
@@ -31,13 +31,13 @@ Options:
   --warm-up <s>      discarded warm-up seconds per route, 1 to 600 (default 3)
   --duration <s>     measured seconds per route, 1 to 600 (default 10)
   --rounds <n>       measured rounds per server and route, 1 to 50 (default 3)
-  --servers <list>   darkstart,fastify,node-http,hono,express,light
-                     (default darkstart,fastify,node-http)
+  --servers <list>   skeld,fastify,node-http,hono,express,light
+                     (default skeld,fastify,node-http)
   --routes <list>    hello,echo (default both)
   --out <dir>        folder for the run's report (default benchmarks/results)
   --check            start each server, check its answers, measure nothing
-  --diag             measure DarkStart's normal and diag builds side by side,
-                     then run the security scenario; darkstart only; with
+  --diag             measure Skeld's normal and diag builds side by side,
+                     then run the security scenario; skeld only; with
                      --check, the start checks and the scenario only
   --step-n <n>       diag build: time the steps of 1 in n requests, 1 to 1024
                      (default 8; needs --diag)
@@ -50,7 +50,7 @@ acceptance protocol and gets a verdict. In diag mode the same rule decides
 whether the overhead ratio is assessed.
 `;
 
-export const defaultServerIds: readonly ServerId[] = ['darkstart', 'fastify', 'node-http'];
+export const defaultServerIds: readonly ServerId[] = ['skeld', 'fastify', 'node-http'];
 const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express', 'light'];
 export const routeIds: readonly RouteId[] = ['hello', 'echo'];
 
@@ -151,14 +151,12 @@ const parseSampling = (
 
 const parseServers = (text: string | undefined, diag: boolean): readonly ServerId[] => {
   if (text === undefined) {
-    return diag ? ['darkstart'] : defaultServerIds;
+    return diag ? ['skeld'] : defaultServerIds;
   }
   const servers = parseList('--servers', text, serverIds, 'server');
-  const other = diag ? servers.find((server) => server !== 'darkstart') : undefined;
+  const other = diag ? servers.find((server) => server !== 'skeld') : undefined;
   if (other !== undefined) {
-    throw usage(
-      `diag mode measures only darkstart; got "${other}" in --servers. Remove --servers or set it to darkstart.`,
-    );
+    throw usage(`diag mode measures only skeld; got "${other}" in --servers. Remove --servers or set it to skeld.`);
   }
   return servers;
 };

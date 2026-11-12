@@ -56,7 +56,7 @@ export function writeStderrLine(
 ): void {
   try {
     const span = start('err.stderr_write');
-    const line = `darkstart: ${escapeLine(method)} ${escapeLine(path)} ${status} ${escapeLine(routeName)}: ${escapeLine(message)}\n`;
+    const line = `skeld: ${escapeLine(method)} ${escapeLine(path)} ${status} ${escapeLine(routeName)}: ${escapeLine(message)}\n`;
     stderr(line);
     process.stderr.write(line);
     end(span);

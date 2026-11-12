@@ -7,11 +7,11 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createClient } from '@darkstart/core/client';
-import { defineContract } from '@darkstart/core/contract';
-import { HttpError } from '@darkstart/core/http-error';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { createClient } from '@skeld/core/client';
+import { defineContract } from '@skeld/core/contract';
+import { HttpError } from '@skeld/core/http-error';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { startServerChild } from './support-typesystem.ts';
 
 const script = fileURLToPath(import.meta.url);
@@ -223,19 +223,15 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 async function diagnosticIdentity(): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), 'darkstart-audit-routes-'));
-  const child = spawnSync(
-    process.execPath,
-    ['--conditions=darkstart-source', '--conditions=darkstart-diag', script, 'diag'],
-    {
-      env: { ...process.env, DARKSTART_DIAG_DIR: dir, DARKSTART_DIAG_STEP_N: '1' },
-      encoding: 'utf8',
-      timeout: 20_000,
-    },
-  );
+  const dir = await mkdtemp(join(tmpdir(), 'skeld-audit-routes-'));
+  const child = spawnSync(process.execPath, ['--conditions=skeld-source', '--conditions=skeld-diag', script, 'diag'], {
+    env: { ...process.env, SKELD_DIAG_DIR: dir, SKELD_DIAG_STEP_N: '1' },
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
   assert.equal(child.status, 0, `${child.stderr}\n${child.stdout}`);
   const run = record(JSON.parse(await readFile(join(dir, 'run.json'), 'utf8')));
-  assert.equal(run.format, 'darkstart-diag/2');
+  assert.equal(run.format, 'skeld-diag/2');
   assert(Array.isArray(run.routes));
   assert.equal(run.routes.length, 2);
   const routes = run.routes.map((value: unknown) => record(value));

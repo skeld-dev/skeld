@@ -119,7 +119,7 @@ function runNode(args: readonly string[], abort: AbortSignal, limitMs: number | 
 }
 
 function runSource(file: string, abort: AbortSignal): Promise<Run> {
-  return runNode(['--conditions=darkstart-source', file], abort, exampleLimitMs);
+  return runNode(['--conditions=skeld-source', file], abort, exampleLimitMs);
 }
 
 function errorLine(output: string): string {

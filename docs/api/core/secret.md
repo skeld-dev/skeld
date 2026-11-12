@@ -1,4 +1,4 @@
-# @darkstart/core/secret
+# @skeld/core/secret
 
 ## Secret
 

@@ -40,7 +40,7 @@ export interface StandardProps<I, O> {
   /** The Standard Schema version. */
   readonly version: 1;
   /** The library that made the schema. */
-  readonly vendor: 'darkstart';
+  readonly vendor: 'skeld';
   /**
    * Checks a value synchronously: `{ value }` with `secret` values wrapped, or `{ issues }`.
    * At most 100 issues; under a value marked `secret` or `personal`, one issue at its path.
@@ -51,7 +51,7 @@ export interface StandardProps<I, O> {
 }
 
 /**
- * A schema made by a builder of `@darkstart/core/schema`: frozen, typed for both sides of the wire.
+ * A schema made by a builder of `@skeld/core/schema`: frozen, typed for both sides of the wire.
  * A plain object of the same shape is not a schema: the builders and `defineContract` refuse it.
  */
 export interface Schema<T = unknown, W = unknown> {

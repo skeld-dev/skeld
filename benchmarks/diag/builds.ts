@@ -20,10 +20,10 @@ export interface Target {
   readonly recorderFolder: string | null;
 }
 
-const diagCondition = '--conditions=darkstart-diag';
+const diagCondition = '--conditions=skeld-diag';
 const recorderFiles = ['run.json', 'snapshot.jsonl', 'journal.jsonl'] as const;
 const scenarioScript = join(import.meta.dirname, 'scenario-server.ts');
-const darkstartScript = join(serversFolder, 'darkstart.ts');
+const skeldScript = join(serversFolder, 'skeld.ts');
 
 const portArguments = ['--port', '0'] as const;
 
@@ -31,9 +31,9 @@ const normalEnvironment = (): NodeJS.ProcessEnv => ({ ...childEnvironment(), NOD
 
 const diagEnvironment = (folder: string, sampling: Sampling): NodeJS.ProcessEnv => ({
   ...normalEnvironment(),
-  DARKSTART_DIAG_DIR: folder,
-  DARKSTART_DIAG_STEP_N: String(sampling.stepN),
-  DARKSTART_DIAG_CPU_N: String(sampling.cpuN),
+  SKELD_DIAG_DIR: folder,
+  SKELD_DIAG_STEP_N: String(sampling.stepN),
+  SKELD_DIAG_CPU_N: String(sampling.cpuN),
 });
 
 export function serverTarget(server: ServerId): Target {
@@ -51,9 +51,9 @@ export function serverTarget(server: ServerId): Target {
 export function diagTarget(folder: string, sampling: Sampling): Target {
   return {
     launch: {
-      name: 'darkstart-diag',
-      readyLabel: 'darkstart',
-      args: [diagCondition, darkstartScript, ...portArguments],
+      name: 'skeld-diag',
+      readyLabel: 'skeld',
+      args: [diagCondition, skeldScript, ...portArguments],
       env: diagEnvironment(folder, sampling),
     },
     recorderFolder: folder,
@@ -66,18 +66,18 @@ export function scenarioTarget(folder: string, sampling: Sampling, token: string
       name: 'scenario',
       readyLabel: 'scenario',
       args: [diagCondition, scenarioScript, ...portArguments, ...(plant ? ['--plant'] : [])],
-      env: { ...diagEnvironment(folder, sampling), DARKSTART_DIAG_CANARY: token },
+      env: { ...diagEnvironment(folder, sampling), SKELD_DIAG_CANARY: token },
     },
     recorderFolder: folder,
   };
 }
 
 export function diagCommandLine(command: Command): readonly string[] {
-  return [...command, diagCondition, displayPath(darkstartScript), ...portArguments];
+  return [...command, diagCondition, displayPath(skeldScript), ...portArguments];
 }
 
 export function requireRecorderBuild(): void {
-  const manifest = fileURLToPath(import.meta.resolve('@darkstart/core/package.json'));
+  const manifest = fileURLToPath(import.meta.resolve('@skeld/core/package.json'));
   const recorder = join(dirname(manifest), 'dist', 'diag', 'recorder', 'recorder.js');
   if (!existsSync(recorder)) {
     throw new BenchError(3, `${displayPath(recorder)} is missing. Run npm run bench, which builds the package first.`);

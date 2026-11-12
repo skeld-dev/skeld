@@ -1,4 +1,4 @@
-# @darkstart/core/client
+# @skeld/core/client
 
 ## CallInput
 

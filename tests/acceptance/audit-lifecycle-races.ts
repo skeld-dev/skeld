@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import vm from 'node:vm';
-import { createServer } from '@darkstart/core/server';
+import { createServer } from '@skeld/core/server';
 
 async function bindRace(port: number): Promise<void> {
   const original = net.Server.prototype.listen;

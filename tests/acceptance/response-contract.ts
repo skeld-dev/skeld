@@ -3,10 +3,10 @@
 
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { defineContract } from '@darkstart/core/contract';
-import { HttpError } from '@darkstart/core/http-error';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import { HttpError } from '@skeld/core/http-error';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude } from './support.ts';
 import { startServerChild } from './support-typesystem.ts';
 
@@ -153,9 +153,7 @@ async function get(child: Child, path: string): Promise<Seen> {
 }
 
 function linesFor(stderr: string, route: string, path: string): string[] {
-  return stderr
-    .split('\n')
-    .filter((line) => line.startsWith(`darkstart: GET ${path} `) && line.includes(` ${route}: `));
+  return stderr.split('\n').filter((line) => line.startsWith(`skeld: GET ${path} `) && line.includes(` ${route}: `));
 }
 
 const refusals: readonly (readonly [string, readonly string[]])[] = [

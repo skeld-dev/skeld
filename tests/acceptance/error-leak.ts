@@ -2,9 +2,9 @@
 // Holds: A random token in the thrown message must not appear anywhere in the response bytes.
 
 import { randomUUID } from 'node:crypto';
-import * as t from '@darkstart/core/schema';
-import { defineContract } from '@darkstart/core/contract';
-import { createServer } from '@darkstart/core/server';
+import * as t from '@skeld/core/schema';
+import { defineContract } from '@skeld/core/contract';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 
 const statement =

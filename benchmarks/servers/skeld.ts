@@ -1,9 +1,9 @@
-// Does:  Serves the hello and echo routes with DarkStart: the server under test.
+// Does:  Serves the hello and echo routes with Skeld: the server under test.
 // Holds: It serves the same two routes with the same bodies as every other server here.
 
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { host } from '../values.ts';
 import { announceReady, failToStart, parsePort } from './server-command.ts';
 
@@ -36,9 +36,9 @@ server.routes(benchContract, {
 
 try {
   const address = await server.listen({ port, host });
-  announceReady('darkstart', address.port);
+  announceReady('skeld', address.port);
 } catch (error) {
-  failToStart('darkstart', port, listenCause(error));
+  failToStart('skeld', port, listenCause(error));
 }
 
 const stop = async (): Promise<void> => {

@@ -2,13 +2,13 @@
 // Holds: Closed keys, captured children and sensitive union failures keep the same meaning across consumers.
 
 import assert from 'node:assert/strict';
-import { defineContract } from '@darkstart/core/contract';
-// biome-ignore lint/correctness/noUnresolvedImports: the proof seam is available only under darkstart-source
-import { generateCheck } from '@darkstart/core/generated-check';
-import { toJsonSchema } from '@darkstart/core/json-schema';
-import * as t from '@darkstart/core/schema';
-import { expose, Secret } from '@darkstart/core/secret';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+// biome-ignore lint/correctness/noUnresolvedImports: the proof seam is available only under skeld-source
+import { generateCheck } from '@skeld/core/generated-check';
+import { toJsonSchema } from '@skeld/core/json-schema';
+import * as t from '@skeld/core/schema';
+import { expose, Secret } from '@skeld/core/secret';
+import { createServer } from '@skeld/core/server';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 

@@ -1,4 +1,4 @@
-# @darkstart/core/http-error
+# @skeld/core/http-error
 
 ## HttpErrorOptions
 

@@ -1,9 +1,9 @@
 // Does:  Proves that the closure check and the client work where code generation from strings is forbidden.
 // Holds: Run under --disallow-code-generation-from-strings; listen itself must reject with CODEGEN_UNAVAILABLE.
 
-import { createClient } from '@darkstart/core/client';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
+import { createClient } from '@skeld/core/client';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
 import { invalidValue, sample, schemas, shapes } from './diverse-fixture.ts';
 
 const flag = '--disallow-code-generation-from-strings';
@@ -132,9 +132,9 @@ async function listenHalf(disabled: boolean): Promise<Report> {
   const name = disabled
     ? `listen of the hello contract rejects with CODEGEN_UNAVAILABLE naming ${flag}`
     : 'listen of the hello contract succeeds without the flag';
-  let modules: [typeof import('@darkstart/core/server'), typeof import('@darkstart/core/boot-error')];
+  let modules: [typeof import('@skeld/core/server'), typeof import('@skeld/core/boot-error')];
   try {
-    modules = await Promise.all([import('@darkstart/core/server'), import('@darkstart/core/boot-error')]);
+    modules = await Promise.all([import('@skeld/core/server'), import('@skeld/core/boot-error')]);
   } catch (error) {
     return { name, problems: [`the server could not be loaded: ${String(error).slice(0, 200)}`], figures: {} };
   }

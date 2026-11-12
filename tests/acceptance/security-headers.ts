@@ -2,9 +2,9 @@
 // Holds: Responses are read as raw header lines, so a duplicate line or a changed value cannot hide.
 
 import net from 'node:net';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude } from './support.ts';
 
 const statement =

@@ -30,7 +30,7 @@ export interface RunFields {
   readonly options: ResolvedServerOptions;
 }
 
-const FORMAT = 'darkstart-diag/2';
+const FORMAT = 'skeld-diag/2';
 const OBJECT_ID = /^[0-9a-f]{40,64}$/;
 const REF_PREFIX = 'ref: ';
 const BRANCH_PREFIX = 'refs/heads/';

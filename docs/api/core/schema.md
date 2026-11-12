@@ -1,4 +1,4 @@
-# @darkstart/core/schema
+# @skeld/core/schema
 
 ## t.string
 
@@ -770,7 +770,7 @@ Source: `packages/core/src/schema/types.ts:300`
 
 ## Schema
 
-A schema made by a builder of `@darkstart/core/schema`: frozen, typed for both sides of the wire.
+A schema made by a builder of `@skeld/core/schema`: frozen, typed for both sides of the wire.
 
 A plain object of the same shape is not a schema: the builders and `defineContract` refuse it.
 
@@ -821,7 +821,7 @@ The Standard Schema v1 interface every schema carries under `~standard`.
 ```ts
 export interface StandardProps<I, O> {
   readonly version: 1;
-  readonly vendor: 'darkstart';
+  readonly vendor: 'skeld';
   readonly validate: (value: unknown) => { readonly value: O } | { readonly issues: readonly Issue[] };
   readonly types?: { readonly input: I; readonly output: O } | undefined;
 }

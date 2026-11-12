@@ -31,11 +31,10 @@ const scripts = [
 
 let failed = 0;
 for (const script of scripts) {
-  const result = spawnSync(
-    process.execPath,
-    ['--conditions=darkstart-source', new URL(script, import.meta.url).pathname],
-    { encoding: 'utf8', timeout: 120_000 },
-  );
+  const result = spawnSync(process.execPath, ['--conditions=skeld-source', new URL(script, import.meta.url).pathname], {
+    encoding: 'utf8',
+    timeout: 120_000,
+  });
   const passed = result.status === 0;
   process.stdout.write(`${script}: ${result.stdout.trim()}\n`);
   if (!passed) {

@@ -11,7 +11,7 @@ import type { Json, Shape } from './diverse-fixture.ts';
 import { invalidValue, sample, shapes } from './diverse-fixture.ts';
 
 const bundleFlags = ['--bundle', '--minify', '--format=esm', '--platform=browser', '--target=es2022'];
-const darkstart = 'darkstart';
+const skeld = 'skeld';
 const measures = ['minified', 'gzip', 'brotli'] as const;
 
 type Measure = (typeof measures)[number];
@@ -62,10 +62,10 @@ function declare(shape: Shape): string {
   }
 }
 
-function darkstartEntry(): string {
+function skeldEntry(): string {
   const lines = shapes.map((shape, index) => `const s${index}=${declare(shape)};`);
   const names = shapes.map((_, index) => `s${index}`).join(',');
-  return `import * as t from '@darkstart/core/schema';\n${lines.join('\n')}\nexport const V=[${names}].map((s)=>(x)=>'value' in s['~standard'].validate(x));\n`;
+  return `import * as t from '@skeld/core/schema';\n${lines.join('\n')}\nexport const V=[${names}].map((s)=>(x)=>'value' in s['~standard'].validate(x));\n`;
 }
 
 function minify(esbuild: string, resolveDir: string, source: string): Buffer {
@@ -162,7 +162,7 @@ async function main(argv: readonly string[]): Promise<void> {
   const version = spawnSync(esbuild, ['--version']).stdout.toString().trim();
   const here = import.meta.dirname;
   const entries = [
-    { name: darkstart, source: darkstartEntry(), resolveDir: here },
+    { name: skeld, source: skeldEntry(), resolveDir: here },
     ...(await comparatorEntries(folder)).map((entry) => ({ ...entry, resolveDir: join(folder, 'bundle') })),
   ];
   const built: Built[] = entries.map((entry) => {
@@ -172,7 +172,7 @@ async function main(argv: readonly string[]): Promise<void> {
   const scratch = mkdtempSync(join(tmpdir(), 'ds-bundle-'));
   try {
     const behaviour = await Promise.all(built.map((item) => exercise(item, scratch)));
-    const own = built.find((item) => item.name === darkstart);
+    const own = built.find((item) => item.name === skeld);
     if (own === undefined) {
       throw new RangeError('no bundle was built for the candidate');
     }
@@ -193,8 +193,8 @@ async function main(argv: readonly string[]): Promise<void> {
       bytes: Object.fromEntries(built.map((item) => [item.name, item.sizes])),
       ratios: Object.fromEntries(
         built
-          .filter((item) => item.name !== darkstart)
-          .map((item) => [`${darkstart}/${item.name}`, ratios(own.sizes, item.sizes)]),
+          .filter((item) => item.name !== skeld)
+          .map((item) => [`${skeld}/${item.name}`, ratios(own.sizes, item.sizes)]),
       ),
       behaviour: Object.fromEntries(built.map((item, position) => [item.name, behaviour[position]])),
     };

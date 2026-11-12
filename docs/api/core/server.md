@@ -1,4 +1,4 @@
-# @darkstart/core/server
+# @skeld/core/server
 
 ## Empty
 

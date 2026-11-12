@@ -8,9 +8,9 @@ const statement =
   'an import of a path the package does not list in exports, or of the bare package name, fails in Node with ERR_PACKAGE_PATH_NOT_EXPORTED';
 const expectedCode = 'ERR_PACKAGE_PATH_NOT_EXPORTED';
 
-const unexportedFile = ['@darkstart', 'core', 'dist', 'router', 'tree.js'].join('/');
-const barePackage = ['@darkstart', 'core'].join('/');
-const exportedSubpath = ['@darkstart', 'core', 'contract'].join('/');
+const unexportedFile = ['@skeld', 'core', 'dist', 'router', 'tree.js'].join('/');
+const barePackage = ['@skeld', 'core'].join('/');
+const exportedSubpath = ['@skeld', 'core', 'contract'].join('/');
 
 async function rejection(specifier: string): Promise<unknown> {
   try {
@@ -26,7 +26,7 @@ function codeOf(error: unknown): unknown {
 }
 
 const problems: string[] = [];
-const packageJson = import.meta.resolve('@darkstart/core/package.json');
+const packageJson = import.meta.resolve('@skeld/core/package.json');
 const treeFile = new URL('./dist/router/tree.js', packageJson);
 check(problems, existsSync(treeFile), `${treeFile.pathname} does not exist, so the rejection would prove nothing`);
 

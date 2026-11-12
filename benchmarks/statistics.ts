@@ -45,7 +45,7 @@ const cpuSpread = (samples: readonly BenchSample[]): BenchSpread | null => {
   return values.length === samples.length ? spread(values) : null;
 };
 
-const builds: readonly BuildId[] = ['darkstart', 'darkstart-diag'];
+const builds: readonly BuildId[] = ['skeld', 'skeld-diag'];
 
 export function summarize(
   samples: readonly BenchSample[],

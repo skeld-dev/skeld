@@ -20,7 +20,7 @@ export type {
 const WRITTEN_BY_SERVICE = 'written by the service, not by a client';
 
 /**
- * The schema of the error body every DarkStart server writes: `{ status, code, message, details? }`.
+ * The schema of the error body every Skeld server writes: `{ status, code, message, details? }`.
  * Its strings and its `details` are `unbounded`, so a client accepts a server's error message of any length.
  */
 export const errorBodySchema = object({

@@ -16,7 +16,7 @@ interface Entry {
 
 type Unpacked = { readonly entries: readonly Entry[] } | { readonly refused: string };
 
-const marker = 'darkstart:diag-recorder';
+const marker = 'skeld:diag-recorder';
 // Why: The tarball is untrusted input to this tool, so its unpacked size and entry count are bounded.
 const unpackedLimit = 64 * 1024 * 1024;
 const entryLimit = 10_000;
@@ -27,8 +27,8 @@ const usage = 'usage: node tools/check-pack-markers.ts <tarball> | --pack | --he
 
 const nodeShipped: ReadonlySet<string> = new Set(['node', 'import', 'module-sync', 'node-addons', 'default']);
 const typesShipped: ReadonlySet<string> = new Set(['types', 'import', 'node', 'default']);
-const nodeDiag: ReadonlySet<string> = new Set([...nodeShipped, 'darkstart-diag']);
-const typesDiag: ReadonlySet<string> = new Set([...typesShipped, 'darkstart-diag']);
+const nodeDiag: ReadonlySet<string> = new Set([...nodeShipped, 'skeld-diag']);
+const typesDiag: ReadonlySet<string> = new Set([...typesShipped, 'skeld-diag']);
 
 let problems = 0;
 
@@ -74,7 +74,7 @@ function packagePath(entry: unknown, conditions: ReadonlySet<string>): string | 
 
 function hasDiagBranch(value: unknown): boolean {
   return (
-    isRecord(value) && Object.entries(value).some(([key, branch]) => key === 'darkstart-diag' || hasDiagBranch(branch))
+    isRecord(value) && Object.entries(value).some(([key, branch]) => key === 'skeld-diag' || hasDiagBranch(branch))
   );
 }
 
@@ -97,7 +97,7 @@ function selfTest(): boolean {
   const manifestPath = join(corePath, 'package.json');
   const entry = diagEntry(parseManifest(readFileSync(manifestPath, 'utf8')));
   if (!hasDiagBranch(entry)) {
-    fail('S', `${manifestPath} has no imports["#diag"] darkstart-diag branch`);
+    fail('S', `${manifestPath} has no imports["#diag"] skeld-diag branch`);
     return false;
   }
   const target = packagePath(entry, nodeDiag);
@@ -213,7 +213,7 @@ async function check(tarball: string, label: string): Promise<number> {
     rules(entry, files, read.entries);
   }
   if (problems === 0) {
-    process.stdout.write(`Pack check passed: @darkstart/core ${version} carries no recorder.\n`);
+    process.stdout.write(`Pack check passed: @skeld/core ${version} carries no recorder.\n`);
     return 0;
   }
   process.stderr.write(`Pack check failed: ${problems} problems in ${label}. Do not publish it.\n`);
@@ -303,7 +303,7 @@ function rules(diag: unknown, files: ReadonlyMap<string, Buffer>, entries: reado
 }
 
 async function pack(destination: string, signal: AbortSignal): Promise<string | undefined> {
-  const child = spawn('npm', ['pack', '--workspace', '@darkstart/core', '--pack-destination', destination], {
+  const child = spawn('npm', ['pack', '--workspace', '@skeld/core', '--pack-destination', destination], {
     cwd: root,
     stdio: ['ignore', 'ignore', 'pipe'],
     signal,
@@ -332,7 +332,7 @@ async function pack(destination: string, signal: AbortSignal): Promise<string | 
 }
 
 async function checkPacked(): Promise<number> {
-  const destination = mkdtempSync(join(tmpdir(), 'darkstart-pack-'));
+  const destination = mkdtempSync(join(tmpdir(), 'skeld-pack-'));
   const controller = new AbortController();
   const remove = (): void => rmSync(destination, { recursive: true, force: true });
   const interrupt = (): void => {

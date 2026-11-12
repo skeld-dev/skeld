@@ -1,10 +1,10 @@
 // Does:  Proves that a body nested past 64 levels is a 400 BAD_REQUEST and a schema nested past 64 fails listen.
 // Holds: Brackets inside a string never count as nesting, and the boundary is tried on both sides at 64 and 65.
 
-import { defineContract } from '@darkstart/core/contract';
-import { BootError } from '@darkstart/core/boot-error';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import { BootError } from '@skeld/core/boot-error';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 
 const statement =

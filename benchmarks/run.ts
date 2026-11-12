@@ -430,7 +430,7 @@ const measuredWindows = (
 ): readonly MeasuredWindow[] =>
   samples.flatMap((sample) => {
     const process = processes.find(({ folder }) => folder.folder === roundFolder(sample.round));
-    return sample.kind !== 'measured' || sample.build !== 'darkstart-diag' || process === undefined
+    return sample.kind !== 'measured' || sample.build !== 'skeld-diag' || process === undefined
       ? []
       : [
           {
@@ -521,7 +521,7 @@ const prepareDiagRun = (packages: Packages): DiagRun => {
 
 const checkDiagBuilds = async (run: DiagRun): Promise<void> => {
   const rows = await checkServers(
-    [serverTarget('darkstart'), diagTarget(join(run.diagFolder, 'check'), options)],
+    [serverTarget('skeld'), diagTarget(join(run.diagFolder, 'check'), options)],
     options.routes,
     pinning.serverCommand,
     hooks,
@@ -548,9 +548,7 @@ const measureDiagBuilds = async (run: DiagRun, samples: BenchSample[]): Promise<
       autocannon: loadAutocannon(),
       serverCommand: pinning.serverCommand,
       target: (visit) =>
-        visit.build === 'darkstart-diag'
-          ? diagTarget(run.roundFolder(visit.round), options)
-          : serverTarget(visit.server),
+        visit.build === 'skeld-diag' ? diagTarget(run.roundFolder(visit.round), options) : serverTarget(visit.server),
       samples,
       interruption: interruption.promise,
       interrupted,
@@ -586,7 +584,7 @@ const readDiagFolders = (
 ): { readonly processes: readonly DiagProcess[]; readonly problems: readonly BenchError[] } => {
   const problems: BenchError[] = [];
   const diagRounds = [
-    ...new Set(samples.filter((sample) => sample.build === 'darkstart-diag').map((sample) => sample.round)),
+    ...new Set(samples.filter((sample) => sample.build === 'skeld-diag').map((sample) => sample.round)),
   ];
   const processes = readProcesses(
     [

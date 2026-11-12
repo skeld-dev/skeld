@@ -3,10 +3,10 @@
 
 import http, { type ServerResponse } from 'node:http';
 import { gzipSync } from 'node:zlib';
-import { createClient } from '@darkstart/core/client';
-import { defineContract } from '@darkstart/core/contract';
-import { HttpError } from '@darkstart/core/http-error';
-import * as t from '@darkstart/core/schema';
+import { createClient } from '@skeld/core/client';
+import { defineContract } from '@skeld/core/contract';
+import { HttpError } from '@skeld/core/http-error';
+import * as t from '@skeld/core/schema';
 import { check, conclude } from './support.ts';
 
 const statement =

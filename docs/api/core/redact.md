@@ -1,4 +1,4 @@
-# @darkstart/core/redact
+# @skeld/core/redact
 
 ## redact
 

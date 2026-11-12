@@ -1,9 +1,9 @@
 // Does:  Proves that the generated check and the closure check agree on verdicts and on failure paths.
 // Holds: Zero mismatches is the only passing result.
 
-// biome-ignore lint/correctness/noUnresolvedImports: the seam carries only the darkstart-source condition, which Biome's resolver does not set (ADR-028)
-import { generateCheck } from '@darkstart/core/generated-check';
-import * as t from '@darkstart/core/schema';
+// biome-ignore lint/correctness/noUnresolvedImports: the seam carries only the skeld-source condition, which Biome's resolver does not set (ADR-028)
+import { generateCheck } from '@skeld/core/generated-check';
+import * as t from '@skeld/core/schema';
 import type { Case } from './corpus.ts';
 import { corpus, describeSpec, valueCount } from './corpus.ts';
 import type { Json } from './diverse-fixture.ts';
@@ -273,8 +273,8 @@ async function inBatches<T, R>(items: readonly T[], work: (item: T) => Promise<R
 async function runOverHttp(options: Options): Promise<Tally> {
   const started = performance.now();
   const [{ defineContract }, { createServer }] = await Promise.all([
-    import('@darkstart/core/contract'),
-    import('@darkstart/core/server'),
+    import('@skeld/core/contract'),
+    import('@skeld/core/server'),
   ]);
   const chosen = [...corpus(options.seed, Math.min(httpSchemas, options.schemas))];
   const acknowledgement = t.object({ ok: t.boolean() });

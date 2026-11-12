@@ -11,7 +11,7 @@
     "declaration": true,
     "declarationMap": true,
     "composite": true,
-    "customConditions": ["darkstart-source"],
+    "customConditions": ["skeld-source"],
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true
   }

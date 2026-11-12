@@ -3,9 +3,9 @@
 
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
-import * as t from '@darkstart/core/schema';
-import { defineContract } from '@darkstart/core/contract';
-import { createServer } from '@darkstart/core/server';
+import * as t from '@skeld/core/schema';
+import { defineContract } from '@skeld/core/contract';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, parseRaw, type RawResponse } from './support.ts';
 
 const statement =

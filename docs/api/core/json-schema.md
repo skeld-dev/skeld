@@ -1,4 +1,4 @@
-# @darkstart/core/json-schema
+# @skeld/core/json-schema
 
 ## toJsonSchema
 

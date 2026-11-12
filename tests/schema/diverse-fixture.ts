@@ -1,8 +1,8 @@
 // Does:  Declares the fixture of diverse routes and schemas that the bundle and no-codegen proofs use.
 // Holds: It holds declarations only; it starts nothing and proves nothing on its own.
 
-import type { Schema } from '@darkstart/core/schema';
-import * as t from '@darkstart/core/schema';
+import type { Schema } from '@skeld/core/schema';
+import * as t from '@skeld/core/schema';
 
 export interface Field {
   readonly name: string;

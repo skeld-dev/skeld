@@ -1,10 +1,10 @@
 {
-  "name": "@darkstart/tests",
+  "name": "@skeld/tests",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@darkstart/core": "0.0.2"
+    "@skeld/core": "0.0.2"
   },
   "devDependencies": {
     "ajv": "8.20.0"

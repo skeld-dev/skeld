@@ -114,8 +114,8 @@ export function decideOverhead(
     summary.find((group) => group.build === build && group.route === route)?.serverCpuMicrosecondsPerRequest?.median ??
     null;
   const routes = routeIds.flatMap((route): RouteOverhead[] => {
-    const normal = medianOf('darkstart', route);
-    const diag = medianOf('darkstart-diag', route);
+    const normal = medianOf('skeld', route);
+    const diag = medianOf('skeld-diag', route);
     if (normal === null || diag === null) {
       return [];
     }
@@ -457,7 +457,7 @@ const overheadSection = (readout: Readout): readonly string[] => {
 
 function renderReadout(readout: Readout): string {
   return [
-    `# DarkStart diag readout ${readout.runId}`,
+    `# Skeld diag readout ${readout.runId}`,
     '',
     '## Run header',
     '',

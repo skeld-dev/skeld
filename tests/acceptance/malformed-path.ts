@@ -1,9 +1,9 @@
 // Does:  Proves that malformed percent-encoding in the request path is answered 400.
 // Holds: No hook and no handler runs for the refused request.
 
-import * as t from '@darkstart/core/schema';
-import { defineContract } from '@darkstart/core/contract';
-import { createServer } from '@darkstart/core/server';
+import * as t from '@skeld/core/schema';
+import { defineContract } from '@skeld/core/contract';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 
 const statement = 'a malformed percent-encoding in the request path answers 400 and runs no hook and no handler';

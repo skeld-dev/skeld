@@ -8,7 +8,7 @@ interface Entrant {
   readonly build: BuildId;
 }
 
-const diagBuilds: readonly BuildId[] = ['darkstart', 'darkstart-diag'];
+const diagBuilds: readonly BuildId[] = ['skeld', 'skeld-diag'];
 
 function roundOrder<T>(order: readonly T[], round: number): readonly T[] {
   const shift = (round - 1) % order.length;
@@ -17,8 +17,8 @@ function roundOrder<T>(order: readonly T[], round: number): readonly T[] {
 
 const entrants = (options: RunOptions): readonly Entrant[] =>
   options.diag
-    ? diagBuilds.map((build) => ({ server: 'darkstart', build }))
-    : options.servers.map((server) => ({ server, build: 'darkstart' }));
+    ? diagBuilds.map((build) => ({ server: 'skeld', build }))
+    : options.servers.map((server) => ({ server, build: 'skeld' }));
 
 export function scheduleVisits(options: RunOptions): readonly Visit[] {
   return Array.from({ length: options.rounds }, (_, index) => index + 1).flatMap((round) =>

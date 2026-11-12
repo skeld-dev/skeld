@@ -8,7 +8,7 @@ import { BenchError, errorCode } from '../bench-error.ts';
 const runFile = 'run.json';
 const snapshotFile = 'snapshot.jsonl';
 const journalFile = 'journal.jsonl';
-const recorderFormat = 'darkstart-diag/2';
+const recorderFormat = 'skeld-diag/2';
 const runLimitBytes = 1_048_576;
 const linesLimitBytes = 16_777_216;
 const countChunkBytes = 65_536;

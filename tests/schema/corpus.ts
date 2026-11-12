@@ -1,8 +1,8 @@
 // Does:  Generates the corpus of random schemas and values that the differential proofs run on.
 // Holds: Generation is seeded, so a run can be repeated exactly.
 
-import type { Schema, Sensitivity } from '@darkstart/core/schema';
-import * as t from '@darkstart/core/schema';
+import type { Schema, Sensitivity } from '@skeld/core/schema';
+import * as t from '@skeld/core/schema';
 import type { Json } from './diverse-fixture.ts';
 
 type Sens = Sensitivity | null;

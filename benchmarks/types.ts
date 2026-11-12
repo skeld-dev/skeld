@@ -1,9 +1,9 @@
 // Does:  Declares the benchmark's shapes: options, samples, summaries, the verdict and the run.
 // Holds: A verdict is keep, below or not-assessed, and a not-assessed one always carries its reason.
 
-export type ServerId = 'darkstart' | 'fastify' | 'node-http' | 'hono' | 'express' | 'light';
+export type ServerId = 'skeld' | 'fastify' | 'node-http' | 'hono' | 'express' | 'light';
 export type RouteId = 'hello' | 'echo';
-export type BuildId = 'darkstart' | 'darkstart-diag';
+export type BuildId = 'skeld' | 'skeld-diag';
 type RunStatus = 'complete' | 'invalid' | 'interrupted';
 export type Bound = 'server' | 'generator' | 'neither' | 'unknown';
 type VerdictKind = 'keep' | 'below' | 'not-assessed';
@@ -54,8 +54,8 @@ export interface BenchSoftware {
   readonly diagServerCommandLine: readonly string[] | null;
   readonly serverEnvironment: { readonly NODE_ENV: 'production' };
   readonly nodeOptions: string | null;
-  readonly darkstart: string;
-  readonly darkstartResolvedFrom: string;
+  readonly skeld: string;
+  readonly skeldResolvedFrom: string;
   readonly revision: string | null;
   readonly uncommittedChanges: boolean | null;
   readonly fastify: string;

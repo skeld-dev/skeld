@@ -1,5 +1,5 @@
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
 
 const Name = t.string({ minLength: 1, maxLength: 64 });
 const Greeting = t.object({ message: t.string({ maxLength: 72 }) });

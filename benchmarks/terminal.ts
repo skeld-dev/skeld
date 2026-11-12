@@ -81,7 +81,7 @@ export function startLines(
   unpinnedReason: string | null,
 ): readonly string[] {
   return [
-    `DarkStart benchmark: ${plural(options.servers.length, 'server', 'servers')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
+    `Skeld benchmark: ${plural(options.servers.length, 'server', 'servers')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
     `Cores: ${coresText(unpinnedReason)}`,
     `Results: ${displayPath(runDirectory)}/`,
   ];
@@ -94,8 +94,8 @@ export function diagStartLines(
   unpinnedReason: string | null,
 ): readonly string[] {
   const first = options.check
-    ? 'DarkStart diag check: the normal and diag builds start once, then the clean and planted scenario passes; nothing is measured'
-    : `DarkStart diag benchmark: the normal and diag builds, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min, then the clean and planted scenario passes`;
+    ? 'Skeld diag check: the normal and diag builds start once, then the clean and planted scenario passes; nothing is measured'
+    : `Skeld diag benchmark: the normal and diag builds, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min, then the clean and planted scenario passes`;
   return [
     first,
     `Sampling: steps on 1 in ${options.stepN} requests, CPU on 1 in ${options.cpuN}`,
@@ -107,7 +107,7 @@ export function diagStartLines(
 const progressLabelWidth = 14;
 
 export function entrantLabel(entrant: { readonly server: ServerId; readonly build: BuildId }): string {
-  return entrant.build === 'darkstart' ? entrant.server : entrant.build;
+  return entrant.build === 'skeld' ? entrant.server : entrant.build;
 }
 
 const progress = (round: number, rounds: number, label: string, text: string): string =>
@@ -194,7 +194,7 @@ const summaryColumns: readonly Column[] = [
 ];
 
 export function verdictLine(verdict: BenchVerdict): string {
-  const ratios = `Fastify's server CPU per request is ${formatPercent(verdict.echo)} of DarkStart's on echo (judged) and ${formatPercent(verdict.hello)} on hello (recorded); the line is ${keepLinePercent} % on echo.`;
+  const ratios = `Fastify's server CPU per request is ${formatPercent(verdict.echo)} of Skeld's on echo (judged) and ${formatPercent(verdict.hello)} on hello (recorded); the line is ${keepLinePercent} % on echo.`;
   if (verdict.kind === 'keep') {
     return `Verdict: keep. ${ratios}`;
   }

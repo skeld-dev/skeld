@@ -1,9 +1,9 @@
 // Does:  Proves that keys a handler returns beyond its response schema never reach the wire.
 // Holds: The response body holds exactly the declared keys.
 
-import * as t from '@darkstart/core/schema';
-import { defineContract } from '@darkstart/core/contract';
-import { createServer } from '@darkstart/core/server';
+import * as t from '@skeld/core/schema';
+import { defineContract } from '@skeld/core/contract';
+import { createServer } from '@skeld/core/server';
 import { check, conclude } from './support.ts';
 
 const statement =

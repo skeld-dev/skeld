@@ -2,9 +2,9 @@
 // Holds: Checked on 400, 413 and 500 responses the engine writes, over raw sockets.
 
 import { fileURLToPath } from 'node:url';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, parseRaw, rawExchange, type RawResponse } from './support.ts';
 import { startServerChild } from './support-typesystem.ts';
 

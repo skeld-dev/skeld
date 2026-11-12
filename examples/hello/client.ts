@@ -1,4 +1,4 @@
-import { createClient } from '@darkstart/core/client';
+import { createClient } from '@skeld/core/client';
 import { helloContract } from './contract.ts';
 
 const client = createClient(helloContract, { baseUrl: 'http://127.0.0.1:3000' });

@@ -6,9 +6,9 @@ import { mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from './support.ts';
 
 const statement =
@@ -161,7 +161,7 @@ function compile(folder: string, source: string): { status: number | null; outpu
         types: ['node'],
         strict: true,
         noEmit: true,
-        customConditions: ['darkstart-source'],
+        customConditions: ['skeld-source'],
         allowImportingTsExtensions: true,
       },
       files: ['probe.ts'],
@@ -171,10 +171,10 @@ function compile(folder: string, source: string): { status: number | null; outpu
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
-const hookHeader = "import { createServer } from '@darkstart/core/server';\nconst server = createServer();\n";
-const replyHeader = `import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import { createServer } from '@darkstart/core/server';
+const hookHeader = "import { createServer } from '@skeld/core/server';\nconst server = createServer();\n";
+const replyHeader = `import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
 const contract = defineContract({ item: { method: 'GET', path: '/item', responses: { 200: t.object({ ok: t.boolean() }) } } });
 const server = createServer();
 `;
@@ -289,7 +289,7 @@ try {
   await server.close();
 }
 
-const scratch = mkdtempSync(join(tmpdir(), 'darkstart-reserved-'));
+const scratch = mkdtempSync(join(tmpdir(), 'skeld-reserved-'));
 try {
   symlinkSync(repoModules, join(scratch, 'node_modules'));
   for (const probe of probes) {

@@ -2,12 +2,12 @@
 // Holds: A handler that must not run is watched, so a request accepted by mistake fails the script.
 
 import { randomBytes } from 'node:crypto';
-import { BootError } from '@darkstart/core/boot-error';
-import { defineContract } from '@darkstart/core/contract';
-import { redact } from '@darkstart/core/redact';
-import * as t from '@darkstart/core/schema';
-import { Secret } from '@darkstart/core/secret';
-import { createServer } from '@darkstart/core/server';
+import { BootError } from '@skeld/core/boot-error';
+import { defineContract } from '@skeld/core/contract';
+import { redact } from '@skeld/core/redact';
+import * as t from '@skeld/core/schema';
+import { Secret } from '@skeld/core/secret';
+import { createServer } from '@skeld/core/server';
 
 const exposedReason = 'the derived credentials are meant to leave the service';
 const markerKey = `key${randomBytes(10).toString('hex')}`;

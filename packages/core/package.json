@@ -1,10 +1,10 @@
 {
-  "name": "@darkstart/core",
+  "name": "@skeld/core",
   "version": "0.0.2",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ul0gic/darkstart.git",
+    "url": "git+https://github.com/ul0gic/skeld.git",
     "directory": "packages/core"
   },
   "type": "module",
@@ -21,62 +21,62 @@
   ],
   "imports": {
     "#diag": {
-      "darkstart-diag": {
-        "darkstart-source": "./src/diag/recorder/recorder.ts",
+      "skeld-diag": {
+        "skeld-source": "./src/diag/recorder/recorder.ts",
         "default": "./dist/diag/recorder/recorder.js"
       },
-      "darkstart-source": "./src/diag/empty.ts",
+      "skeld-source": "./src/diag/empty.ts",
       "default": "./dist/diag/empty.js"
     }
   },
   "exports": {
     "./contract": {
-      "darkstart-source": "./src/contract/contract.ts",
+      "skeld-source": "./src/contract/contract.ts",
       "types": "./dist/contract/contract.d.ts",
       "default": "./dist/contract/contract.js"
     },
     "./http-error": {
-      "darkstart-source": "./src/contract/http-error.ts",
+      "skeld-source": "./src/contract/http-error.ts",
       "types": "./dist/contract/http-error.d.ts",
       "default": "./dist/contract/http-error.js"
     },
     "./server": {
-      "darkstart-source": "./src/server/server.ts",
+      "skeld-source": "./src/server/server.ts",
       "types": "./dist/server/server.d.ts",
       "default": "./dist/server/server.js"
     },
     "./boot-error": {
-      "darkstart-source": "./src/server/boot-error.ts",
+      "skeld-source": "./src/server/boot-error.ts",
       "types": "./dist/server/boot-error.d.ts",
       "default": "./dist/server/boot-error.js"
     },
     "./client": {
-      "darkstart-source": "./src/client/client.ts",
+      "skeld-source": "./src/client/client.ts",
       "types": "./dist/client/client.d.ts",
       "default": "./dist/client/client.js"
     },
     "./schema": {
-      "darkstart-source": "./src/schema/schema.ts",
+      "skeld-source": "./src/schema/schema.ts",
       "types": "./dist/schema/schema.d.ts",
       "default": "./dist/schema/schema.js"
     },
     "./secret": {
-      "darkstart-source": "./src/schema/secret.ts",
+      "skeld-source": "./src/schema/secret.ts",
       "types": "./dist/schema/secret.d.ts",
       "default": "./dist/schema/secret.js"
     },
     "./redact": {
-      "darkstart-source": "./src/schema/redact.ts",
+      "skeld-source": "./src/schema/redact.ts",
       "types": "./dist/schema/redact.d.ts",
       "default": "./dist/schema/redact.js"
     },
     "./json-schema": {
-      "darkstart-source": "./src/schema/json-schema.ts",
+      "skeld-source": "./src/schema/json-schema.ts",
       "types": "./dist/schema/json-schema.d.ts",
       "default": "./dist/schema/json-schema.js"
     },
     "./generated-check": {
-      "darkstart-source": "./src/compile/generate.ts"
+      "skeld-source": "./src/compile/generate.ts"
     },
     "./package.json": "./package.json"
   },

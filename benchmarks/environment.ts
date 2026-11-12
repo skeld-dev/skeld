@@ -1,5 +1,5 @@
 // Does:  Captures the machine and installed software, and builds the environment each child runs in.
-// Holds: A child never inherits a DARKSTART_DIAG_ variable, and a --conditions in NODE_OPTIONS refuses the run.
+// Holds: A child never inherits a SKELD_DIAG_ variable, and a --conditions in NODE_OPTIONS refuses the run.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -13,8 +13,8 @@ import { displayPath } from './terminal.ts';
 import type { BenchMachine, BenchSoftware } from './types.ts';
 
 export interface Packages {
-  readonly darkstart: string;
-  readonly darkstartResolvedFrom: string;
+  readonly skeld: string;
+  readonly skeldResolvedFrom: string;
   readonly fastify: string;
   readonly autocannon: string;
   readonly hono: string;
@@ -74,15 +74,15 @@ const versionOf = (name: string, entryFile: string): string => {
 };
 
 export function resolvePackages(): Packages {
-  const serverFile = resolveFile('@darkstart/core', () => import.meta.resolve('@darkstart/core/server'));
-  const manifestFile = resolveFile('@darkstart/core', () => import.meta.resolve('@darkstart/core/package.json'));
+  const serverFile = resolveFile('@skeld/core', () => import.meta.resolve('@skeld/core/server'));
+  const manifestFile = resolveFile('@skeld/core', () => import.meta.resolve('@skeld/core/package.json'));
   const coreRoot = dirname(manifestFile);
   const distFolder = join(coreRoot, 'dist');
   if (!serverFile.startsWith(`${distFolder}${sep}`)) {
     const top = relative(coreRoot, serverFile).split(sep)[0] ?? '';
     throw new BenchError(
       3,
-      `@darkstart/core/server resolves to ${displayPath(join(coreRoot, top))}/, not to the build. The benchmark measures the package as it ships; remove the --conditions flag from NODE_OPTIONS.`,
+      `@skeld/core/server resolves to ${displayPath(join(coreRoot, top))}/, not to the build. The benchmark measures the package as it ships; remove the --conditions flag from NODE_OPTIONS.`,
     );
   }
   if (!existsSync(serverFile)) {
@@ -98,8 +98,8 @@ export function resolvePackages(): Packages {
   const expressFile = resolveFile('express', () => import.meta.resolve('express'));
   const lightFile = resolveFile('@lightstart/server', () => import.meta.resolve('@lightstart/server'));
   return {
-    darkstart: versionOf('@darkstart/core', manifestFile),
-    darkstartResolvedFrom: displayPath(dirname(serverFile)),
+    skeld: versionOf('@skeld/core', manifestFile),
+    skeldResolvedFrom: displayPath(dirname(serverFile)),
     fastify: versionOf('fastify', fastifyFile),
     autocannon: versionOf('autocannon', autocannonFile),
     hono: versionOf('hono', honoFile),
@@ -138,7 +138,7 @@ export function refuseConditions(): void {
   }
 }
 
-const diagVariablePrefix = 'DARKSTART_DIAG_';
+const diagVariablePrefix = 'SKELD_DIAG_';
 
 export function inheritedDiagVariables(): readonly string[] {
   return Object.keys(process.env).filter((name) => name.startsWith(diagVariablePrefix));
@@ -211,8 +211,8 @@ export function captureSoftware(
     diagServerCommandLine,
     serverEnvironment: { NODE_ENV: 'production' },
     nodeOptions: nodeOptions(),
-    darkstart: packages.darkstart,
-    darkstartResolvedFrom: packages.darkstartResolvedFrom,
+    skeld: packages.skeld,
+    skeldResolvedFrom: packages.skeldResolvedFrom,
     revision,
     uncommittedChanges: porcelain === null ? null : porcelain.trim() !== '',
     fastify: packages.fastify,

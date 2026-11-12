@@ -25,7 +25,7 @@ import type { ErrorHandler, ResolvedServerOptions } from './types.ts';
 const NO_HOOKS: HookChains = { onRequest: [], preHandler: [], onSend: [], onResponse: [], onError: [] };
 
 const CODEGEN_UNAVAILABLE_MESSAGE =
-  'Code generation from strings is disabled in this process (node --disallow-code-generation-from-strings or an equivalent policy). @darkstart/core/server compiles its validators and serializers at listen and cannot start; the schema, contract and client subpaths run without it.';
+  'Code generation from strings is disabled in this process (node --disallow-code-generation-from-strings or an equivalent policy). @skeld/core/server compiles its validators and serializers at listen and cannot start; the schema, contract and client subpaths run without it.';
 
 function describe(info: RouteInfo): string {
   return `${info.name} (${info.method} ${info.path})`;

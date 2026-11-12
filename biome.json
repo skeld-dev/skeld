@@ -187,8 +187,8 @@
           "options": {
             "patterns": [
               {
-                "group": ["@darkstart/*/*/**", "@darkstart/*/src/**", "../**/src/**"],
-                "message": "import @darkstart packages through their exports subpaths only"
+                "group": ["@skeld/*/*/**", "@skeld/*/src/**", "../**/src/**"],
+                "message": "import @skeld packages through their exports subpaths only"
               }
             ]
           }

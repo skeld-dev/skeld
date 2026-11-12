@@ -1,10 +1,10 @@
 // Does:  Serves the scenario routes the security pass drives, with an option to plant known leaks.
 // Holds: Leaks exist only when planting is asked for; the clean pass runs the same routes without them.
 
-import { defineContract } from '@darkstart/core/contract';
-import * as t from '@darkstart/core/schema';
-import type { ResponseContext, Scope } from '@darkstart/core/server';
-import { createServer } from '@darkstart/core/server';
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
+import type { ResponseContext, Scope } from '@skeld/core/server';
+import { createServer } from '@skeld/core/server';
 import { announceReady, failToStart } from '../servers/server-command.ts';
 import { host, standalonePort } from '../values.ts';
 
@@ -47,18 +47,18 @@ function parseArguments(argv: readonly string[]): { readonly port: number; reado
 
 function readCanary(value: string | undefined): string {
   if (value === undefined) {
-    return fail('DARKSTART_DIAG_CANARY is not set; the scenario service plants it and checks it never leaves.');
+    return fail('SKELD_DIAG_CANARY is not set; the scenario service plants it and checks it never leaves.');
   }
   if (!canaryPattern.test(value)) {
     return fail(
-      `DARKSTART_DIAG_CANARY must be 16 to 128 characters of A-Z, a-z, 0-9, _ and -; got ${value.length} characters.`,
+      `SKELD_DIAG_CANARY must be 16 to 128 characters of A-Z, a-z, 0-9, _ and -; got ${value.length} characters.`,
     );
   }
   return value;
 }
 
 const { port, plant } = parseArguments(process.argv.slice(2));
-const token = readCanary(process.env.DARKSTART_DIAG_CANARY);
+const token = readCanary(process.env.SKELD_DIAG_CANARY);
 
 const Hello = t.object({ hello: t.string({ maxLength: 64 }) });
 const ScenarioBody = t.object({
