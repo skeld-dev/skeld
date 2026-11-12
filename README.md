@@ -12,13 +12,13 @@ A server writes structured JSON lines to stdout. The options, the record format,
 
 An npm workspaces monorepo. Source runs unbuilt with `node --conditions=skeld-source`, which resolves `@skeld/core` to `packages/core/src`.
 
-| Workspace       | What                                                               |
-| --------------- | ------------------------------------------------------------------ |
-| `packages/core` | `@skeld/core`, the published package                               |
-| `examples/`     | runnable [hello, logging and service examples](examples/README.md) |
-| `benchmarks`    | the benchmark runner and its servers                               |
-| `tests`         | end-to-end acceptance scripts                                      |
-| `tools`         | repository tools, such as the README example check                 |
+| Workspace       | What                                                                 |
+| --------------- | -------------------------------------------------------------------- |
+| `packages/core` | `@skeld/core`, the published package                                 |
+| `examples/`     | runnable [hello, logging and service examples](examples/README.md)   |
+| `benchmarks`    | [performance workloads and type-cost fixtures](benchmarks/README.md) |
+| `tests`         | [correctness checks organized by behavior](tests/README.md)          |
+| `tools`         | repository tools, such as the README example check                   |
 
 ## Development
 
@@ -33,6 +33,7 @@ Run every command from the repository root.
 | Command                                                                                                  | Does                                                                                                     |
 | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `npx tsc -b --force`                                                                                     | type-checks and builds every project                                                                     |
+| `npm test`                                                                                               | builds and runs all ordinary correctness checks; `npm test -- security` selects a category               |
 | `npx biome check .`                                                                                      | formats and lints                                                                                        |
 | `npx knip`                                                                                               | finds unused files, exports and dependencies                                                             |
 | `semgrep scan --config p/typescript --config p/nodejs --config .semgrep --metrics=off --error --quiet .` | static analysis                                                                                          |

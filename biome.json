@@ -230,6 +230,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["tests/lifecycle/audit-retention.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
     }
   ]
 }

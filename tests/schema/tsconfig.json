@@ -3,8 +3,15 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "../.tsout/schema",
-    "tsBuildInfoFile": "./.tsbuildinfo"
+    "tsBuildInfoFile": "./.tsbuildinfo",
+    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": false
   },
   "include": ["*.ts"],
-  "references": [{ "path": "../../packages/core" }]
+  "references": [
+    {
+      "path": "../../packages/core"
+    }
+  ]
 }

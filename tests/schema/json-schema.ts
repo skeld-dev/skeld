@@ -1,5 +1,5 @@
 // Does:  Proves that the JSON Schema export agrees with the type system, with Ajv as the oracle.
-// Holds: Schemas whose export is knowingly weaker are counted and printed, never silently skipped.
+// Holds: Every compared disagreement fails unless declared-key counting alone explains it.
 
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { Schema } from '@skeld/core/schema';
@@ -229,7 +229,71 @@ function parseOptions(argv: readonly string[]): {
 function newAjv(): Ajv2020 {
   const ajv = new Ajv2020({ allErrors: false, logger: false, ownProperties: true });
   ajv.addVocabulary(extensionKeywords);
+  ajv.addKeyword({
+    keyword: 'x-declared-minimum',
+    schemaType: 'object',
+    validate: (rule: { keys: string[]; minimum: number }, value: unknown) =>
+      !isObjectJson(value) || rule.keys.filter((key) => Object.hasOwn(value, key)).length >= rule.minimum,
+  });
   return ajv;
+}
+
+// Why: JSON Schema counts all own keys; Skeld's open-object minimum counts only declared keys.
+function countDeclared(document: Record<string, unknown>): Record<string, unknown> {
+  const adjusted = Object.fromEntries(
+    Object.entries(document).map(([key, value]) => [
+      key,
+      Array.isArray(value)
+        ? value.map((item) => (isObjectJson(item) ? countDeclared(item) : item))
+        : isObjectJson(value)
+          ? countDeclared(value)
+          : value,
+    ]),
+  );
+  if (
+    document.type === 'object' &&
+    typeof document['x-open'] === 'string' &&
+    typeof document.minProperties === 'number'
+  ) {
+    adjusted['x-declared-minimum'] = {
+      keys: isObjectJson(document.properties) ? Object.keys(document.properties) : [],
+      minimum: document.minProperties,
+    };
+  }
+  return adjusted;
+}
+
+function proveOpenMinimum(): string[] {
+  const schema = t.partial(
+    t.object({ name: t.string({ maxLength: 4 }), age: t.integer({ minimum: 0 }) }, { open: reason }),
+    {
+      minProperties: 1,
+    },
+  );
+  const cases = [
+    { value: { name: 'Ada' }, accepted: true, exported: true },
+    { value: { age: 1, extra: true }, accepted: true, exported: true },
+    { value: { extra: true }, accepted: false, exported: true },
+    { value: {}, accepted: false, exported: false },
+    { value: { name: 'too long', extra: true }, accepted: false, exported: false },
+    { value: { age: -1, extra: true }, accepted: false, exported: false },
+    { value: { name: 123 }, accepted: false, exported: false },
+  ];
+  const ajv = newAjv();
+  const document = toJsonSchema(schema);
+  const exported = ajv.compile(document);
+  const adjusted = ajv.compile(countDeclared(document));
+  const problems: string[] = [];
+  for (const entry of cases) {
+    if (
+      exported(entry.value) !== entry.exported ||
+      adjusted(entry.value) !== entry.accepted ||
+      'value' in schema['~standard'].validate(entry.value) !== entry.accepted
+    ) {
+      problems.push(`open-object minimum or another constraint disagrees for ${JSON.stringify(entry.value)}`);
+    }
+  }
+  return problems;
 }
 
 function proveKinds(): { readonly problems: string[]; readonly checked: number } {
@@ -301,7 +365,9 @@ function proveAgreement(schemas: number, seed: number, all: boolean): Agreement 
     if (open) {
       openSchemas++;
     }
-    const validate = ajv.compile(toJsonSchema(current.schema));
+    const document = toJsonSchema(current.schema);
+    const validate = ajv.compile(document);
+    const adjusted = open ? ajv.compile(countDeclared(document)) : validate;
     current.values.forEach((held, position) => {
       if (hasAstral(held.value)) {
         skippedAstral++;
@@ -313,10 +379,11 @@ function proveAgreement(schemas: number, seed: number, all: boolean): Agreement 
       if (open) {
         openPairs++;
       }
-      if (closure === exported) {
+      const declared = adjusted(held.value);
+      if (closure === exported && closure === declared) {
         return;
       }
-      if (open && !closure && exported) {
+      if (open && !closure && exported && !declared) {
         openDiffer++;
         return;
       }
@@ -346,6 +413,7 @@ function proveAgreement(schemas: number, seed: number, all: boolean): Agreement 
 function main(argv: readonly string[]): void {
   const { schemas, seed, all } = parseOptions(argv);
   const kinds = proveKinds();
+  kinds.problems.push(...proveOpenMinimum());
   process.stdout.write(
     `${kinds.problems.length === 0 ? 'pass' : 'fail'} export of ${kinds.checked} schemas covering every kind and option validates against the 2020-12 meta-schema and carries its keywords\n`,
   );

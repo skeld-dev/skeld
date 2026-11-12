@@ -3,8 +3,23 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": ".tsout",
-    "tsBuildInfoFile": "./.tsbuildinfo"
+    "tsBuildInfoFile": "./.tsbuildinfo",
+    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": false
   },
-  "include": ["acceptance/**/*.ts"],
-  "references": [{ "path": "../packages/core" }]
+  "include": [
+    "*.ts",
+    "security/**/*.ts",
+    "browser/**/*.ts",
+    "lifecycle/**/*.ts",
+    "contracts/**/*.ts",
+    "logging/**/*.ts",
+    "support/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../packages/core"
+    }
+  ]
 }

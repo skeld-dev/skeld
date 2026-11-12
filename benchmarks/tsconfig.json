@@ -4,8 +4,19 @@
     "rootDir": ".",
     "outDir": ".tsout",
     "tsBuildInfoFile": "./.tsbuildinfo",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": false
   },
   "include": ["**/*.ts"],
-  "references": [{ "path": "../packages/core" }]
+  "references": [
+    {
+      "path": "../packages/core"
+    },
+    {
+      "path": "../tests/schema"
+    }
+  ],
+  "exclude": ["type-cost"]
 }
