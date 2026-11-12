@@ -42,7 +42,7 @@ import { limitState, observe } from './limits.ts';
 import { startProcessWatch, stopProcessWatch } from './process.ts';
 import { runHeader } from './run.ts';
 import { bootFigures, writeSnapshot } from './snapshot.ts';
-import { beginRequest, currentRouteName, currentSlot, leaveSlot, resumeSlot, routeRequest, state } from './slots.ts';
+import { beginRequest, currentRouteId, currentSlot, leaveSlot, resumeSlot, routeRequest, state } from './slots.ts';
 import { endSpan, nextSpan, startSpan, trackSpan } from './spans.ts';
 
 export type { Slot, Token } from '../empty.ts';
@@ -112,11 +112,11 @@ export const count: Count = (name, countKey) => {
 };
 
 export const event: Event = (name, subject) => {
-  raise(name, subject ?? null, currentRouteName(), null);
+  raise(name, subject ?? null, currentRouteId(), null);
 };
 
 export const limit: Limit = (name, used, max) => {
-  observe(limitState(name), used, max, currentRouteName());
+  observe(limitState(name), used, max, currentRouteId());
 };
 
 export const wrote: Wrote = finishWrote;

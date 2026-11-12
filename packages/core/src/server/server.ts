@@ -1,11 +1,12 @@
 // Does:  Defines createServer: the root scope, listen and close.
 // Holds: listen runs at most once, and a server that was closed never starts listening.
 
-import { end, open, start } from '#diag';
+import { closed as closeDiagnostics, end, open, start } from '#diag';
 import { handleRequest } from '../lifecycle/handle-request.ts';
 import type { EngineRuntime } from '../lifecycle/types.ts';
 import { BootError } from './boot-error.ts';
 import { bootPlugins } from './boot.ts';
+import { dispose } from './disposal.ts';
 import { createHttpServer } from './listen.ts';
 import { resolveListenOptions, resolveServerOptions, resolveTrustProxy } from './options.ts';
 import { buildRuntime } from './runtime.ts';
@@ -59,6 +60,7 @@ export function createServer(options: ServerOptions = {}): Server {
   let closed: Promise<void> | null = null;
   let handle: HttpServerHandle | null = null;
   let runtime: EngineRuntime | null = null;
+  let startup: Promise<ListeningAddress> | null = null;
 
   async function listen(listenOptions: ListenOptions): Promise<ListeningAddress> {
     if (closing) {
@@ -69,8 +71,26 @@ export function createServer(options: ServerOptions = {}): Server {
     }
     const target = resolveListenOptions(listenOptions);
     listenCalled = true;
-    // Why: The root scope is sealed at listen; its plugins still register, each on its own scope.
     root.sealed = true;
+    startup = startListening(target.host, target.port);
+    try {
+      return await startup;
+    } catch (cause) {
+      try {
+        await close();
+      } catch (cleanup) {
+        if (cause instanceof BootError) {
+          throw new BootError(cause.code, cause.message, cause.route, cause.plugin, {
+            cause: new AggregateError([cause, cleanup], 'Startup and rollback failed'),
+          });
+        }
+        throw new AggregateError([cause, cleanup], 'Startup and rollback failed', { cause });
+      }
+      throw cause;
+    }
+  }
+
+  async function startListening(host: string, port: number): Promise<ListeningAddress> {
     open(resolved);
     const plugins = start('boot.plugins');
     try {
@@ -78,24 +98,43 @@ export function createServer(options: ServerOptions = {}): Server {
     } finally {
       end(plugins);
     }
+    if (closing) {
+      throw new BootError('SERVER_CLOSED', 'Server closed during startup', null, null);
+    }
     const built = buildRuntime(root, resolved, trustProxy, () => closing);
     runtime = built;
-    // Why: close() may have been called while the plugins were booting.
-    if (closing) {
-      throw new BootError('SERVER_CLOSED', 'listen() was called after close()', null, null);
-    }
     handle = createHttpServer(resolved, (req, res) => handleRequest(built, req, res));
-    return handle.listen(target.host, target.port);
+    return handle.listen(host, port, root.disposal.abort.signal);
   }
 
-  function stopDeadlines(): void {
-    runtime?.deadlines.stop();
+  async function shutdown(): Promise<void> {
+    // Why: Startup failures belong to listen; shutdown must still release everything acquired before the failure.
+    await startup?.then(
+      () => undefined,
+      () => undefined,
+    );
+    const failures: unknown[] = [];
+    try {
+      await handle?.close(resolved.closeTimeoutMs);
+    } catch (error) {
+      failures.push(error);
+    } finally {
+      runtime?.deadlines.stop();
+    }
+    failures.push(...(await dispose(root.disposal, resolved.pluginCloseTimeoutMs)));
+    closeDiagnostics();
+    if (failures.length !== 0) {
+      throw new AggregateError(failures, 'Server shutdown failed');
+    }
   }
 
   function close(): Promise<void> {
     if (closed === null) {
       closing = true;
-      closed = handle === null ? Promise.resolve() : handle.close(resolved.closeTimeoutMs).then(stopDeadlines);
+      root.sealed = true;
+      // Why: Assign the shared promise before abort dispatch can reenter close through an author's listener.
+      closed = Promise.resolve().then(shutdown);
+      root.disposal.abort.abort();
     }
     return closed;
   }

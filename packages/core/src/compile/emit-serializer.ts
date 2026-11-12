@@ -175,7 +175,9 @@ function emitObject(node: ObjectSchema, value: string, place: Place, lead: Lead,
   const closed = closeObject(opening, lead, place.sink);
   const declared = present ?? String(required);
   const fewer = below(declared, node.minProperties);
-  const counts = exact ? exactKeys(value, declared, fewer, fail, names) : test([fewer], fail);
+  const counts = exact
+    ? exactKeys(value, Object.keys(node.properties), declared, fewer, fail, names)
+    : test([fewer], fail);
   return { code: code + closed.code + counts, owed: closed.owed };
 }
 

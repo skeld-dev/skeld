@@ -4,7 +4,7 @@
 import { createServer, type RequestListener } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { getSystemErrorMessage } from 'node:util';
-import { closed, end, event, listening, start, track } from '#diag';
+import { end, event, listening, start, track } from '#diag';
 import { BootError } from './boot-error.ts';
 import type { HttpServerHandle, ListeningAddress, ResolvedServerOptions } from './types.ts';
 
@@ -57,27 +57,56 @@ export function createHttpServer(options: ResolvedServerOptions, onRequest: Requ
     onRequest,
   );
   return {
-    listen(host, port) {
+    listen(host, port, signal) {
       const { promise, resolve, reject } = Promise.withResolvers<ListeningAddress>();
       const span = start('boot.listen');
-      const onError = (error: NodeJS.ErrnoException): void => {
-        end(span);
-        reject(listenFailure(host, port, error));
-      };
-      server.once('error', onError);
-      server.listen(port, host, () => {
+      let settled = false;
+      const finish = (): boolean => {
+        if (settled) {
+          return false;
+        }
+        settled = true;
         end(span);
         server.off('error', onError);
-        const address = server.address();
-        if (address === null || typeof address === 'string') {
-          reject(
-            new BootError('LISTEN_FAILED', `Cannot listen on ${hostPort(host, port)}: no TCP address`, null, null),
-          );
-          return;
+        signal.removeEventListener('abort', onAbort);
+        return true;
+      };
+      const onError = (error: NodeJS.ErrnoException): void => {
+        if (finish()) {
+          reject(listenFailure(host, port, error));
         }
-        listening(server);
-        resolve(toListeningAddress(address));
-      });
+      };
+      const onAbort = (): void => {
+        if (finish()) {
+          reject(new BootError('SERVER_CLOSED', 'Server closed while binding', null, null));
+        }
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) {
+        onAbort();
+        return promise;
+      }
+      server.once('error', onError);
+      try {
+        server.listen({ host, port, signal }, () => {
+          if (!finish()) {
+            return;
+          }
+          const address = server.address();
+          if (address === null || typeof address === 'string') {
+            reject(
+              new BootError('LISTEN_FAILED', `Cannot listen on ${hostPort(host, port)}: no TCP address`, null, null),
+            );
+            return;
+          }
+          listening(server);
+          resolve(toListeningAddress(address));
+        });
+      } catch (cause) {
+        if (finish()) {
+          reject(new BootError('LISTEN_FAILED', `Cannot listen on ${hostPort(host, port)}`, null, null, { cause }));
+        }
+      }
       return promise;
     },
     close(timeoutMs) {
@@ -91,7 +120,6 @@ export function createHttpServer(options: ResolvedServerOptions, onRequest: Requ
       server.close(() => {
         clearTimeout(timer);
         end(span);
-        closed();
         resolve();
       });
       // Why: server.close stops accepting but leaves idle keep-alive sockets open, so they are closed at once.

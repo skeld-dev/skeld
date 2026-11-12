@@ -1,6 +1,7 @@
 // Does:  Runs one request through its stages in order: pre-route, onRequest, body, validation, preHandler, handler.
 // Holds: A body declared over its route's limit condemns the connection before any onRequest hook runs.
 
+import { authorResult } from './author-result.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { begin, contain, destroyed, end, event, leave, next, resume, routed, start } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
@@ -54,30 +55,34 @@ function runHandler(exchange: Exchange, parts: ValidatedParts): void {
   const argument = new HandlerRequest(exchange, parts);
   end(arg);
   contain('handler', argument);
-  let reply: RuntimeReply | Promise<RuntimeReply>;
-  try {
-    reply = route.handler(argument);
-  } catch (error) {
-    fail(exchange, error, true);
-    return;
-  }
-  if (reply instanceof Promise) {
-    exchange.runtime.deadlines.wait(exchange);
-    reply.then(
-      (value: RuntimeReply) => {
+  authorResult<RuntimeReply>(
+    () => route.handler(argument),
+    (value, asynchronous) => {
+      if (asynchronous) {
         resume(exchange.diag);
+      }
+      try {
         respond(exchange, value);
-        leave(exchange.diag);
-      },
-      (error: unknown) => {
+      } finally {
+        if (asynchronous) {
+          leave(exchange.diag);
+        }
+      }
+    },
+    (error, asynchronous) => {
+      if (asynchronous) {
         resume(exchange.diag);
+      }
+      try {
         fail(exchange, error, true);
-        leave(exchange.diag);
-      },
-    );
-  } else {
-    respond(exchange, reply);
-  }
+      } finally {
+        if (asynchronous) {
+          leave(exchange.diag);
+        }
+      }
+    },
+    () => exchange.runtime.deadlines.wait(exchange),
+  );
 }
 
 function validateStage(exchange: Exchange, body: unknown): void {

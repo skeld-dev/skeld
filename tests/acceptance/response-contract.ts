@@ -152,9 +152,8 @@ async function get(child: Child, path: string): Promise<Seen> {
   }
 }
 
-function linesFor(child: Child, route: string, path: string): string[] {
-  return child
-    .stderr()
+function linesFor(stderr: string, route: string, path: string): string[] {
+  return stderr
     .split('\n')
     .filter((line) => line.startsWith(`darkstart: GET ${path} `) && line.includes(` ${route}: `));
 }
@@ -172,9 +171,12 @@ const refusals: readonly (readonly [string, readonly string[]])[] = [
 ];
 
 async function failCase(child: Child, mode: string, problems: string[], log: string[]): Promise<void> {
+  const offset = child.stderr().length;
   const seen = await get(child, `/fail/${mode}`);
   await delay(60);
-  const lines = linesFor(child, 'fail', `/fail/${mode}`).filter((line) => /error body does not match/.test(line));
+  const lines = linesFor(child.stderr().slice(offset), 'fail', '/fail/:mode').filter((line) =>
+    /error body does not match/.test(line),
+  );
   log.push(`AC-45 ${mode}: ${seen.status} ${seen.body} | ${lines.join(' // ')}`);
   check(problems, seen.status === 500 && seen.body === fixed500, `${mode} answered ${seen.status} ${seen.body}`);
   check(problems, lines.length === 1, `${mode} wrote ${lines.length} stderr lines saying the error body did not match`);
@@ -202,8 +204,14 @@ async function prove(): Promise<void> {
       '/either/no-member',
     ];
     const answers = new Map<string, Seen>();
-    await Promise.all(paths.map(async (path) => answers.set(path, await get(child, path))));
-    await delay(100);
+    const stderrByPath = new Map<string, string>();
+    for (const path of paths) {
+      const offset = child.stderr().length;
+      // biome-ignore lint/performance/noAwaitInLoops: one request at a time attributes template-only stderr to its case
+      answers.set(path, await get(child, path));
+      await delay(60);
+      stderrByPath.set(path, child.stderr().slice(offset));
+    }
     const answer = (path: string): Seen => answers.get(path) ?? { status: 0, body: 'no answer' };
 
     const good = answer('/user/good');
@@ -216,7 +224,7 @@ async function prove(): Promise<void> {
 
     for (const [name, locations] of refusals) {
       const seen = answer(`/user/${name}`);
-      const lines = linesFor(child, 'user', `/user/${name}`);
+      const lines = linesFor(stderrByPath.get(`/user/${name}`) ?? '', 'user', '/user/:case');
       const line = lines[0] ?? '';
       log.push(`${name}: ${seen.status} ${seen.body} | ${lines.join(' // ')}`);
       check(problems, seen.status === 500 && seen.body === fixed500, `${name} answered ${seen.status} ${seen.body}`);
@@ -268,7 +276,7 @@ async function prove(): Promise<void> {
     for (const name of ['extra-key', 'no-member']) {
       const seen = answer(`/either/${name}`);
       log.push(
-        `union ${name}: ${seen.status} ${seen.body} | ${linesFor(child, 'either', `/either/${name}`).join(' // ')}`,
+        `union ${name}: ${seen.status} ${seen.body} | ${linesFor(stderrByPath.get(`/either/${name}`) ?? '', 'either', '/either/:case').join(' // ')}`,
       );
       check(
         problems,

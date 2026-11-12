@@ -1,6 +1,7 @@
 // Does:  Turns anything thrown or refused into the one error shape via onError hooks and handlers; answers timeouts.
 // Holds: A non-HttpError is answered with the fixed 500 body; after a timeout no further hook or handler is called.
 
+import { authorResult } from './author-result.ts';
 import { contain, count, destroyed, end, event, leave, next, resume, start, type Token } from '#diag';
 import { HttpError } from '../contract/http-error.ts';
 import type { ErrorBody } from '../contract/types.ts';
@@ -56,7 +57,7 @@ function closeChild(exchange: Exchange, token: Token): void {
 }
 
 function report(exchange: Exchange, status: number, message: string): void {
-  writeStderrLine(exchange.method, exchange.path, status, exchange.route.info.name, message);
+  writeStderrLine(exchange.method, exchange.route.info.path, status, exchange.route.info.name, message);
 }
 
 interface Pending {
@@ -106,37 +107,36 @@ function classify(exchange: Exchange, context: ErrorContext, index: number, curr
     classify(exchange, context, index + 1, error, pending);
   };
   const span = holdChild(exchange, start('err.handler', index));
-  let settled: HttpError | null;
-  let later: Promise<HttpError> | null;
-  try {
-    const result = handler(current, context);
-    later = result instanceof Promise ? result : null;
-    settled = result instanceof Promise ? null : result;
-  } catch (error) {
-    closeChild(exchange, span);
-    rethrown(error);
-    return;
-  }
-  if (later !== null) {
-    exchange.runtime.deadlines.wait(exchange);
-    later.then(
-      (value: HttpError) => {
+  authorResult<HttpError>(
+    () => handler(current, context),
+    (value, asynchronous) => {
+      if (asynchronous) {
         resume(exchange.diag);
+      }
+      try {
         closeChild(exchange, span);
         answer(exchange, value, pending);
-        leave(exchange.diag);
-      },
-      (error: unknown) => {
+      } finally {
+        if (asynchronous) {
+          leave(exchange.diag);
+        }
+      }
+    },
+    (error, asynchronous) => {
+      if (asynchronous) {
         resume(exchange.diag);
+      }
+      try {
         closeChild(exchange, span);
         rethrown(error);
-        leave(exchange.diag);
-      },
-    );
-  } else {
-    closeChild(exchange, span);
-    answer(exchange, settled, pending);
-  }
+      } finally {
+        if (asynchronous) {
+          leave(exchange.diag);
+        }
+      }
+    },
+    () => exchange.runtime.deadlines.wait(exchange),
+  );
 }
 
 function enterErrorPath(exchange: Exchange, error: unknown, thrown: boolean): void {

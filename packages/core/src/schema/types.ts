@@ -72,7 +72,7 @@ export type Infer<S extends Schema> = S['~static'];
 export type Wire<S extends Schema> = S['~wire'];
 
 /** The value type a data class gives: wrapped in `Secret` for `secret`, plain otherwise. */
-export type Sealed<T, S> = [S] extends ['secret'] ? Secret<T> : T;
+export type Sealed<T, S> = S extends 'secret' ? Secret<T> : T;
 
 /** The options of `t.boolean`, `t.null` and `t.union`. */
 export interface NodeOptions {

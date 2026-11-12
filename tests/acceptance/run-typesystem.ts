@@ -20,6 +20,12 @@ const scripts = [
   'handler-timeout.ts',
   'client-address.ts',
   'security-headers.ts',
+  'audit-callbacks.ts',
+  'audit-lifecycle.ts',
+  'audit-lifecycle-races.ts',
+  'audit-schema.ts',
+  'audit-boundaries.ts',
+  'audit-retention.ts',
 ];
 
 let failed = 0;

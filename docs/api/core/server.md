@@ -44,7 +44,7 @@ export type AuthorHeaderName<N extends string> = N extends unknown
   : never;
 ```
 
-Source: `packages/core/src/server/types.ts:88`
+Source: `packages/core/src/server/types.ts:91`
 
 ## CompletedContext
 
@@ -70,7 +70,7 @@ export interface CompletedContext {
 | `completed`     | Whether the whole response was written before the connection closed.                                  |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
 
-Source: `packages/core/src/server/types.ts:234`
+Source: `packages/core/src/server/types.ts:237`
 
 ## ErrorContext
 
@@ -96,7 +96,7 @@ export interface ErrorContext {
 | `signal`        | Aborted when the connection closes or the request times out.                                          |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
 
-Source: `packages/core/src/server/types.ts:250`
+Source: `packages/core/src/server/types.ts:253`
 
 ## ErrorHandler
 
@@ -108,7 +108,7 @@ The nearest scope's handler runs first and a value it throws goes to the parent'
 export type ErrorHandler = (error: unknown, context: ErrorContext) => HttpError | Promise<HttpError>;
 ```
 
-Source: `packages/core/src/server/types.ts:295`
+Source: `packages/core/src/server/types.ts:298`
 
 ## Handler
 
@@ -122,7 +122,7 @@ export type Handler<C extends ContractRoutes, K extends keyof C> = (
 ) => RouteReply<C[K]> | Promise<RouteReply<C[K]>>;
 ```
 
-Source: `packages/core/src/server/types.ts:143`
+Source: `packages/core/src/server/types.ts:146`
 
 ## Handlers
 
@@ -132,7 +132,7 @@ One handler per route name of a contract.
 export type Handlers<C extends ContractRoutes> = { readonly [K in keyof C]: Handler<C, K> };
 ```
 
-Source: `packages/core/src/server/types.ts:148`
+Source: `packages/core/src/server/types.ts:151`
 
 ## HookName
 
@@ -142,7 +142,7 @@ The hook names `addHook` accepts.
 export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'onError';
 ```
 
-Source: `packages/core/src/server/types.ts:298`
+Source: `packages/core/src/server/types.ts:301`
 
 ## ListeningAddress
 
@@ -162,7 +162,7 @@ export interface ListeningAddress {
 | `port` | The bound port.                                                           |
 | `url`  | The base URL, as in `http://127.0.0.1:3000`; an IPv6 host is in brackets. |
 
-Source: `packages/core/src/server/types.ts:353`
+Source: `packages/core/src/server/types.ts:364`
 
 ## ListenOptions
 
@@ -180,7 +180,7 @@ export interface ListenOptions {
 | `port` | The TCP port, from 0 to 65535; 0 picks a free one.                     |
 | `host` | The address to bind; an empty string is refused (default `127.0.0.1`). |
 
-Source: `packages/core/src/server/types.ts:342`
+Source: `packages/core/src/server/types.ts:353`
 
 ## OnErrorHook
 
@@ -192,7 +192,7 @@ It cannot change the reply; a throw is written to stderr.
 export type OnErrorHook = (context: ErrorContext, error: unknown) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:289`
+Source: `packages/core/src/server/types.ts:292`
 
 ## OnRequestHook
 
@@ -204,7 +204,7 @@ A hook run after routing and before the body is read.
 export type OnRequestHook = (context: RequestContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:269`
+Source: `packages/core/src/server/types.ts:272`
 
 ## OnResponseHook
 
@@ -216,7 +216,7 @@ A throw is written to stderr and changes nothing; it does not run after a hook r
 export type OnResponseHook = (context: CompletedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:284`
+Source: `packages/core/src/server/types.ts:287`
 
 ## OnSendHook
 
@@ -228,7 +228,7 @@ Its return value is ignored; a throw goes to the error path.
 export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:279`
+Source: `packages/core/src/server/types.ts:282`
 
 ## OutgoingHeaders
 
@@ -242,7 +242,7 @@ export type OutgoingHeaders = { readonly [name: string]: string | number | reado
 };
 ```
 
-Source: `packages/core/src/server/types.ts:98`
+Source: `packages/core/src/server/types.ts:101`
 
 ## Plugin
 
@@ -252,7 +252,7 @@ A function that declares routes, hooks and plugins on the child scope it is give
 export type Plugin = (scope: Scope) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:333`
+Source: `packages/core/src/server/types.ts:344`
 
 ## PreHandlerHook
 
@@ -264,7 +264,7 @@ It never runs for a refused request; `context.send` replies and skips the handle
 export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:274`
+Source: `packages/core/src/server/types.ts:277`
 
 ## RawHeaders
 
@@ -276,7 +276,7 @@ export interface RawHeaders {
 }
 ```
 
-Source: `packages/core/src/server/types.ts:72`
+Source: `packages/core/src/server/types.ts:75`
 
 ## RawReply
 
@@ -296,7 +296,7 @@ export interface RawReply {
 | `headers` | Headers to set on the reply; a reserved name of `OutgoingHeaders` makes `send` throw `Error` before anything is set. |
 | `payload` | The body, written as given; without it the reply has no body.                                                        |
 
-Source: `packages/core/src/server/types.ts:165`
+Source: `packages/core/src/server/types.ts:168`
 
 ## RegisterOptions
 
@@ -312,7 +312,7 @@ export interface RegisterOptions {
 | ------ | ------------------------------------------------------------------------------------------------------ |
 | `name` | The plugin's name in boot errors (default the function's name, or `plugin #<n>` for an anonymous one). |
 
-Source: `packages/core/src/server/types.ts:336`
+Source: `packages/core/src/server/types.ts:347`
 
 ## ReservedHeaderName
 
@@ -330,7 +330,7 @@ export type ReservedHeaderName =
   | 'upgrade';
 ```
 
-Source: `packages/core/src/server/types.ts:77`
+Source: `packages/core/src/server/types.ts:80`
 
 ## RequestContext
 
@@ -360,7 +360,7 @@ export interface RequestContext {
 | `setHeader`     | Sets a header on the response.                                                                        |
 | `send`          | Replies at once; later hooks and the handler do not run.                                              |
 
-Source: `packages/core/src/server/types.ts:175`
+Source: `packages/core/src/server/types.ts:178`
 
 ## ResponseContext
 
@@ -390,7 +390,7 @@ export interface ResponseContext {
 | `status`        | The status being written.                                                                             |
 | `setHeader`     | Sets a header on the response.                                                                        |
 
-Source: `packages/core/src/server/types.ts:211`
+Source: `packages/core/src/server/types.ts:214`
 
 ## RouteReply
 
@@ -415,7 +415,7 @@ export type RouteReply<R extends RouteDefinition> = {
 }[keyof R['responses']];
 ```
 
-Source: `packages/core/src/server/types.ts:124`
+Source: `packages/core/src/server/types.ts:127`
 
 ## RouteRequest
 
@@ -443,7 +443,7 @@ export interface RouteRequest<R extends RouteDefinition> {
 | `signal`        | Aborted when the connection closes or the request times out, to stop work no client waits for.        |
 | `clientAddress` | The client's IP address: the socket peer, or from `X-Forwarded-For` when the peer is in `trustProxy`. |
 
-Source: `packages/core/src/server/types.ts:103`
+Source: `packages/core/src/server/types.ts:106`
 
 ## RoutesOptions
 
@@ -461,7 +461,7 @@ export interface RoutesOptions<C extends ContractRoutes> {
 | `bodyLimits`      | Body limits in bytes by route name, each replacing `bodyLimit` for its route.               |
 | `handlerTimeouts` | Time limits in milliseconds by route name, each replacing `handlerTimeoutMs` for its route. |
 
-Source: `packages/core/src/server/types.ts:151`
+Source: `packages/core/src/server/types.ts:154`
 
 ## Scope
 
@@ -471,6 +471,8 @@ Its methods throw BootError `REGISTRATION_CLOSED` once `listen` is called, or on
 
 ```ts
 export interface Scope {
+  readonly signal: AbortSignal;
+  onClose(callback: () => void | Promise<void>): void;
   routes<C extends ContractRoutes>(
     contract: C,
     handlers: NoInfer<Handlers<C>>,
@@ -488,12 +490,14 @@ export interface Scope {
 
 | Field             | Summary                                                                                                       |
 | ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `signal`          | Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work.              |
+| `onClose`         | Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.      |
 | `routes`          | Adds a contract's routes to this scope, with one handler per route.                                           |
 | `addHook`         | Adds a hook to this scope; it runs for this scope's routes and its plugins' routes, after its parents' hooks. |
 | `setErrorHandler` | Sets this scope's error handler.                                                                              |
 | `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                   |
 
-Source: `packages/core/src/server/types.ts:304`
+Source: `packages/core/src/server/types.ts:307`
 
 ## Server
 
@@ -511,7 +515,7 @@ export interface Server extends Scope {
 | `listen` | Runs the plugins, checks and compiles every route, then listens; resolves with the bound address. |
 | `close`  | Stops accepting connections and resolves once every open one has closed.                          |
 
-Source: `packages/core/src/server/types.ts:363`
+Source: `packages/core/src/server/types.ts:374`
 
 ## ServerOptions
 
@@ -524,6 +528,7 @@ export interface ServerOptions {
   readonly bodyLimit?: number;
   readonly maxParamLength?: number;
   readonly pluginTimeoutMs?: number;
+  readonly pluginCloseTimeoutMs?: number;
   readonly closeTimeoutMs?: number;
   readonly keepAliveTimeout?: number;
   readonly requestTimeout?: number;
@@ -535,19 +540,20 @@ export interface ServerOptions {
 }
 ```
 
-| Field              | Summary                                                                                                     |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `bodyLimit`        | Largest request body accepted, in bytes; a larger one is refused with 413 (default 1 MiB).                  |
-| `maxParamLength`   | Longest path parameter accepted, in bytes as received; a longer one is refused with 414 (default 100).      |
-| `pluginTimeoutMs`  | Time each plugin has to settle at `listen`, in milliseconds, at most 2 147 483 647 (default 10 000).        |
-| `closeTimeoutMs`   | Time `close` waits for open connections before closing them, in ms, at most 2 147 483 647 (default 10 000). |
-| `keepAliveTimeout` | Time an idle keep-alive connection stays open, in milliseconds (default 72 000).                            |
-| `requestTimeout`   | Time allowed to receive a whole request, in milliseconds (default 300 000).                                 |
-| `headersTimeout`   | Time allowed to receive the request headers, in milliseconds; at most `requestTimeout` (default 60 000).    |
-| `maxHeaderSize`    | Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB).         |
-| `handlerTimeoutMs` | Time a request has from its route match to its response, in ms, at most 2 147 483 647 (default 30 000).     |
-| `trustProxy`       | Proxy addresses and CIDR ranges whose `X-Forwarded-For` sets `clientAddress` (default none).                |
-| `securityHeaders`  | Whether responses carry `nosniff`, a frame ban and `cache-control: no-store` unless set (default true).     |
+| Field                  | Summary                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `bodyLimit`            | Largest request body accepted, in bytes; a larger one is refused with 413 (default 1 MiB).                  |
+| `maxParamLength`       | Longest path parameter accepted, in bytes as received; a longer one is refused with 414 (default 100).      |
+| `pluginTimeoutMs`      | Time each plugin has to settle at `listen`, in milliseconds, at most 2 147 483 647 (default 10 000).        |
+| `pluginCloseTimeoutMs` | Time each registered disposer has to settle, in ms, at most 2 147 483 647 (default 10 000).                 |
+| `closeTimeoutMs`       | Time `close` waits for open connections before closing them, in ms, at most 2 147 483 647 (default 10 000). |
+| `keepAliveTimeout`     | Time an idle keep-alive connection stays open, in milliseconds (default 72 000).                            |
+| `requestTimeout`       | Time allowed to receive a whole request, in milliseconds (default 300 000).                                 |
+| `headersTimeout`       | Time allowed to receive the request headers, in milliseconds; at most `requestTimeout` (default 60 000).    |
+| `maxHeaderSize`        | Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB).         |
+| `handlerTimeoutMs`     | Time a request has from its route match to its response, in ms, at most 2 147 483 647 (default 30 000).     |
+| `trustProxy`           | Proxy addresses and CIDR ranges whose `X-Forwarded-For` sets `clientAddress` (default none).                |
+| `securityHeaders`      | Whether responses carry `nosniff`, a frame ban and `cache-control: no-store` unless set (default true).     |
 
 Source: `packages/core/src/server/types.ts:12`
 
@@ -569,7 +575,7 @@ export interface ValidatedContext extends RequestContext {
 | `query`  | The validated query parameters. |
 | `body`   | The validated body.             |
 
-Source: `packages/core/src/server/types.ts:201`
+Source: `packages/core/src/server/types.ts:204`
 
 ## createServer
 
@@ -587,4 +593,4 @@ await server.listen({ port: 0 });
 await server.close();
 ```
 
-Source: `packages/core/src/server/server.ts:53`
+Source: `packages/core/src/server/server.ts:54`

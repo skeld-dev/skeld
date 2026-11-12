@@ -186,7 +186,7 @@ export function leaveSlot(slot: number): void {
     recordSpan(syncSeries, length, length, -1, false, record.step);
   }
   if (length > config.blockMs * 1e6) {
-    raise('loop.block', toMillis(length), record.route?.name ?? null, null);
+    raise('loop.block', toMillis(length), record.route?.id ?? null, null);
   }
 }
 
@@ -217,4 +217,4 @@ export function routeRequest(route: RouteInfo): void {
   found.count.total += 1;
 }
 
-export const currentRouteName = (): string | null => state.current?.route?.name ?? null;
+export const currentRouteId = (): string | null => state.current?.route?.id ?? null;

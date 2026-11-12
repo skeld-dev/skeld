@@ -39,7 +39,8 @@ const UNREADABLE = 'a thrown value whose message could not be read';
 
 export function describeThrown(value: unknown): string {
   try {
-    return value instanceof Error ? value.message : String(value);
+    const message: unknown = value instanceof Error ? value.message : value;
+    return typeof message === 'string' ? message : String(message);
   } catch {
     // Why: An accessor `message` or a throwing `toString` on a thrown value must not escape the error path.
     return UNREADABLE;
@@ -53,9 +54,13 @@ export function writeStderrLine(
   routeName: string,
   message: string,
 ): void {
-  const span = start('err.stderr_write');
-  const line = `darkstart: ${escapeLine(method)} ${escapeLine(path)} ${status} ${routeName}: ${escapeLine(message)}\n`;
-  stderr(line);
-  process.stderr.write(line);
-  end(span);
+  try {
+    const span = start('err.stderr_write');
+    const line = `darkstart: ${escapeLine(method)} ${escapeLine(path)} ${status} ${escapeLine(routeName)}: ${escapeLine(message)}\n`;
+    stderr(line);
+    process.stderr.write(line);
+    end(span);
+  } catch {
+    // Why: Reporting a failed request must never prevent its terminal response when stderr itself fails.
+  }
 }

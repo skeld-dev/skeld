@@ -3,48 +3,15 @@
 
 import { compileCheck } from './check.ts';
 import { isModelSchema } from './node.ts';
+import { reached } from './sensitivity.ts';
 import type { ObjectSchema, Schema, Sensitivity } from './types.ts';
 
 function marker(sensitivity: Sensitivity): string {
   return sensitivity === 'secret' ? '[secret]' : '[personal]';
 }
 
-function strongest(marks: readonly (Sensitivity | undefined)[]): Sensitivity | undefined {
-  if (marks.includes('secret')) {
-    return 'secret';
-  }
-  return marks.includes('personal') ? 'personal' : undefined;
-}
-
 function isObjectValue(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function reached(schema: Schema): Sensitivity | undefined {
-  if (!isModelSchema(schema)) {
-    return undefined;
-  }
-  switch (schema.kind) {
-    case 'string':
-    case 'integer':
-    case 'number':
-    case 'boolean':
-    case 'null':
-      return schema.sensitivity;
-    case 'literal':
-      return undefined;
-    case 'object':
-      return strongest([schema.sensitivity, ...Object.values(schema.properties).map((property) => reached(property))]);
-    case 'array':
-      return strongest([schema.sensitivity, reached(schema.items)]);
-    case 'record':
-      return strongest([schema.sensitivity, reached(schema.value)]);
-    case 'union':
-      return strongest([schema.sensitivity, ...schema.members.map((member) => reached(member))]);
-    case 'optional':
-    case 'exposed':
-      return reached(schema.inner);
-  }
 }
 
 function redactObject(schema: ObjectSchema, value: Readonly<Record<string, unknown>>): unknown {
@@ -94,7 +61,7 @@ export function redact(schema: Schema, value: unknown): unknown {
       if (member !== undefined) {
         return redact(member, value);
       }
-      const mark = strongest(schema.members.map((candidate) => reached(candidate)));
+      const mark = reached(schema);
       return mark === undefined ? value : marker(mark);
     }
     case 'optional':

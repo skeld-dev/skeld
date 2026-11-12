@@ -145,12 +145,15 @@ export function object(properties: Properties, options?: ObjectOptions): Runtime
   if (options?.open !== undefined && isEmptyReason(options.open)) {
     throw new TypeError('t.object: open needs a reason, got an empty string');
   }
+  const captured: Record<string, Schema> = Object.create(null);
   for (const key of Object.keys(properties)) {
-    if (!isNode(properties[key])) {
+    const child = properties[key];
+    if (!isNode(child)) {
       throw new TypeError(`t.object: property "${key}" is not a schema`);
     }
+    captured[key] = child;
   }
-  return createNode({ kind: 'object', properties, open: options?.open, sensitivity: options?.sensitivity });
+  return createNode({ kind: 'object', properties: captured, open: options?.open, sensitivity: options?.sensitivity });
 }
 
 /**
@@ -228,10 +231,11 @@ export function union<const M extends readonly Schema[], S extends Sensitivity |
   options?: NodeOptions & { readonly sensitivity?: S },
 ): UnionSchema<M, Sealed<M[number]['~static'], S>>;
 export function union(members: readonly Schema[], options?: NodeOptions): RuntimeNode {
-  if (members.length === 0) {
+  const captured = Array.from(members);
+  if (captured.length === 0) {
     throw new TypeError('t.union: needs at least one member');
   }
-  for (const [index, member] of members.entries()) {
+  for (const [index, member] of captured.entries()) {
     if (!isNode(member)) {
       throw new TypeError(`t.union: member ${index} is not a schema`);
     }
@@ -241,7 +245,7 @@ export function union(members: readonly Schema[], options?: NodeOptions): Runtim
       );
     }
   }
-  return createNode({ kind: 'union', members, sensitivity: options?.sensitivity });
+  return createNode({ kind: 'union', members: captured, sensitivity: options?.sensitivity });
 }
 
 /**
@@ -362,15 +366,18 @@ export function extend<P extends Properties, S extends Sensitivity | undefined, 
 ): ObjectSchema<P & E, S>;
 export function extend(base: ObjectSchema, props: Properties): RuntimeNode {
   checkBase('extend', base);
+  const captured: Record<string, Schema> = Object.create(null);
   for (const key of Object.keys(props)) {
     if (Object.hasOwn(base.properties, key)) {
       throw new TypeError(`t.extend: key "${key}" is already declared; omit it first`);
     }
-    if (!isNode(props[key])) {
+    const child = props[key];
+    if (!isNode(child)) {
       throw new TypeError(`t.extend: property "${key}" is not a schema`);
     }
+    captured[key] = child;
   }
-  return derived(base, Object.fromEntries([...Object.entries(base.properties), ...Object.entries(props)]));
+  return derived(base, Object.fromEntries([...Object.entries(base.properties), ...Object.entries(captured)]));
 }
 
 export { nullSchema as null };

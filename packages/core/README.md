@@ -187,3 +187,13 @@ The engine's codes are `BAD_REQUEST`, `VALIDATION`, `NOT_FOUND`, `PAYLOAD_TOO_LA
 ## License
 
 MIT
+
+### Plugin resource ownership
+
+Register `scope.onClose(() => resource.close())` immediately after acquiring a resource, before another await. `scope.signal` aborts when shutdown or failed-boot rollback begins. After HTTP draining, cleanup runs once in reverse registration order. Each callback has its own `pluginCloseTimeoutMs` deadline (default 10,000 ms, maximum 2,147,483,647). Every callback is attempted; `close()` rejects with an `AggregateError` if any fails or times out. Repeated calls share the completion. Failed startup preserves its original error with rollback failures attached.
+
+Closing during startup prevents subsequent plugins and binding, waits for the current plugin within its boot deadline, and unwinds resources. Plugins and cleanup callbacks must cooperate with cancellation: a timeout cannot terminate arbitrary JavaScript or reclaim resources acquired after a plugin has timed out. Total cleanup time can grow with callback count. Registration after scope sealing is refused.
+
+### Audit compatibility corrections
+
+Static dot segments and backslashes in declared paths are rejected. Handler and route-limit maps use only own properties. Schema builders capture child values once into owned frozen maps; caller-owned maps remain mutable. Widened sensitivity options infer raw-or-Secret values, requiring narrowing. Failed classified unions report a generic union-level issue. Framework error targets use route templates; public request context paths remain concrete. Diagnostic format version 2 uses route ids joined through the run route table, preserving repeated route names.

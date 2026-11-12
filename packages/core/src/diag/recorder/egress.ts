@@ -114,7 +114,7 @@ export function checkPayload(status: number, serialized: string): void {
   record.schemaChecked = true;
   const subject = schemaFailure(validator, serialized);
   if (subject !== null) {
-    raise('leak.response_schema', subject, route.name, status);
+    raise('leak.response_schema', subject, route.id, status);
   }
 }
 
@@ -128,7 +128,7 @@ function valueHasBreak(value: HeaderValue): boolean {
 export function checkHeader(name: string, value: HeaderValue): void {
   const badName = LINE_BREAK.test(name);
   if (badName || valueHasBreak(value)) {
-    raise('leak.header_injection', badName ? 'name' : name, state.current?.route?.name ?? null, null);
+    raise('leak.header_injection', badName ? 'name' : name, state.current?.route?.id ?? null, null);
   }
 }
 
@@ -182,7 +182,7 @@ export function checkWrite(
   headers: OutgoingHttpHeaders | null,
   payload: string | Uint8Array | null,
 ): void {
-  const route = record.route?.name ?? null;
+  const route = record.route?.id ?? null;
   const { canary } = config;
   if (payload !== null) {
     const text = asText(payload);

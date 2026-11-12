@@ -5,6 +5,7 @@ import { checkContract } from '../contract/checks.ts';
 import type { ContractRoutes, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { RuntimeHandler } from '../lifecycle/types.ts';
 import { BootError } from './boot-error.ts';
+import type { DisposalState } from './disposal.ts';
 import { MAX_TIMER_MS } from './options.ts';
 import type {
   ErrorHandler,
@@ -43,6 +44,7 @@ export interface ChildScope {
 
 export interface ScopeState {
   readonly name: string;
+  readonly disposal: DisposalState;
   readonly parent: ScopeState | null;
   readonly children: ChildScope[];
   readonly routes: RouteRecord[];
@@ -58,6 +60,7 @@ interface ErasedHandlers {
 export function createScopeState(name: string, parent: ScopeState | null): ScopeState {
   return {
     name,
+    disposal: parent?.disposal ?? { abort: new AbortController(), callbacks: [] },
     parent,
     children: [],
     routes: [],
@@ -72,7 +75,7 @@ export function pluginName(state: ScopeState): string | null {
 }
 
 function assertOpen(state: ScopeState, method: string): void {
-  if (!state.sealed) {
+  if (!state.sealed && !state.disposal.abort.signal.aborted) {
     return;
   }
   const message =
@@ -137,7 +140,7 @@ function toRouteRecords(
   }
   return Object.entries(contract).map(([name, definition]) => {
     const info: RouteInfo = { name, method: definition.method, path: definition.path };
-    const handler = handlers[name];
+    const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
     if (handler === undefined) {
       throw new TypeError(`Route ${name} (${definition.method} ${definition.path}): has no handler`);
     }
@@ -145,14 +148,22 @@ function toRouteRecords(
       info,
       definition,
       handler,
-      bodyLimit: routeBodyLimit(info, definition, bodyLimits[name]),
-      timeoutMs: routeTimeout(info, timeouts[name]),
+      bodyLimit: routeBodyLimit(info, definition, Object.hasOwn(bodyLimits, name) ? bodyLimits[name] : undefined),
+      timeoutMs: routeTimeout(info, Object.hasOwn(timeouts, name) ? timeouts[name] : undefined),
     };
   });
 }
 
 export function createScope(state: ScopeState): Scope {
   return {
+    signal: state.disposal.abort.signal,
+    onClose(callback) {
+      assertOpen(state, 'onClose');
+      if (typeof callback !== 'function') {
+        throw new TypeError('onClose requires a function');
+      }
+      state.disposal.callbacks.push({ name: state.name, callback });
+    },
     routes(contract, handlers, options) {
       assertOpen(state, 'routes');
       // Why: A contract object can reach routes() without having passed defineContract, so it is checked again here.

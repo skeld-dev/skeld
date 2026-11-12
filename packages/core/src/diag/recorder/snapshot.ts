@@ -30,7 +30,7 @@ function takeGauges(socketsOpen: number): Record<string, unknown> {
   const gauges: Record<string, unknown> = {};
   for (const route of routeList) {
     if (route.slowestNs > 0) {
-      gauges[`req.slowest{${route.name}}`] = toMicros(route.slowestNs);
+      gauges[`req.slowest{${route.id}}`] = toMicros(route.slowestNs);
       route.slowestNs = 0;
     }
   }

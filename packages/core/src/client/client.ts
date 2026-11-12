@@ -190,8 +190,8 @@ function createCall(
     const call = track('client.call', name);
     try {
       const url = buildUrl(input?.params, input?.query);
-      // Why: Error messages name the method, origin and path only; a query may hold a secret.
-      const target = `${route.method} ${url.origin}${url.pathname}`;
+      // Why: Concrete parameters and queries may hold secrets; diagnostics use only the declared route.
+      const target = `${route.method} ${url.origin}${route.path}`;
       const headers = buildHeaders(route, input?.headers);
       const init: RequestInit =
         route.body === undefined

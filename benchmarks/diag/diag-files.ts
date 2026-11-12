@@ -8,13 +8,14 @@ import { BenchError, errorCode } from '../bench-error.ts';
 const runFile = 'run.json';
 const snapshotFile = 'snapshot.jsonl';
 const journalFile = 'journal.jsonl';
-const recorderFormat = 'darkstart-diag/1';
+const recorderFormat = 'darkstart-diag/2';
 const runLimitBytes = 1_048_576;
 const linesLimitBytes = 16_777_216;
 const countChunkBytes = 65_536;
 const newline = 0x0a;
 
 interface RunRoute {
+  readonly id: string;
   readonly name: string;
   readonly method: string;
   readonly path: string;
@@ -347,6 +348,7 @@ function readRoute(value: unknown, index: number, at: Place): RunRoute {
   const route = entryObject(value, name, at);
   const place = inside(at, name);
   return {
+    id: stringAt(route, 'id', place),
     name: stringAt(route, 'name', place),
     method: stringAt(route, 'method', place),
     path: stringAt(route, 'path', place),

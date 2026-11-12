@@ -11,7 +11,7 @@ type KeyedPart = 'params' | 'query' | 'headers';
 
 const PARAMETER_SEGMENT = /^:[A-Za-z_][A-Za-z0-9_]*$/;
 // Why: A declared path is matched against the decoded request path, so it carries no query, fragment or escape.
-const FORBIDDEN_PATH_CHARACTER = /[?#%\s]/;
+const FORBIDDEN_PATH_CHARACTER = /[?#%\\\s]/;
 const SCALAR_KINDS: ReadonlySet<Kind> = new Set(['string', 'number', 'integer', 'boolean', 'literal']);
 // Why: HTTP gives 204 and 304 no body, so a schema declared for one could never be honoured.
 const BODYLESS_STATUSES = ['204', '304'];
@@ -30,7 +30,10 @@ function checkPath(path: string): string | null {
     return 'path has an empty segment';
   }
   if (FORBIDDEN_PATH_CHARACTER.test(path)) {
-    return 'path must not contain ?, #, % or whitespace';
+    return 'path must not contain ?, #, %, backslashes or whitespace';
+  }
+  if (texts.some((text) => text === '.' || text === '..')) {
+    return 'path must not contain . or .. segments';
   }
   const badParameter = texts.find((text) => text.startsWith(':') && !PARAMETER_SEGMENT.test(text));
   if (badParameter !== undefined) {

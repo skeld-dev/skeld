@@ -22,6 +22,8 @@ export interface ServerOptions {
    * Past it `listen` rejects with BootError `PLUGIN_TIMEOUT`.
    */
   readonly pluginTimeoutMs?: number;
+  /** Time each registered disposer has to settle, in ms, at most 2 147 483 647 (default 10 000). */
+  readonly pluginCloseTimeoutMs?: number;
   /** Time `close` waits for open connections before closing them, in ms, at most 2 147 483 647 (default 10 000). */
   readonly closeTimeoutMs?: number;
   /** Time an idle keep-alive connection stays open, in milliseconds (default 72 000). */
@@ -59,6 +61,7 @@ export interface ResolvedServerOptions {
   readonly bodyLimit: number;
   readonly maxParamLength: number;
   readonly pluginTimeoutMs: number;
+  readonly pluginCloseTimeoutMs: number;
   readonly closeTimeoutMs: number;
   readonly keepAliveTimeout: number;
   readonly requestTimeout: number;
@@ -302,6 +305,14 @@ export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'o
  * Its methods throw BootError `REGISTRATION_CLOSED` once `listen` is called, or once the plugin that owns it has settled.
  */
 export interface Scope {
+  /** Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work. */
+  readonly signal: AbortSignal;
+  /**
+   * Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.
+   * Each callback runs once under pluginCloseTimeoutMs; registration after sealing throws REGISTRATION_CLOSED.
+   * @example const server = createServer(); server.onClose(() => console.log("closed")); await server.close();
+   */
+  onClose(callback: () => void | Promise<void>): void;
   /**
    * Adds a contract's routes to this scope, with one handler per route.
    * Throws `TypeError` for a contract that breaks a rule or a route without a handler.
@@ -368,12 +379,12 @@ export interface Server extends Scope {
   listen(options: ListenOptions): Promise<ListeningAddress>;
   /**
    * Stops accepting connections and resolves once every open one has closed.
-   * Idle connections close at once and the rest are closed forcibly after `closeTimeoutMs`; every call returns the same promise.
+   * Idle connections close at once; others are forced after `closeTimeoutMs`, then disposers run; failures reject AggregateError and every call returns the same promise.
    */
   close(): Promise<void>;
 }
 
 export interface HttpServerHandle {
-  listen(host: string, port: number): Promise<ListeningAddress>;
+  listen(host: string, port: number, signal: AbortSignal): Promise<ListeningAddress>;
   close(timeoutMs: number): Promise<void>;
 }

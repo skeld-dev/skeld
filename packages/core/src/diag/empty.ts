@@ -47,7 +47,7 @@ export type BootSpanName =
   | 'boot.error_serializer'
   | 'boot.router_add'
   | 'boot.listen';
-export type SpanName = StageName | StepName | ErrorSpanName | BootSpanName;
+export type SpanName = StageName | StepName | ErrorSpanName | BootSpanName | 'close.plugin';
 export type TrackName =
   | 'refuse.teardown'
   | 'req.hook.on_response'

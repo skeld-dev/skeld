@@ -100,6 +100,7 @@ interface PassState {
 }
 
 interface StepWindow {
+  readonly routes: RecorderFolder['run']['routes'];
   readonly from: SnapshotLine;
   readonly to: SnapshotLine;
   readonly snapshots: readonly SnapshotLine[];
@@ -340,11 +341,15 @@ const keyedDelta = (name: string, expected: number): Figure => ({
   observed: ({ from, to }) => keyedTotal(to, name) - keyedTotal(from, name),
 });
 
-const journaled = (name: string, expected: number, match: (line: JournalLine) => boolean): Figure => ({
+const journaled = (
+  name: string,
+  expected: number,
+  match: (line: JournalLine, window: StepWindow) => boolean,
+): Figure => ({
   name,
   atLeast: false,
   expected: () => expected,
-  observed: ({ journal }) => journal.filter(match).length,
+  observed: (window) => window.journal.filter((line) => match(line, window)).length,
 });
 
 const headroomLow = (expected: number): Figure =>
@@ -530,7 +535,13 @@ function cleanSteps(token: string): readonly Step[] {
       name: 'block',
       send: sendBlock,
       figures: [
-        journaled('loop.block{block}', 1, (line) => line.hook === 'loop.block' && line.route === 'block'),
+        journaled(
+          'loop.block{block}',
+          1,
+          (line, window) =>
+            line.hook === 'loop.block' &&
+            window.routes.some((route) => route.id === line.route && route.name === 'block'),
+        ),
         loopDelayMax,
       ],
     },
@@ -561,7 +572,9 @@ const plantedLeaks: readonly PlantedLeak[] = [
     figure: journaled(
       'leak.content_type{plant_raw}',
       1,
-      (line) => line.hook === 'leak.content_type' && line.route === 'plant_raw',
+      (line, window) =>
+        line.hook === 'leak.content_type' &&
+        window.routes.some((route) => route.id === line.route && route.name === 'plant_raw'),
     ),
   },
 ];
@@ -604,6 +617,7 @@ function lastSnapshot(folder: RecorderFolder, step: string): SnapshotLine {
 }
 
 const windowOf = (folder: RecorderFolder, from: SnapshotLine, to: SnapshotLine): StepWindow => ({
+  routes: folder.run.routes,
   from,
   to,
   snapshots: folder.snapshots.filter((line) => line.t > from.t && line.t <= to.t),

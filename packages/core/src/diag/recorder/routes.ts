@@ -1,5 +1,5 @@
 // Does:  Keeps one record per route: its request counter, slowest request and response checks.
-// Holds: A route name maps to one record for the life of the process.
+// Holds: Each declared route identity keeps its own validators and counters, even when names repeat.
 
 import type { RouteInfo } from '../../contract/types.ts';
 import type { Check, Schema } from '../../schema/types.ts';
@@ -11,6 +11,7 @@ export interface ResponseCheck {
 }
 
 export interface RouteRecord {
+  readonly id: string;
   readonly name: string;
   readonly method: string;
   readonly path: string;
@@ -19,7 +20,7 @@ export interface RouteRecord {
   slowestNs: number;
 }
 
-const byName = new Map<string, RouteRecord>();
+const byInfo = new WeakMap<RouteInfo, RouteRecord>();
 
 // Why: Consecutive requests usually hit the same route, so the last record is tried before the map.
 const lastHit: { info: RouteInfo | null; record: RouteRecord | null } = { info: null, record: null };
@@ -30,21 +31,23 @@ export function routeRecord(info: RouteInfo): RouteRecord {
   if (info === lastHit.info && lastHit.record !== null) {
     return lastHit.record;
   }
-  const found = byName.get(info.name);
+  const found = byInfo.get(info);
   if (found !== undefined) {
     lastHit.info = info;
     lastHit.record = found;
     return found;
   }
+  const id = `r${routeList.length + 1}`;
   const created: RouteRecord = {
+    id,
     name: info.name,
     method: info.method,
     path: info.path,
-    count: keyedCounter('req.count', info.name),
+    count: keyedCounter('req.count', id),
     validators: new Map(),
     slowestNs: 0,
   };
-  byName.set(info.name, created);
+  byInfo.set(info, created);
   routeList.push(created);
   return created;
 }

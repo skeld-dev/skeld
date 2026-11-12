@@ -30,7 +30,7 @@ export interface RunFields {
   readonly options: ResolvedServerOptions;
 }
 
-const FORMAT = 'darkstart-diag/1';
+const FORMAT = 'darkstart-diag/2';
 const OBJECT_ID = /^[0-9a-f]{40,64}$/;
 const REF_PREFIX = 'ref: ';
 const BRANCH_PREFIX = 'refs/heads/';
@@ -106,6 +106,6 @@ export function runHeader(fields: RunFields): string {
     canary: fields.canary,
     options: fields.options,
     capacity: { slots: SLOT_COUNT, depth: DEPTH, tracks: TRACK_COUNT },
-    routes: routeList.map(({ name, method, path }) => ({ name, method, path })),
+    routes: routeList.map(({ id, name, method, path }) => ({ id, name, method, path })),
   });
 }

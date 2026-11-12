@@ -15,6 +15,7 @@ import {
   wrongType,
 } from './messages.ts';
 import { isModelSchema, type ModelSchema } from './node.ts';
+import { reached } from './sensitivity.ts';
 import type {
   ArraySchema,
   IntegerSchema,
@@ -183,6 +184,10 @@ function explainRecord(walk: Walk, schema: RecordSchema, value: unknown): void {
 
 // Does:  Explains against each member and keeps the shortest explanation that does not fail at the union itself.
 function explainUnion(walk: Walk, schema: UnionSchema, value: unknown): void {
+  if (reached(schema) !== undefined) {
+    report(walk, noAllowedForm);
+    return;
+  }
   const depth = walk.path.length;
   let chosen: readonly Issue[] | null = null;
   for (const member of schema.members) {

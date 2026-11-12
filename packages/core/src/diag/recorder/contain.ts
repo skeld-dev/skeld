@@ -38,7 +38,7 @@ export function checkContain(kind: ContextKind, value: object): void {
     const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
     if (descriptor !== undefined && reachesRaw(descriptor.value)) {
       const subject = typeof key === 'string' ? key : (key.description ?? 'symbol');
-      raise('contain.raw_request', subject, record.route?.name ?? null, null);
+      raise('contain.raw_request', subject, record.route?.id ?? null, null);
       return;
     }
   }
@@ -53,7 +53,7 @@ export function watchServer(server: Server | null): void {
 }
 
 export function checkListeners(record: SlotRecord): void {
-  const route = record.route?.name ?? null;
+  const route = record.route?.id ?? null;
   const socket = record.req?.socket;
   if (socket !== undefined) {
     let total = 0;

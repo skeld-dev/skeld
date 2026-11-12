@@ -35,6 +35,9 @@ async function bootChild(child: ChildScope, timeoutMs: number): Promise<void> {
 
 export async function bootPlugins(state: ScopeState, timeoutMs: number): Promise<void> {
   for (const child of state.children) {
+    if (state.disposal.abort.signal.aborted) {
+      throw new BootError('SERVER_CLOSED', 'Server closed during plugin boot', null, state.name);
+    }
     // biome-ignore lint/performance/noAwaitInLoops: boot order is sequential by design
     await bootChild(child, timeoutMs);
   }

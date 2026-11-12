@@ -46,7 +46,7 @@ function emitObject(node: ObjectSchema, value: string, fail: string, names: Name
   if (!closed) {
     return code + test([fewer], fail);
   }
-  return code + exactKeys(value, declared, fewer, fail, names);
+  return code + exactKeys(value, Object.keys(node.properties), declared, fewer, fail, names);
 }
 
 function emitArray(node: ArraySchema, value: string, fail: string, names: Names): string {

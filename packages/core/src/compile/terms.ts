@@ -84,9 +84,17 @@ export function scalarTerms(node: ScalarSchema, value: string): Terms {
 }
 
 // Does:  Emits the walk that fails when the value has a key beyond the declared ones, stopping at the first extra.
-export function exactKeys(value: string, declared: string, fewer: string | null, fail: string, names: Names): string {
+export function exactKeys(
+  value: string,
+  keys: readonly string[],
+  declared: string,
+  fewer: string | null,
+  fail: string,
+  names: Names,
+): string {
   const count = fresh('n', names);
   const visited = fresh('k', names);
-  const walk = `let ${count} = 0;\nfor (const ${visited} in ${value}) {\nif (++${count} > ${declared}) ${fail}\n}\n`;
+  const unknown = keys.map((key) => `${visited} !== ${JSON.stringify(key)}`).join(' && ') || 'true';
+  const walk = `let ${count} = 0;\nfor (const ${visited} in ${value}) {\nif ((${unknown}) || ++${count} > ${declared}) ${fail}\n}\n`;
   return walk + test([`${count} !== ${declared}`, fewer], fail);
 }

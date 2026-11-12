@@ -1,6 +1,7 @@
 // Does:  Runs hook chains for a stage and builds the context records each kind of hook receives.
 // Holds: After a hook's reply or a timeout no later hook or stage runs; only onResponse observers still see the end.
 
+import { authorResult } from './author-result.ts';
 import type { OutgoingHttpHeaders } from 'node:http';
 import { contain, end, event, leave, resume, type Slot, track, wrote } from '#diag';
 import type { RouteInfo } from '../contract/types.ts';
@@ -34,7 +35,7 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
     event('err.already_sent');
     const error = new Error(ALREADY_SENT);
     exchange.lateSendError = error;
-    writeStderrLine(method, exchange.path, res.statusCode, exchange.route.info.name, ALREADY_SENT);
+    writeStderrLine(method, exchange.route.info.path, res.statusCode, exchange.route.info.name, ALREADY_SENT);
     throw error;
   }
   if (reply.headers !== undefined) {
@@ -148,30 +149,34 @@ export function runStage<H>(
       next();
       return;
     }
-    let result: void | Promise<void>;
-    try {
-      result = call(hook);
-    } catch (error) {
-      fault(error);
-      return;
-    }
-    if (result instanceof Promise) {
-      exchange.runtime.deadlines.wait(exchange);
-      result.then(
-        () => {
+    authorResult<void>(
+      () => call(hook),
+      (_value, asynchronous) => {
+        if (asynchronous) {
           resume(exchange.diag);
+        }
+        try {
           step(index + 1);
-          leave(exchange.diag);
-        },
-        (error: unknown) => {
+        } finally {
+          if (asynchronous) {
+            leave(exchange.diag);
+          }
+        }
+      },
+      (error, asynchronous) => {
+        if (asynchronous) {
           resume(exchange.diag);
+        }
+        try {
           fault(error);
-          leave(exchange.diag);
-        },
-      );
-    } else {
-      step(index + 1);
-    }
+        } finally {
+          if (asynchronous) {
+            leave(exchange.diag);
+          }
+        }
+      },
+      () => exchange.runtime.deadlines.wait(exchange),
+    );
   };
   step(0);
 }
@@ -192,32 +197,27 @@ export function runObservers<H>(
       done();
       return;
     }
-    let result: void | Promise<void>;
-    try {
-      result = call(hook);
-    } catch (error) {
-      report(error);
-      step(index + 1);
-      return;
-    }
-    if (result instanceof Promise) {
-      waiting();
-      result.then(
-        () => {
-          resume(slot);
-          step(index + 1);
+    const advance = (asynchronous: boolean): void => {
+      if (asynchronous) {
+        resume(slot);
+      }
+      try {
+        step(index + 1);
+      } finally {
+        if (asynchronous) {
           leave(slot);
-        },
-        (error: unknown) => {
-          resume(slot);
-          report(error);
-          step(index + 1);
-          leave(slot);
-        },
-      );
-    } else {
-      step(index + 1);
-    }
+        }
+      }
+    };
+    authorResult<void>(
+      () => call(hook),
+      (_value, asynchronous) => advance(asynchronous),
+      (error, asynchronous) => {
+        report(error);
+        advance(asynchronous);
+      },
+      waiting,
+    );
   };
   step(0);
 }
@@ -274,7 +274,7 @@ export function watchCompletion(exchange: Exchange, hooks: readonly OnResponseHo
       (error) =>
         writeStderrLine(
           exchange.method,
-          exchange.path,
+          exchange.route.info.path,
           res.statusCode,
           exchange.route.info.name,
           `onResponse hook threw: ${describeThrown(error)}`,

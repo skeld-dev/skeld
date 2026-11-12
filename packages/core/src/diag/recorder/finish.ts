@@ -56,7 +56,7 @@ function finish(record: SlotRecord, status: Counter, t: number): void {
   status.total += 1;
   const { route, res } = record;
   if (config.options !== null) {
-    observe(requestMs, incl / 1e6, config.options.requestTimeout, route?.name ?? null);
+    observe(requestMs, incl / 1e6, config.options.requestTimeout, route?.id ?? null);
   }
   if (route !== null && incl > route.slowestNs) {
     route.slowestNs = incl;

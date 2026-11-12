@@ -144,10 +144,10 @@ function objectCheck(schema: ObjectSchema): Check {
       return true;
     }
     let visited = 0;
-    // biome-ignore lint/suspicious/noForIn: M6 refuses every key a for...in visits beyond the present declared ones, inherited ones too (ADR-027)
-    for (const _key in value) {
+    // biome-ignore lint/suspicious/noForIn: Closed schemas check inherited enumerable keys as well as own keys
+    for (const key in value) {
       visited += 1;
-      if (visited > present) {
+      if (!Object.hasOwn(schema.properties, key) || visited > present) {
         return false;
       }
     }

@@ -138,7 +138,7 @@ export function array<I extends Schema, S extends Sensitivity | undefined = unde
 t.array(t.string({ maxLength: 32 }), { maxItems: 10 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:161`
+Source: `packages/core/src/schema/schema.ts:164`
 
 ## t.record
 
@@ -158,7 +158,7 @@ export function record<V extends Schema, S extends Sensitivity | undefined = und
 t.record(t.string({ maxLength: 16 }), t.integer(), { maxProperties: 50 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:190`
+Source: `packages/core/src/schema/schema.ts:193`
 
 ## t.union
 
@@ -177,7 +177,7 @@ export function union<const M extends readonly Schema[], S extends Sensitivity |
 t.union([t.literal('card'), t.literal('cash')]);
 ```
 
-Source: `packages/core/src/schema/schema.ts:226`
+Source: `packages/core/src/schema/schema.ts:229`
 
 ## t.optional
 
@@ -193,7 +193,7 @@ export function optional<S extends Schema>(inner: S): OptionalSchema<S>;
 t.object({ note: t.optional(t.string({ maxLength: 200 })) });
 ```
 
-Source: `packages/core/src/schema/schema.ts:252`
+Source: `packages/core/src/schema/schema.ts:256`
 
 ## t.exposed
 
@@ -209,7 +209,7 @@ export function exposed<T, W>(inner: Schema<Secret<T>, W>, reason: string): Expo
 t.exposed(t.string({ maxLength: 64, sensitivity: 'secret' }), 'returned once at creation');
 ```
 
-Source: `packages/core/src/schema/schema.ts:268`
+Source: `packages/core/src/schema/schema.ts:272`
 
 ## t.pick
 
@@ -228,7 +228,7 @@ export function pick<P extends Properties, S extends Sensitivity | undefined, co
 t.pick(t.object({ id: t.integer(), name: t.string({ maxLength: 64 }) }), ['name']);
 ```
 
-Source: `packages/core/src/schema/schema.ts:309`
+Source: `packages/core/src/schema/schema.ts:313`
 
 ## t.omit
 
@@ -247,7 +247,7 @@ export function omit<P extends Properties, S extends Sensitivity | undefined, co
 t.omit(t.object({ id: t.integer(), name: t.string({ maxLength: 64 }) }), ['id']);
 ```
 
-Source: `packages/core/src/schema/schema.ts:324`
+Source: `packages/core/src/schema/schema.ts:328`
 
 ## t.partial
 
@@ -266,7 +266,7 @@ export function partial<P extends Properties, S extends Sensitivity | undefined>
 t.partial(t.object({ name: t.string({ maxLength: 64 }) }), { minProperties: 1 });
 ```
 
-Source: `packages/core/src/schema/schema.ts:339`
+Source: `packages/core/src/schema/schema.ts:343`
 
 ## t.extend
 
@@ -285,7 +285,7 @@ export function extend<P extends Properties, S extends Sensitivity | undefined, 
 t.extend(t.object({ id: t.integer() }), { active: t.boolean() });
 ```
 
-Source: `packages/core/src/schema/schema.ts:359`
+Source: `packages/core/src/schema/schema.ts:363`
 
 ## Secret
 
@@ -797,7 +797,7 @@ Source: `packages/core/src/schema/types.ts:57`
 The value type a data class gives: wrapped in `Secret` for `secret`, plain otherwise.
 
 ```ts
-export type Sealed<T, S> = [S] extends ['secret'] ? Secret<T> : T;
+export type Sealed<T, S> = S extends 'secret' ? Secret<T> : T;
 ```
 
 Source: `packages/core/src/schema/types.ts:75`
