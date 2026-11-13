@@ -1,6 +1,6 @@
 # Your first request
 
-Run a small service, call it through its contract, then send input the contract refuses. You need the Node version in [`.nvmrc`](../../.nvmrc) and a terminal in the repository root.
+Run a small service, call it through its contract, then send input the contract refuses. You need the Node version in [`.nvmrc`](../../.nvmrc), pnpm 12.19.0, and a terminal in the repository root.
 
 This walkthrough uses the checkout, so you can follow it before the package is published. For a separate application, see the [package installation instructions](../../packages/core/README.md#install) once the package is available.
 
@@ -9,14 +9,14 @@ This walkthrough uses the checkout, so you can follow it before the package is p
 Install the workspace dependencies and start hello:
 
 ```sh
-npm install
-npm run start --workspace @skeld/example-hello
+pnpm install
+pnpm --filter @skeld/example-hello run start
 ```
 
 Leave that terminal running. In a second terminal, from the same repository root:
 
 ```sh
-npm run call --workspace @skeld/example-hello
+pnpm --filter @skeld/example-hello run call
 ```
 
 The client prints:
@@ -85,7 +85,7 @@ The route was found, but its input was refused before the handler ran. Change `f
 In the example client, change `excited: true` to `excited: 'yes'`, then run:
 
 ```sh
-npm run check
+pnpm run check
 ```
 
 TypeScript reports that the call disagrees with the contract. Restore the boolean afterward. The compile-time check helps your own callers; the HTTP refusal protects the service from callers that never ran TypeScript.

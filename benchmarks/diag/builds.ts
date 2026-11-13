@@ -80,7 +80,7 @@ export function requireRecorderBuild(): void {
   const manifest = fileURLToPath(import.meta.resolve('@skeld/core/package.json'));
   const recorder = join(dirname(manifest), 'dist', 'diag', 'recorder', 'recorder.js');
   if (!existsSync(recorder)) {
-    throw new BenchError(3, `${displayPath(recorder)} is missing. Run npm run bench, which builds the package first.`);
+    throw new BenchError(3, `${displayPath(recorder)} is missing. Run pnpm run bench, which builds the package first.`);
   }
 }
 

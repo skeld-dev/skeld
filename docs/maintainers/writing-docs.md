@@ -27,13 +27,13 @@ The website builds its public collection directly from these Markdown files. Kee
 Run from the repository root:
 
 ```sh
-npm run api-docs -- --check
-npm run api-check
-npm run readme-check
-npm run examples-check
-npm run consumer-check
-npm run consumer-check -- --page docs/guides/contracts.md
-npm run consumer-check -- --page docs/guides/browser-security.md
+pnpm run api-docs --check
+pnpm run api-check
+pnpm run readme-check
+pnpm run examples-check
+pnpm run consumer-check
+pnpm run consumer-check --page docs/guides/contracts.md
+pnpm run consumer-check --page docs/guides/browser-security.md
 ```
 
 These checks serve different purposes: generated reference freshness, public symbol documentation and examples, README/example parity, real HTTP example behavior, and consumer compatibility. The `--page` commands compile every TypeScript block in those two guides; the default consumer check covers the logging page. They do **not** automatically compile every fenced block in every guide or verify every prose claim.

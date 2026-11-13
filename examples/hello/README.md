@@ -1,17 +1,17 @@
 # Hello: a contract, a server, a client
 
-This is the [package README's example](../../packages/core/README.md#example), kept identical by `npm run readme-check`.
+This is the [package README's example](../../packages/core/README.md#example), kept identical by `pnpm run readme-check`.
 
-From the repository root, after `npm install`:
+From the repository root, after `pnpm install`:
 
 ```sh
-npm run start --workspace @skeld/example-hello
+pnpm --filter @skeld/example-hello run start
 ```
 
 In a second terminal:
 
 ```sh
-npm run call --workspace @skeld/example-hello
+pnpm --filter @skeld/example-hello run call
 ```
 
 The client prints:

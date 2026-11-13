@@ -27,7 +27,7 @@ const repositoryRoot = join(import.meta.dirname, '..');
 const missingCodes = new Set(['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED']);
 
 const notInstalled = (name: string): BenchError =>
-  new BenchError(3, `${name} is not installed. Run npm install at the repository root.`);
+  new BenchError(3, `${name} is not installed. Run pnpm install at the repository root.`);
 
 const readText = (path: string): string | null => {
   try {
@@ -88,7 +88,7 @@ export function resolvePackages(): Packages {
   if (!existsSync(serverFile)) {
     throw new BenchError(
       3,
-      `${displayPath(distFolder)}/ has no build. Run npm run bench, which builds the package first.`,
+      `${displayPath(distFolder)}/ has no build. Run pnpm run bench, which builds the package first.`,
     );
   }
   const fastifyFile = resolveFile('fastify', () => import.meta.resolve('fastify'));

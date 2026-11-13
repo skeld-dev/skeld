@@ -23,15 +23,15 @@ Performance workloads live in [`../benchmarks/`](../benchmarks/README.md).
 
 ## Run
 
-From the repository root, after `npm install`:
+From the repository root, after `pnpm install`:
 
 ```sh
-npm test                         # build/type-check, then all ordinary correctness scripts
-npm test -- security             # one category; any folder name above except support works
-npm test -- browser
-npm test -- schema
-npm test -- logging
-npm test -- diag                 # the seven base checks under diagnostic instrumentation
+pnpm test                      # build/type-check, then all ordinary correctness scripts
+pnpm test security             # one category; any folder name above except support works
+pnpm test browser
+pnpm test schema
+pnpm test logging
+pnpm test diag                 # the seven base checks under diagnostic instrumentation
 ```
 
 `tests/run.ts` discovers scripts in each category and runs them in separate processes. The schema corpus and
@@ -42,7 +42,7 @@ it afterward; tests that start multiple servers use their own diagnostic childre
 For a single script, build first, then run it directly:
 
 ```sh
-npm run check
+pnpm run check
 node --conditions=skeld-source tests/security/body-limit.ts
 node --conditions=skeld-source --disallow-code-generation-from-strings tests/schema/no-codegen.ts
 ```
@@ -50,8 +50,8 @@ node --conditions=skeld-source --disallow-code-generation-from-strings tests/sch
 Two logging integrations are explicit:
 
 ```sh
-npm test -- collector --collector /absolute/path/to/otelcol-contrib
-npm test -- destination
+pnpm test collector --collector /absolute/path/to/otelcol-contrib
+pnpm test destination
 ```
 
 The Collector check requires the version pinned in `logging/log-collector.ts` and does not download it.

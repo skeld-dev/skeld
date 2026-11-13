@@ -2,7 +2,8 @@
 // Holds: Exit 0 only when no symbol has a finding; the first line of each block must equal the compiler's hover text.
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { checkExamples, type Finding, ruleOrder } from './examples.ts';
 import { type PublicSymbol, root, walk } from './walk.ts';
 
@@ -31,7 +32,9 @@ function parseArgs(args: readonly string[]): Options | 'help' | undefined {
   }
   const entry = given.get('entry');
   return {
-    packageDir: resolve(given.get('package') ?? join(root, 'packages/core')),
+    packageDir: resolve(
+      given.get('package') ?? dirname(fileURLToPath(import.meta.resolve('@skeld/core/package.json'))),
+    ),
     entry: entry === undefined ? undefined : resolve(entry),
   };
 }

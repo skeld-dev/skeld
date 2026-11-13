@@ -16,4 +16,4 @@ The Core module is distributed as `@skeld/core`. Its public API is organized int
 | [redirect](core/redirect.md)       | Checking redirect destinations                                       |
 | [json-schema](core/json-schema.md) | Exporting JSON Schema 2020-12                                        |
 
-The pages in `core/` are generated. Change the public source documentation and run `npm run api-docs`; do not edit those pages by hand. For a learning path, start at the [documentation home](../README.md).
+The pages in `core/` are generated. Change the public source documentation and run `pnpm run api-docs`; do not edit those pages by hand. For a learning path, start at the [documentation home](../README.md).

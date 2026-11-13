@@ -1,0 +1,15 @@
+packages:
+  - "packages/*"
+  - "examples/*"
+  - "website"
+  - "benchmarks"
+  - "tests"
+  - "tools"
+
+# Keep benchmark-only optional peers out of the website dependency graph.
+projectScopedOptionalPeers: true
+
+# These pinned tools validate their platform binaries during installation.
+allowBuilds:
+  esbuild: true
+  workerd: true

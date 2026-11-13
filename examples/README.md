@@ -12,18 +12,18 @@ For a guided walkthrough and the reasoning behind the APIs, use the [documentati
 
 ## Run from this repository
 
-Use the Node version in [`.nvmrc`](../.nvmrc), then run `npm install` from the repository root. Each example has two commands: `start` in one terminal and `call` in another. The individual READMEs give the exact commands and expected results. Stop a server with Ctrl-C; it closes through Skeld and flushes its logger.
+Use the Node version in [`.nvmrc`](../.nvmrc), then run `pnpm install` from the repository root. Each example has two commands: `start` in one terminal and `call` in another. The individual READMEs give the exact commands and expected results. Stop a server with Ctrl-C; it closes through Skeld and flushes its logger.
 
 All servers bind to `127.0.0.1`. To choose another port, set `PORT` for the server and the matching `BASE_URL` for the client:
 
 ```sh
-PORT=3101 npm run start --workspace @skeld/example-logging
+PORT=3101 pnpm --filter @skeld/example-logging run start
 ```
 
 In a second terminal:
 
 ```sh
-BASE_URL=http://127.0.0.1:3101 npm run call --workspace @skeld/example-logging
+BASE_URL=http://127.0.0.1:3101 pnpm --filter @skeld/example-logging run call
 ```
 
 The servers write JSON log lines; clients print human-readable results in their own terminal. Keep those streams separate when piping server logs to a collector. Access records are enabled in logging and service; hello uses the default, with access records off.
@@ -33,7 +33,7 @@ The servers write JSON log lines; clients print human-readable results in their 
 1. Read the contract before the handler. It defines the accepted input and each declared response.
 2. Run the client and inspect the server's records.
 3. Try the invalid requests in each guide. Check the status and whether the handler's record appears.
-4. Change a response body or a client call to disagree with the contract, then run `npm run check` to see the type error. Restore the change afterward.
+4. Change a response body or a client call to disagree with the contract, then run `pnpm run check` to see the type error. Restore the change afterward.
 
 These examples use only Node and public `@skeld/core` imports. They require no database, account, credential or external service. The task store is bounded and temporary; the logging example previews JSON syntax and does not authenticate its demonstration key. Neither is a deployed application with identity or durable storage.
 
@@ -44,8 +44,8 @@ Use an ES module project (`"type": "module"`) and install `@skeld/core`. Copy th
 ## Keep examples working
 
 ```sh
-npm run examples-check
-npm run readme-check
+pnpm run examples-check
+pnpm run readme-check
 ```
 
 The first command builds the projects, starts each example on an available local port, runs its client, checks refusal and logging behavior, and closes the servers it started. It leaves existing servers alone. The second keeps hello identical to the package README. These are behavior checks, not benchmarks.

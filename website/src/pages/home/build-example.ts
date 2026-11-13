@@ -40,7 +40,7 @@ export function buildExample() {
         <details class="build-run" id="run-example">
           <summary><span>Run this example locally</span><span class="build-run-context">From a Skeld checkout</span><svg aria-hidden="true"><use href="#arrow"></use></svg></summary>
           <div class="build-run-body">
-            <p>Use the Node version in the checkout's <code>.nvmrc</code> and run <code>npm install</code> at the repository root. Save all three files together in a new folder inside that checkout.</p>
+            <p>Use the Node version in the checkout's <code>.nvmrc</code> and pnpm 12.19.0, then run <code>pnpm install</code> at the repository root. Save all three files together in a new folder under <code>examples/hello/</code>, where the workspace provides Skeld.</p>
             <div class="build-terminals">
               <div><span>In that folder · terminal one</span><pre tabindex="0" aria-label="Start the example server"><code>node --conditions=skeld-source server.ts</code></pre></div>
               <div><span>In that folder · terminal two</span><pre tabindex="0" aria-label="Call the example server"><code>node --conditions=skeld-source client.ts</code></pre></div>

@@ -107,7 +107,7 @@ function selfTest(): boolean {
   }
   const file = join(corePath, target);
   if (!existsSync(file)) {
-    fail('S', `${file} does not exist; build first with npx tsc -b packages/core`);
+    fail('S', `${file} does not exist; build first with pnpm exec tsc -b packages/core`);
     return false;
   }
   if (!readFileSync(file).includes(marker)) {
@@ -303,7 +303,7 @@ function rules(diag: unknown, files: ReadonlyMap<string, Buffer>, entries: reado
 }
 
 async function pack(destination: string, signal: AbortSignal): Promise<string | undefined> {
-  const child = spawn('npm', ['pack', '--workspace', '@skeld/core', '--pack-destination', destination], {
+  const child = spawn('pnpm', ['--filter', '@skeld/core', 'pack', '--pack-destination', destination], {
     cwd: root,
     stdio: ['ignore', 'ignore', 'pipe'],
     signal,
@@ -314,18 +314,18 @@ async function pack(destination: string, signal: AbortSignal): Promise<string | 
   try {
     [code] = await once(child, 'close');
   } catch (error) {
-    fail('pack', `npm pack did not start: ${error instanceof Error ? error.message : String(error)}`);
+    fail('pack', `pnpm pack did not start: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
   if (code !== 0) {
     process.stderr.write(Buffer.concat(errors));
-    fail('pack', `npm pack exited ${String(code)}`);
+    fail('pack', `pnpm pack exited ${String(code)}`);
     return undefined;
   }
   const tarballs = readdirSync(destination).filter((name) => name.endsWith('.tgz'));
   const [tarball] = tarballs;
   if (tarball === undefined || tarballs.length !== 1) {
-    fail('pack', `npm pack left ${tarballs.length} tarballs in ${destination}`);
+    fail('pack', `pnpm pack left ${tarballs.length} tarballs in ${destination}`);
     return undefined;
   }
   return tarball;

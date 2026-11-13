@@ -2,16 +2,16 @@
 
 This small JSON preview endpoint demonstrates a request that succeeds and one the handler rejects. It neither saves the document nor calls an external service. All client data is synthetic; the `apiKey` field demonstrates secret handling, not authentication.
 
-From the repository root, after `npm install`:
+From the repository root, after `pnpm install`:
 
 ```sh
-npm run start --workspace @skeld/example-logging
+pnpm --filter @skeld/example-logging run start
 ```
 
 In a second terminal:
 
 ```sh
-npm run call --workspace @skeld/example-logging
+pnpm --filter @skeld/example-logging run call
 ```
 
 Expect these client results, with a different UUID on each line:

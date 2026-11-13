@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const tsc = fileURLToPath(new URL('../../node_modules/typescript/bin/tsc', import.meta.url));
-const repoModules = fileURLToPath(new URL('../../node_modules', import.meta.url));
+const tsc = fileURLToPath(new URL('bin/tsc', import.meta.resolve('typescript/package.json')));
+const repoModules = fileURLToPath(new URL('../node_modules', import.meta.url));
 
 export interface Compiled {
   status: number | null;

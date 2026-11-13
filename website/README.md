@@ -7,15 +7,15 @@ Website source for `skeld.dev`, built with Light, TypeScript 7, Vite, and native
 From the repository root:
 
 ```sh
-npm install
-npm run dev --workspace @skeld/website
+pnpm install
+pnpm --filter @skeld/website run dev
 ```
 
 Open `http://<host-ip>:5173` from another device. Vite binds to `0.0.0.0` (all network interfaces) and refuses an occupied port. The production preview also binds to `0.0.0.0`, on port 4173:
 
 ```sh
-npm run build --workspace @skeld/website
-npm run preview --workspace @skeld/website
+pnpm --filter @skeld/website run build
+pnpm --filter @skeld/website run preview
 ```
 
 TypeScript and the Vite output target ESNext. This deliberately targets current browsers without legacy transpilation. The website has no dependency on Skeld core.
@@ -40,7 +40,7 @@ website/
   wrangler.json             Cloudflare static-assets hosting
 ```
 
-The Vite HTML transform renders the page with Light's markup renderer. The browser adopts the same template tree and upgrades the tab component. The request walkthrough illustrates a `POST /projects` contract across input validation, handler values, response serialization and schema-aware logging. Visitors can inspect four stages, run a finite sequence, or select an over-limit request. It does not execute Skeld or make backend requests. Playback starts once when the path enters view, pauses offscreen or while the document is hidden, and stops for manual inspection. Reduced-motion users control the stages without animation; all stages remain readable without JavaScript. The Build with Skeld section shows three complete files for a bounded greeting route. Light supplies the file tabs; native downloads save the exact source shown. `first-route-code.ts` is the source of truth for display and downloads, and `code-example.ts` colors escaped template text. Local run instructions use a Skeld checkout, so they do not assume npm publication. The closing section invites visitors to “Make your first request.” over the polar peak image and links to `/docs/guides/first-request/`. Getting started renders the canonical first-request guide from `docs/`; `/start/` redirects to that guide. It explicitly notes that public release downloads and registry installation are not available yet. The shared footer groups Explore, Build and Website destinations, identifies ul0gic as maintainer, and credits [Lightstart](https://github.com/alantriesagain/lightstart). `/privacy/` and `/terms/` describe the current website; `/license.txt` is generated directly from the repository MIT license. Native links connect static HTML pages and homepage sections; no client router is installed.
+The Vite HTML transform renders the page with Light's markup renderer. The browser adopts the same template tree and upgrades the tab component. The request walkthrough illustrates a `POST /projects` contract across input validation, handler values, response serialization and schema-aware logging. Visitors can inspect four stages, run a finite sequence, or select an over-limit request. It does not execute Skeld or make backend requests. Playback starts once when the path enters view, pauses offscreen or while the document is hidden, and stops for manual inspection. Reduced-motion users control the stages without animation; all stages remain readable without JavaScript. The Build with Skeld section shows three complete files for a bounded greeting route. Light supplies the file tabs; native downloads save the exact source shown. `first-route-code.ts` is the source of truth for display and downloads, and `code-example.ts` colors escaped template text. Local run instructions use a new folder under `examples/hello/` in a Skeld checkout, where the workspace provides `@skeld/core`; they do not assume npm publication. The closing section invites visitors to “Make your first request.” over the polar peak image and links to `/docs/guides/first-request/`. Getting started renders the canonical first-request guide from `docs/`; `/start/` redirects to that guide. It explicitly notes that public release downloads and registry installation are not available yet. The shared footer groups Explore, Build and Website destinations, identifies ul0gic as maintainer, and credits [Lightstart](https://github.com/alantriesagain/lightstart). `/privacy/` and `/terms/` describe the current website; `/license.txt` is generated directly from the repository MIT license. Native links connect static HTML pages and homepage sections; no client router is installed.
 
 `src/build/pages-plugin.ts` maps each HTML entry under `src/pages/` to its public URL. Home is `/`, documentation is `/docs/`, security is `/security/`, and policy pages are `/privacy/` and `/terms/`. Vite serves these URLs directly in development and emits matching directories in `dist/`; source-folder paths are not published. Each page can be opened or refreshed independently. New standalone pages get their own folder and an entry in this build map. New documentation articles belong in root `docs/` and the docs manifest.
 
@@ -67,23 +67,23 @@ The shared brand icon is `public/assets/skeld-icon.png`, used by the header, foo
 ## Checks
 
 ```sh
-npm run check --workspace @skeld/website
-npm run lint --workspace @skeld/website
-npm run knip --workspace @skeld/website
-npm run build --workspace @skeld/website
+pnpm --filter @skeld/website run check
+pnpm --filter @skeld/website run lint
+pnpm --filter @skeld/website run knip
+pnpm --filter @skeld/website run build
 ```
 
 The root `biome.json` owns all lint and formatting settings, with a scoped override for Vite's required default export. Knip scans the TypeScript application and Vite entry; Vite resolves the native CSS imports during the build. The root type-check also includes the website.
 
 ## Hosting and documentation
 
-Cloudflare serves the `dist/` directory as static assets; no Node server or browser rendering runs inside a Worker. The deploy command builds and publishes through Wrangler, and is only for an authorized release. Local development and builds do not deploy anything. To verify the built assets under the local Workers runtime, run `npm exec --workspace @skeld/website -- wrangler dev --local` after building.
+Cloudflare serves the `dist/` directory as static assets; no Node server or browser rendering runs inside a Worker. The deploy command builds and publishes through Wrangler, and is only for an authorized release. Local development and builds do not deploy anything. To verify the built assets under the local Workers runtime, run `pnpm --filter @skeld/website exec wrangler dev --local` after building.
 
 Documentation lives in [`../docs/`](../docs/README.md). The website compiles that source without maintaining a second copy. Contribution links should point to the repository's [`CONTRIBUTING.md`](../CONTRIBUTING.md); `docs/maintainers/` stays outside the published documentation.
 
 The build emits the homepage, 29 documentation pages, Security, Privacy and Terms pages, plus redirects from the old `/start` URLs. Website publication remains separate work. Before publishing, confirm hosting behavior against the Privacy page and replace the checkout-only setup notice with verified public release instructions. The code currently has no analytics, signup forms or application-managed visitor storage.
 
-A GitHub release can distribute a built `npm pack` tarball while npm account verification is blocked; npm can install that HTTPS artifact directly. This requires a real public repository/release URL, not a link to an assumed repository or GitHub source archive. The core manifest currently says `0.0.2`; the requested initial release was called `0.0.1`. Resolve that version before packaging or publication. No release is created by the website build.
+A GitHub release can distribute a built `pnpm --filter @skeld/core pack` tarball while npm account verification is blocked; npm can install that HTTPS artifact directly. This requires a real public repository/release URL, not a link to an assumed repository or GitHub source archive. The core manifest currently says `0.0.2`; the requested initial release was called `0.0.1`. Resolve that version before packaging or publication. No release is created by the website build.
 
 ## Documentation rendering
 

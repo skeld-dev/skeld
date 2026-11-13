@@ -6,14 +6,14 @@ For a substantial API or behavior change, open an issue to discuss the use case 
 
 ## Set up the checkout
 
-Use the Node version pinned in [`.nvmrc`](.nvmrc). From the repository root:
+Use the Node version pinned in [`.nvmrc`](.nvmrc) and pnpm 12.19.0, pinned in `package.json`. From the repository root:
 
 ```sh
-npm install
-npm run check
+pnpm install
+pnpm run check
 ```
 
-The repository uses npm workspaces. The [repository map](README.md#repository) identifies each workspace, and the [examples](examples/README.md) show how to run a service and client locally. Source execution uses `node --conditions=skeld-source` so imports resolve to the workspace's TypeScript source.
+The repository uses pnpm workspaces and a single `pnpm-lock.yaml`. Use `pnpm install --frozen-lockfile` to reproduce the locked dependency graph. The [repository map](README.md#repository) identifies each workspace, and the [examples](examples/README.md) show how to run a service and client locally. Source execution uses `node --conditions=skeld-source` so imports resolve to the workspace's TypeScript source.
 
 ## Make a focused change
 
@@ -26,13 +26,13 @@ Explain changed public behavior in the same pull request. Public API pages are g
 For a code change, start with the relevant category, then run the ordinary suite and repository checks:
 
 ```sh
-npm test -- contracts
-npm test
-npm run lint
-npm run knip
+pnpm test contracts
+pnpm test
+pnpm run lint
+pnpm run knip
 ```
 
-Replace `contracts` with the category your change affects. `npm test` builds and runs ordinary correctness checks. The [test guide](tests/README.md#run) explains individual scripts, diagnostic mode, and the separate integrations.
+Replace `contracts` with the category your change affects. `pnpm test` builds and runs ordinary correctness checks. The [test guide](tests/README.md#run) explains individual scripts, diagnostic mode, and the separate integrations.
 
 For documentation-only changes, check links, formatting, and any examples or claims you changed. Follow the [documentation checks](docs/maintainers/writing-docs.md#verify-the-claims-that-changed); rerunning unrelated runtime tests is not a substitute for checking a snippet or its explanation.
 
@@ -42,6 +42,6 @@ Performance measurements are separate from correctness tests and need a quiet ho
 
 Describe the concrete problem and the resulting behavior. Include reproduction steps when they help, the checks you ran, and any checks you could not run. Call out changes to public contracts, defaults, resource limits, or disclosure behavior so reviewers can assess their effect on existing applications.
 
-Keep unrelated refactoring and generated output out of the diff. When a public API doc comment changes, regenerate its reference with `npm run api-docs` and include the resulting pages. Never include credentials or private request data in fixtures, logs, or screenshots.
+Keep unrelated refactoring and generated output out of the diff. When a public API doc comment changes, regenerate its reference with `pnpm run api-docs` and include the resulting pages. Never include credentials or private request data in fixtures, logs, or screenshots.
 
 The documentation website should link to this guide rather than publish a second copy of the contribution instructions.

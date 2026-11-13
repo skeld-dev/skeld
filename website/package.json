@@ -5,11 +5,11 @@
   "scripts": {
     "dev": "vite",
     "check": "tsc -b",
-    "build": "npm run check && vite build",
+    "build": "pnpm run check && vite build",
     "preview": "vite preview",
     "lint": "biome check . --error-on-warnings",
     "knip": "knip --directory .. --workspace @skeld/website",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "pnpm run build && wrangler deploy"
   },
   "dependencies": {
     "@lightstart/components": "github:ul0gic/lightstart#35c5a123d1e09f1c2fe9e1ce0b408ec7003a916e",

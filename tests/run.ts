@@ -31,7 +31,7 @@ function scriptsFor(): string[] {
     return ['logging/log-destination.ts'];
   }
   if (args.length !== 0 || (mode !== 'all' && !categories.includes(mode))) {
-    throw new Error(`Usage: npm test -- [all|${categories.join('|')}|diag|collector --collector <path>|destination]`);
+    throw new Error(`Usage: pnpm test [all|${categories.join('|')}|diag|collector --collector <path>|destination]`);
   }
   return (mode === 'all' ? categories : [mode]).flatMap((category) => {
     const scripts = readdirSync(new URL(`${category}/`, import.meta.url))

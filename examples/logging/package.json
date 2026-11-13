@@ -11,6 +11,6 @@
     "call": "node --conditions=skeld-source client.ts"
   },
   "dependencies": {
-    "@skeld/core": "0.0.2"
+    "@skeld/core": "workspace:*"
   }
 }

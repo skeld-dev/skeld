@@ -98,14 +98,14 @@ function tsBlocks(page: string): Block[] {
 }
 
 async function installPacked(project: string): Promise<void> {
-  const packed = await run('npm', ['pack', '--workspace', '@skeld/core', '--pack-destination', project], root);
+  const packed = await run('pnpm', ['--filter', '@skeld/core', 'pack', '--pack-destination', project], root);
   if (packed.code !== 0) {
-    throw new CouldNotRun(`npm pack exited ${String(packed.code)}: ${packed.stderr.trim()}`);
+    throw new CouldNotRun(`pnpm pack exited ${String(packed.code)}: ${packed.stderr.trim()}`);
   }
   const tarballs = readdirSync(project).filter((name) => name.endsWith('.tgz'));
   const [tarball] = tarballs;
   if (tarball === undefined || tarballs.length !== 1) {
-    throw new CouldNotRun(`npm pack left ${tarballs.length} tarballs`);
+    throw new CouldNotRun(`pnpm pack left ${tarballs.length} tarballs`);
   }
   const scope = join(project, 'node_modules/@skeld');
   mkdirSync(scope, { recursive: true });
@@ -178,7 +178,7 @@ function findings(output: string, blocks: readonly Block[], page: string): strin
 
 async function check(page: string, shown: string): Promise<number> {
   if (!existsSync(builtMarker)) {
-    throw new CouldNotRun(`${relative(root, builtMarker)} is missing; build first with npx tsc -b packages/core`);
+    throw new CouldNotRun(`${relative(root, builtMarker)} is missing; build first with pnpm exec tsc -b packages/core`);
   }
   if (!existsSync(page)) {
     throw new CouldNotRun(`${page} does not exist`);

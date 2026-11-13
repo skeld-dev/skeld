@@ -10,7 +10,7 @@ A server writes structured JSON lines to stdout. The options, the record format,
 
 ## Repository
 
-An npm workspaces monorepo. Source runs unbuilt with `node --conditions=skeld-source`, which resolves `@skeld/core` to `packages/core/src`.
+A pnpm workspaces monorepo. Source runs unbuilt with `node --conditions=skeld-source`, which resolves `@skeld/core` to `packages/core/src`.
 
 | Workspace       | What                                                                 |
 | --------------- | -------------------------------------------------------------------- |
@@ -24,32 +24,32 @@ An npm workspaces monorepo. Source runs unbuilt with `node --conditions=skeld-so
 
 ## Development
 
-Requires Node 26.13.0 (`.nvmrc`).
+Requires Node 26.13.0 (`.nvmrc`) and pnpm 12.19.0 (pinned in `package.json`). Install that pnpm version with `npm install --global pnpm@12.19.0 --allow-scripts=pnpm` if needed.
 
 ```sh
-npm install
+pnpm install
 ```
 
-Run every command from the repository root.
+Run every command from the repository root. `pnpm-workspace.yaml` defines the workspaces; `pnpm-lock.yaml` is the only dependency lockfile. Use `pnpm install --frozen-lockfile` for CI and reproducible installs. Internal packages use `workspace:*` to require the local checkout.
 
 | Command                                                                                                  | Does                                                                                                     |
 | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `npx tsc -b --force`                                                                                     | type-checks and builds every project                                                                     |
-| `npm test`                                                                                               | builds and runs all ordinary correctness checks; `npm test -- security` selects a category               |
-| `npx biome check .`                                                                                      | formats and lints                                                                                        |
-| `npx knip`                                                                                               | finds unused files, exports and dependencies                                                             |
+| `pnpm exec tsc -b --force`                                                                               | type-checks and builds every project                                                                     |
+| `pnpm test`                                                                                              | builds and runs all ordinary correctness checks; `pnpm test security` selects a category                 |
+| `pnpm exec biome check .`                                                                                | formats and lints                                                                                        |
+| `pnpm exec knip`                                                                                         | finds unused files, exports and dependencies                                                             |
 | `semgrep scan --config p/typescript --config p/nodejs --config .semgrep --metrics=off --error --quiet .` | static analysis                                                                                          |
-| `npm audit --omit=dev --workspace @skeld/core`                                                           | audits the published package's dependencies                                                              |
+| `pnpm audit --prod`                                                                                      | audits production dependencies across the workspace                                                      |
 | `node tools/check-readme-example.ts`                                                                     | checks that the package README's example matches `examples/hello` byte for byte                          |
-| `npm run examples-check`                                                                                 | builds and runs all examples, checking clients, refusals, logging and graceful shutdown                  |
-| `npm publish --dry-run --workspace @skeld/core`                                                          | lists what the package would publish, without publishing                                                 |
-| `npm run bench`                                                                                          | builds `packages/core` and runs the benchmark, about 11 minutes; run it with nothing else on the machine |
+| `pnpm run examples-check`                                                                                | builds and runs all examples, checking clients, refusals, logging and graceful shutdown                  |
+| `pnpm --filter @skeld/core publish --dry-run`                                                            | lists what the package would publish, without publishing                                                 |
+| `pnpm run bench`                                                                                         | builds `packages/core` and runs the benchmark, about 11 minutes; run it with nothing else on the machine |
 
 Run the hello example from source, with the client in a second shell:
 
 ```sh
-npm run start --workspace @skeld/example-hello
-npm run call --workspace @skeld/example-hello
+pnpm --filter @skeld/example-hello run start
+pnpm --filter @skeld/example-hello run call
 ```
 
 Continue with the [logging example](examples/logging/README.md) for classified fields and request IDs, or the

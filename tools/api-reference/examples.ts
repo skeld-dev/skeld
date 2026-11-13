@@ -4,6 +4,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { display, type Entry, namespaceSubpath, type PublicSymbol, type Refusal, root } from './walk.ts';
 
 export type Rule =
@@ -56,7 +57,7 @@ interface Run {
   readonly timedOut: boolean;
 }
 
-const tsc = join(root, 'node_modules/.bin/tsc');
+const tsc = fileURLToPath(new URL('bin/tsc', import.meta.resolve('typescript/package.json')));
 const examplesDir = join(root, 'examples');
 const diagnosticPattern = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
 // Why: An example is one line; one that has not exited by now is hung, not slow.

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@skeld/core": "0.0.2",
+    "@skeld/core": "workspace:*",
     "@hono/node-server": "2.1.5",
     "@lightstart/server": "file:vendor/lightstart-server-0.1.0-0b4cc663.tgz",
     "autocannon": "8.0.0",

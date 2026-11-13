@@ -52,4 +52,4 @@ For malformed JSON lines, also check whether another writer shares stdout. For m
 
 Run the [hello example](../../examples/hello/README.md) to isolate basic routing and contract behavior, the [logging example](../../examples/logging/README.md) for classification, or the [service example](../../examples/service/README.md) for scoped hooks and cleanup. Keep the failing input small and remove credentials before sharing it.
 
-From the repository root, `npm run examples-check` exercises those examples against real local HTTP servers and closes the servers it creates. See [test categories](../../tests/README.md) for focused regression checks; performance measurements live separately under [benchmarks](../../benchmarks/README.md).
+From the repository root, `pnpm run examples-check` exercises those examples against real local HTTP servers and closes the servers it creates. See [test categories](../../tests/README.md) for focused regression checks; performance measurements live separately under [benchmarks](../../benchmarks/README.md).

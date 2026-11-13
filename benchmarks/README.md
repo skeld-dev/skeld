@@ -19,7 +19,7 @@ configuration, comparator versions and raw results with any claim.
 Run from the repository root. The HTTP runner builds core itself:
 
 ```sh
-npm run bench
+pnpm run bench
 ```
 
 Schema scripts use the source condition. The comparator directory must already contain the dependencies
@@ -36,10 +36,10 @@ Type-cost fixtures consume built package types. They stay out of the ordinary so
 measurement workloads to every developer check. Choose one configuration explicitly:
 
 ```sh
-npm run check
+pnpm run check
 node node_modules/typescript/bin/tsc -p benchmarks/type-cost/tsconfig.json --extendedDiagnostics
 ```
 
 The neighboring `tsconfig.500.json`, `tsconfig.cookies.json`, `tsconfig.derived.json` and `tsconfig.unions.json`
 select the other fixtures. The combined logging destination correctness/latency check remains in
-`tests/logging/log-destination.ts` and runs explicitly through `npm test -- destination`.
+`tests/logging/log-destination.ts` and runs explicitly through `pnpm test destination`.

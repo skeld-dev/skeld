@@ -2,16 +2,16 @@
 
 This task service creates and reads tasks. It keeps at most 100 in memory and clears them at shutdown. It has no authentication or durable storage; it is a local example of organizing the core APIs.
 
-From the repository root, after `npm install`:
+From the repository root, after `pnpm install`:
 
 ```sh
-npm run start --workspace @skeld/example-service
+pnpm --filter @skeld/example-service run start
 ```
 
 In a second terminal:
 
 ```sh
-npm run call --workspace @skeld/example-service
+pnpm --filter @skeld/example-service run call
 ```
 
 On a fresh server, the client prints:
