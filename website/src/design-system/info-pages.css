@@ -1,0 +1,131 @@
+/* Does: Styles getting-started and policy pages with the shared Polar palette. */
+/* Holds: Prose stays readable, commands scroll locally and navigation works at narrow widths. */
+
+.info-page {
+  padding-block: 160px 100px;
+}
+.info-heading {
+  padding-bottom: 48px;
+  border-bottom: 1px solid var(--color-line);
+}
+.info-heading h1 {
+  margin-block: 24px;
+  font-size: clamp(36px, 5vw, 64px);
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+}
+.info-heading > p:last-child {
+  max-width: 600px;
+  color: var(--color-readable);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.info-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 740px);
+  gap: clamp(32px, 6vw, 100px);
+  padding-top: 48px;
+}
+.info-navigation {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.info-navigation a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-readable);
+  font-size: 12px;
+}
+.info-navigation a[aria-current="page"] {
+  color: var(--color-ice);
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+.info-navigation a:hover {
+  color: var(--color-frost);
+}
+.info-content {
+  min-width: 0;
+  color: var(--color-soft);
+  font-size: 15px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.info-notice + section,
+.info-content section + section,
+.info-content > p + section {
+  margin-top: 40px;
+}
+.info-content h2 {
+  margin-bottom: 12px;
+  color: var(--color-frost);
+  font-size: clamp(21px, 2vw, 26px);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+}
+.info-content p + p {
+  margin-top: 14px;
+}
+.info-content a {
+  color: var(--color-ice);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.info-content a:hover {
+  color: var(--color-frost);
+}
+.info-content code {
+  font-size: 0.85em;
+}
+.info-content pre {
+  max-width: 100%;
+  margin-block: 20px;
+  padding: 20px 24px;
+  overflow-x: auto;
+  background: var(--color-editor);
+  color: var(--color-editor-ink);
+  line-height: 1.8;
+  overflow-wrap: normal;
+}
+.info-notice {
+  border-left: 2px solid var(--color-ice);
+  padding: 20px 24px;
+  background: var(--color-raised);
+  font-size: 14px;
+}
+.info-notice strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-frost);
+  font-weight: 600;
+}
+.info-content .text-link {
+  display: inline-flex;
+  margin-top: 20px;
+  gap: 12px;
+}
+@media (max-width: 760px) {
+  .info-page {
+    padding-block: 128px 64px;
+  }
+  .info-heading {
+    padding-bottom: 32px;
+  }
+  .info-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    padding-top: 24px;
+  }
+  .info-navigation {
+    flex-direction: row;
+    flex-wrap: wrap;
+    column-gap: 24px;
+  }
+  .info-content pre {
+    padding: 16px;
+  }
+}

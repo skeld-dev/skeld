@@ -1,0 +1,182 @@
+/* Does: Frames the framework decisions with a left-edge glacial shelf and a readable text column. */
+/* Holds: Artwork stays clear of the copy; layout and content remain complete without scripts or motion. */
+
+.principles-section {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  background: var(--color-depth);
+  padding-block: 80px 64px;
+  border-top: 1px solid var(--color-line);
+}
+.principles-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: clamp(52px, 7vw, 112px);
+}
+.principles-heading {
+  position: relative;
+  min-height: 600px;
+}
+.principles-heading .section-label {
+  margin-bottom: 22px;
+}
+.principles-heading h2 {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(44px, 4.6vw, 70px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.065em;
+}
+.principles-heading h2 span {
+  color: var(--color-ice);
+}
+.principles-intro {
+  position: relative;
+  z-index: 1;
+  max-width: 350px;
+  margin-top: 24px;
+  color: var(--color-soft);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.principles-art {
+  position: absolute;
+  top: 285px;
+  right: -24px;
+  width: calc(100% + max(var(--spacing-gutter), (100vw - 1488px) / 2) + 24px);
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, #000 76%, transparent 100%);
+}
+.principles-art img {
+  width: 100%;
+  height: auto;
+}
+.principle-list {
+  position: relative;
+  align-self: center;
+  padding-block: 4px;
+}
+.principle {
+  padding-block: 32px;
+  border-top: 1px solid var(--color-outline);
+}
+.principle:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.principle:last-child {
+  padding-bottom: 0;
+}
+.principle h3 {
+  margin: 0 0 14px;
+  color: var(--color-frost);
+  font-size: clamp(22px, 1.9vw, 28px);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.principle p {
+  max-width: 480px;
+  margin: 0;
+  color: var(--color-readable);
+  font-size: 14px;
+  line-height: 1.85;
+}
+.principle-detail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+  color: var(--color-ice);
+  font: 10px / 1.7 var(--font-mono);
+}
+.principle-detail > span:not(.principle-refusal) {
+  color: var(--color-readable);
+}
+.principle-refusal {
+  color: var(--color-warning);
+  font-size: 16px;
+  line-height: 1;
+}
+.principle-detail svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+@media (min-width: 761px) {
+  .principles-section {
+    scroll-margin-top: -70px;
+  }
+}
+@media (max-width: 1120px) {
+  .principles-shell {
+    gap: 44px;
+  }
+  .principles-heading {
+    min-height: 570px;
+  }
+  .principles-heading h2 {
+    font-size: clamp(40px, 4.5vw, 50px);
+  }
+  .principles-intro {
+    font-size: 14px;
+  }
+  .principles-art {
+    top: 300px;
+  }
+  .principle {
+    padding-block: 26px;
+  }
+  .principle-detail {
+    column-gap: 7px;
+  }
+}
+@media (max-width: 760px) {
+  .principles-section {
+    padding-block: 48px 52px;
+  }
+  .principles-shell {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .principles-heading {
+    min-height: 0;
+  }
+  .principles-heading h2 {
+    font-size: clamp(39px, 8.2vw, 58px);
+  }
+  .principles-heading .section-label {
+    margin-bottom: 20px;
+  }
+  .principles-intro {
+    max-width: 360px;
+    margin-top: 20px;
+  }
+  .principles-art {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: min(540px, calc(100% + var(--spacing-gutter)));
+    height: clamp(170px, 45vw, 260px);
+    margin-top: 20px;
+    margin-left: calc(-1 * var(--spacing-gutter));
+    overflow: clip;
+    mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+  }
+  .principle h3 {
+    font-size: 24px;
+    text-wrap: initial;
+  }
+  .principle p {
+    max-width: 540px;
+    font-size: 14px;
+    line-height: 1.8;
+  }
+  .principle-detail {
+    font-size: 10px;
+  }
+}

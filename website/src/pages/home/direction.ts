@@ -1,53 +1,17 @@
-// Does:  Renders the current core status and subsequent areas of work.
-// Holds: Future modules are presented as direction rather than available functionality.
+// Does:  Invites visitors to build their first API through the getting-started page.
+// Holds: The CTA leads to available installation guidance without claiming a published package.
 
 import { html } from '@lightstart/light/html/core';
 
 export function direction() {
   return html`
-    <section class="direction-section section-shell" id="direction" aria-labelledby="direction-title">
-      <div class="direction-top">
-        <p class="section-label">
-          <img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
-          What comes next
-        </p>
-        <span class="development-label">Core complete</span>
-      </div>
-      <div class="direction-content">
-        <h2 id="direction-title">
-          The core comes first.
-          <br />
-          Everything else follows.
-        </h2>
-        <div>
-          <p>
-            The core brings contracts, validation, serialization, and structured logging together. The next work builds
-            on that foundation.
-          </p>
-          <a class="text-link" href="#contract">
-            Explore the foundation
-            <svg aria-hidden="true"><use href="#arrow"></use></svg>
-          </a>
-        </div>
-      </div>
-      <div class="roadmap">
-        <div class="roadmap-item current">
-          <span class="roadmap-dot"></span>
-          <strong>Core</strong>
-          <span>Complete</span>
-        </div>
-        <div class="roadmap-connector" aria-hidden="true"></div>
-        <div class="roadmap-item">
-          <span class="roadmap-dot"></span>
-          <strong>Stability</strong>
-          <span>Ongoing verification</span>
-        </div>
-        <div class="roadmap-connector" aria-hidden="true"></div>
-        <div class="roadmap-item">
-          <span class="roadmap-dot"></span>
-          <strong>Modules</strong>
-          <span>Built on a solid base</span>
-        </div>
+    <section class="direction-section" id="direction" aria-labelledby="direction-title">
+      <div class="direction-art" aria-hidden="true"><img src="/assets/polar-ice-peak.png" alt="" width="2172" height="724" loading="lazy" decoding="async" /></div>
+      <div class="section-shell direction-shell">
+        <p class="section-label"><img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />Start building</p>
+        <h2 id="direction-title">Make your first<br /><span>request.</span></h2>
+        <p class="direction-description">Define a contract. Write a handler. See what Skeld checks before the data reaches your code.</p>
+        <a class="button primary" href="/start/">Get started<svg aria-hidden="true"><use href="#arrow"></use></svg></a>
       </div>
     </section>
   `;

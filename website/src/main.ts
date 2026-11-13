@@ -8,13 +8,15 @@ import { mountNavigation } from './components/site-header.ts';
 import { mountContractWalkthrough } from './pages/home/request-journey.ts';
 import { mountHeroMotion } from './pages/home/hero-motion.ts';
 import { homePage } from './pages/home/page.ts';
+import { infoPage } from './pages/info/page.ts';
 
 const root = document.getElementById('app');
 if (root === null) {
   throw new Error('The site entry requires an #app element');
 }
 
-render(homePage(), root, { adopt: true });
+const pageName = document.body.dataset.page;
+render(pageName === undefined ? homePage() : infoPage(pageName), root, { adopt: true });
 // Why: Package declarations allow explicit undefined; omit absent members under exactOptionalPropertyTypes.
 const { events, mixins, ...tabDefinition } = tabs;
 View.define({
@@ -25,10 +27,16 @@ View.define({
   style: false,
   firstUpdated() {
     tabs.firstUpdated?.call(this);
-    this.querySelector('[role=tablist]')?.setAttribute('aria-label', 'Contract flow');
+    this.querySelector('[role=tablist]')?.setAttribute(
+      'aria-label',
+      this.getAttribute('data-tab-label') ?? 'Contract flow',
+    );
   },
 });
-const cleanups = [mountNavigation(root), mountContractWalkthrough(root), mountHeroMotion(root)];
+const cleanups = [mountNavigation(root)];
+if (pageName === undefined) {
+  cleanups.push(mountContractWalkthrough(root), mountHeroMotion(root));
+}
 document.documentElement.dataset.enhanced = 'true';
 
 if (import.meta.hot !== undefined) {

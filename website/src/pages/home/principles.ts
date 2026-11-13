@@ -1,79 +1,59 @@
-// Does:  Renders the framework principles on the landing page.
-// Holds: Performance language states an approach without claiming measured superiority.
+// Does:  Explains the framework's choices about bounds, secret exposure and client verification.
+// Holds: Copy describes core behavior; the glacier is decorative and the section needs no JavaScript.
 
 import { html } from '@lightstart/light/html/core';
 
 export function principles() {
   return html`
-    <section class="principles-section section-shell" id="principles" aria-labelledby="principles-title">
-      <div class="principles-heading">
-        <p class="section-label">
-          <img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
-          The principles
-        </p>
-        <h2 id="principles-title">
-          Strength starts
-          <br />
-          at the core.
-        </h2>
-        <p>
-          A small foundation with a clear point of view.
-          <br />
-          Security and performance are design constraints from the start.
-        </p>
-        <div class="boundary-art" aria-hidden="true">
-          <svg viewBox="0 0 340 180">
-            <path
-              d="M20 28h145l55 55-55 55H20V28Zm300 14H175l-55 55 55 55h145V42Z"
-              fill="none"
-              stroke="currentColor"
-            ></path>
-            <path d="m120 97 45-45 55 31-45 45Z" fill="currentColor" fill-opacity=".07" stroke="currentColor"></path>
-            <path d="M20 166h300M20 160v12m300-12v12" fill="none" stroke="currentColor" stroke-opacity=".45"></path>
-          </svg>
-          <span>Agreement, by design.</span>
+    <section class="principles-section" id="principles" aria-labelledby="principles-title">
+      <div class="section-shell principles-shell">
+        <div class="principles-heading">
+          <p class="section-label">
+            <img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
+            Why Skeld
+          </p>
+          <h2 id="principles-title">The defaults<br /><span>are deliberate.</span></h2>
+          <p class="principles-intro">
+            Skeld makes limits, secret exposure and response checks part of how you define an API.
+          </p>
+          <div class="principles-art" aria-hidden="true">
+            <img
+              src="/assets/glacier-shelf-overhang.png"
+              alt=""
+              width="1536"
+              height="1024"
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
         </div>
-      </div>
-      <div class="principle-list">
-        <article class="principle">
-          <span class="principle-icon" aria-hidden="true">[&nbsp;]</span>
-          <div>
-            <h3>Explicit at the edges.</h3>
+        <div class="principle-list">
+          <article class="principle">
+            <h3>Limits belong in the contract.</h3>
+            <p>Strings, arrays and records require bounds. Leaving one unbounded takes an explicit reason.</p>
+            <div class="principle-detail">
+              <code>maxLength</code><span aria-hidden="true">·</span><code>maxItems</code><span aria-hidden="true">·</span><code>maxProperties</code>
+            </div>
+          </article>
+          <article class="principle">
+            <h3>Secret exposure takes a decision.</h3>
             <p>
-              Declare what belongs in your system. Keep types, validation, and serialization connected to the same
-              contract.
+              A response schema containing a secret is rejected at startup unless its exposure is explicitly
+              declared with a reason.
             </p>
-            <span class="principle-tag">Contracts before conventions</span>
-          </div>
-        </article>
-        <article class="principle">
-          <span class="principle-icon" aria-hidden="true">{&nbsp;}</span>
-          <div>
-            <h3>Security in the foundation.</h3>
+            <div class="principle-detail"><span class="principle-refusal" aria-hidden="true">×</span><code>SECRET_IN_RESPONSE</code><span>Checked before serving requests</span></div>
+          </article>
+          <article class="principle">
+            <h3>The client checks, too.</h3>
             <p>
-              Sensitive data deserves deliberate handling. Build around clear boundaries and predictable failure, then
-              keep testing those assumptions.
+              Skeld's client validates declared JSON responses against the contract before returning typed data
+              to your code.
             </p>
-            <span class="principle-tag">Security as a design constraint</span>
-          </div>
-        </article>
-        <article class="principle">
-          <span class="principle-icon waveform" aria-hidden="true">
-            <i></i>
-            <i></i>
-            <i></i>
-            <i></i>
-            <i></i>
-          </span>
-          <div>
-            <h3>Performance with evidence.</h3>
-            <p>
-              Measure the work a request actually costs. Let repeatable benchmarks guide the core, and be precise about
-              what they prove.
-            </p>
-            <span class="principle-tag">Measure. Understand. Improve.</span>
-          </div>
-        </article>
+            <div class="principle-detail">
+              <span>JSON</span><svg aria-hidden="true"><use href="#arrow"></use></svg><span>Schema check</span><svg aria-hidden="true"><use href="#arrow"></use></svg><span>Typed result</span>
+            </div>
+          </article>
+        </div>
       </div>
     </section>
   `;

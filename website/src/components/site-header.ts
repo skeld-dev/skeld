@@ -17,7 +17,7 @@ function toggleMenu() {
 export function siteHeader() {
   return html`
     <header class="header">
-      <a class="brand" href="#top" aria-label="Skeld home">
+      <a class="brand" href="/#top" aria-label="Skeld home">
         <img class="brand-mark" src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
         <span>skeld</span>
       </a>
@@ -27,12 +27,12 @@ export function siteHeader() {
         @click=${closeMenu}
         aria-label="Main navigation"
       >
-        <a href="#contract">Framework</a>
-        <a href="#principles">Principles</a>
-        <a href="#direction">Direction</a>
+        <a href="/#contract">Framework</a>
+        <a href="/#principles">Why Skeld</a>
+        <a href="/#build">Examples</a>
       </nav>
-      <a class="header-cta" href="#contract">
-        Explore the core
+      <a class="header-cta" href="/start/">
+        Get started
         <svg aria-hidden="true"><use href="#arrow"></use></svg>
       </a>
       <button

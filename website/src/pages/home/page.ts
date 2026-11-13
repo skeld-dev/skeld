@@ -5,6 +5,7 @@ import { html } from '@lightstart/light/html/core';
 import { siteFooter } from '../../components/site-footer.ts';
 import { siteHeader } from '../../components/site-header.ts';
 import { symbols } from '../../components/symbols.ts';
+import { buildExample } from './build-example.ts';
 import { contractWalkthrough } from './contract-walkthrough.ts';
 import { direction } from './direction.ts';
 import { hero } from './hero.ts';
@@ -14,7 +15,7 @@ export function homePage() {
   return html`
     <a class="skip" href="#main">Skip to content</a>
     ${symbols()} ${siteHeader()}
-    <main id="main" tabindex="-1">${hero()} ${contractWalkthrough()} ${principles()} ${direction()}</main>
+    <main id="main" tabindex="-1">${hero()} ${contractWalkthrough()} ${principles()} ${buildExample()} ${direction()}</main>
     ${siteFooter()}
   `;
 }
