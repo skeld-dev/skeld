@@ -6,6 +6,7 @@ export interface DocDefinition {
   url: string;
   label: string;
   group: string;
+  parent?: string;
 }
 export interface DocHeading {
   id: string;

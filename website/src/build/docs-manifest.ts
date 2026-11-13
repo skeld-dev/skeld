@@ -44,7 +44,7 @@ const groups = [
   [
     'API reference',
     [
-      ['api/README', 'Modules'],
+      ['api/README', 'Core API'],
       ['api/core/contract', 'Contract'],
       ['api/core/schema', 'Schema'],
       ['api/core/server', 'Server'],
@@ -66,5 +66,6 @@ export const docDefinitions: DocDefinition[] = groups.flatMap(([group, entries])
     url: `/docs/${path.replace(/README$/, '').replace(/\/$/, '')}${path === 'README' ? '' : '/'}`,
     label,
     group,
+    ...(path.startsWith('api/core/') ? { parent: '/docs/api/' } : {}),
   })),
 );

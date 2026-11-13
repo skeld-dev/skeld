@@ -1,8 +1,8 @@
-# API reference
+# Core API
 
-Import from a subpath such as `@skeld/core/server`. There is no `@skeld/core` root export.
+The Core module is distributed as `@skeld/core`. Its public API is organized into entry points, such as `@skeld/core/server`. Import from these subpaths; there is no `@skeld/core` root export.
 
-| Module                             | Use it for                                                           |
+| Entry point                        | Use it for                                                           |
 | ---------------------------------- | -------------------------------------------------------------------- |
 | [contract](core/contract.md)       | Route declarations, request and reply types, shared error bodies     |
 | [schema](core/schema.md)           | Bounded schemas, composition, inferred types, sensitivity            |

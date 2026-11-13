@@ -8,17 +8,29 @@ import { siteHeader } from '../../components/site-header.ts';
 import { symbols } from '../../components/symbols.ts';
 import type { DocDefinition, DocHeading, DocPage } from './model.ts';
 
+function topicLink(page: DocPage, definition: DocDefinition, label = definition.label) {
+  return html`<a href=${definition.url} aria-current=${definition.url === page.url ? 'page' : 'false'}>${label}</a>`;
+}
+function topic(page: DocPage, definition: DocDefinition, definitions: DocDefinition[]) {
+  const children = definitions.filter((entry) => entry.parent === definition.url);
+  if (children.length === 0) {
+    return topicLink(page, definition);
+  }
+  const current = page.url === definition.url || children.some((entry) => entry.url === page.url);
+  return html`
+    <details class=${current ? 'docs-nav-branch is-current' : 'docs-nav-branch'} ?open=${current}>
+      <summary class="docs-nav-parent">${definition.label}<svg class="docs-nav-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"></path></svg></summary>
+      <ul class="docs-nav-children"><li>${topicLink(page, definition, 'Overview')}</li>${children.map((entry) => html`<li>${topicLink(page, entry)}</li>`)}</ul>
+    </details>
+  `;
+}
 function navigation(page: DocPage, definitions: DocDefinition[]) {
   const groups = [...new Set(definitions.map((definition) => definition.group))];
   return groups.map(
     (group) => html`
     <div class="docs-nav-group"><p>${group}</p>${definitions
-      .filter((definition) => definition.group === group)
-      .map(
-        (definition) => html`
-      <a href=${definition.url} aria-current=${definition.url === page.url ? 'page' : 'false'}>${definition.label}</a>
-    `,
-      )}</div>
+      .filter((definition) => definition.group === group && definition.parent === undefined)
+      .map((definition) => topic(page, definition, definitions))}</div>
   `,
   );
 }

@@ -87,7 +87,7 @@ A GitHub release can distribute a built `npm pack` tarball while npm account ver
 
 ## Documentation rendering
 
-`src/build/docs-manifest.ts` explicitly selects the public guides, concepts, logging and generated API pages. The content stays in root `docs/`; there is no authored website copy of those articles. Maintainer notes are excluded. Marked and Beautiful Mermaid are development dependencies used during compilation, with no Markdown or diagram library in the browser bundle.
+`src/build/docs-manifest.ts` explicitly selects the public guides, concepts, logging and generated API pages. Parent links in the manifest place core entry points beneath an expandable Core API item. Native disclosures work without JavaScript and open automatically for the overview or a child page, in both desktop and mobile navigation. The content stays in root `docs/`; there is no authored website copy of those articles. Maintainer notes are excluded. Marked and Beautiful Mermaid are development dependencies used during compilation, with no Markdown or diagram library in the browser bundle.
 
 The build generates complete HTML, unique heading anchors, previous/next links and an on-demand search index. Links between published pages and heading fragments are checked at build time. Referenced checkout files are served as exact text copies under `/docs/files/` while the framework repository is unpublished; only the explicitly allowed public source locations can be included. A broken link fails the build. Vite watches both docs and referenced source files during development.
 

@@ -70,6 +70,51 @@
   background: var(--color-active);
   border-color: var(--color-ice);
 }
+.docs-nav-parent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  margin-right: 12px;
+  padding: 7px 12px;
+  color: var(--color-readable);
+  font-size: 12px;
+  line-height: 1.7;
+  list-style: none;
+  cursor: pointer;
+}
+.docs-nav-parent:focus-visible {
+  outline: 2px solid var(--color-ice);
+  outline-offset: -2px;
+}
+.docs-nav-parent::-webkit-details-marker {
+  display: none;
+}
+.docs-nav-parent:hover {
+  color: var(--color-frost);
+  background: var(--color-surface);
+}
+.docs-nav-branch.is-current > .docs-nav-parent {
+  color: var(--color-ice);
+}
+.docs-nav-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.docs-nav-branch[open] .docs-nav-chevron {
+  transform: rotate(90deg);
+}
+.docs-nav-children {
+  list-style: none;
+  margin: 4px 0 0 14px;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--color-line);
+}
 .docs-search {
   position: relative;
   margin-bottom: 26px;
@@ -98,7 +143,7 @@
   background: transparent;
   color: var(--color-frost);
   font: 12px var(--font-sans);
-  outline-offset: -2px;
+  outline: none;
 }
 .docs-search input::placeholder {
   color: var(--color-readable);
@@ -467,7 +512,7 @@
     margin-bottom: 28px;
     border-bottom: 1px solid var(--color-line);
   }
-  .docs-mobile-navigation summary {
+  .docs-mobile-navigation > summary {
     padding: 14px 0;
     cursor: pointer;
     color: var(--color-ice);
