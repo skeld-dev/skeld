@@ -8,7 +8,7 @@ export function principles() {
     <section class="principles-section section-shell" id="principles" aria-labelledby="principles-title">
       <div class="principles-heading">
         <p class="section-label">
-          <span class="mini-mark"></span>
+          <img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
           The principles
         </p>
         <h2 id="principles-title">

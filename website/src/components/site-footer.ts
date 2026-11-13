@@ -7,9 +7,7 @@ export function siteFooter() {
   return html`
     <footer class="footer section-shell">
       <a class="brand" href="#top" aria-label="Back to top">
-        <svg class="brand-mark" aria-hidden="true">
-          <use href="#mark"></use>
-        </svg>
+        <img class="brand-mark" src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
         <span>skeld</span>
       </a>
       <p>Cold precision. Clear boundaries.</p>

@@ -18,9 +18,7 @@ export function siteHeader() {
   return html`
     <header class="header">
       <a class="brand" href="#top" aria-label="Skeld home">
-        <svg class="brand-mark" aria-hidden="true">
-          <use href="#mark"></use>
-        </svg>
+        <img class="brand-mark" src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
         <span>skeld</span>
       </a>
       <nav

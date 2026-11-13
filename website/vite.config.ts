@@ -1,15 +1,13 @@
-// Does:  Builds the landing page's initial HTML and its browser assets with Light and Tailwind.
+// Does:  Builds the landing page's initial HTML and its browser assets with Light.
 // Holds: Initial page content comes from the same templates the browser adopts.
 
 import { renderToString } from '@lightstart/light/markup';
-import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { homePage } from './src/pages/home/page.ts';
 
 export default defineConfig({
   appType: 'mpa',
   plugins: [
-    tailwindcss(),
     {
       name: 'skeld-page',
       transformIndexHtml: {

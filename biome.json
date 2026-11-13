@@ -250,14 +250,6 @@
       }
     },
     {
-      "includes": ["website/**/*.css"],
-      "css": {
-        "parser": {
-          "tailwindDirectives": true
-        }
-      }
-    },
-    {
       "includes": ["website/vite.config.ts"],
       "linter": {
         "rules": {

@@ -7,8 +7,7 @@
   },
   "workspaces": {
     "website": {
-      "entry": ["src/design-system/styles.css"],
-      "project": ["src/**/*.{ts,css}"]
+      "project": ["src/**/*.ts"]
     },
     "packages/*": {
       "project": ["src/**/*.ts"]

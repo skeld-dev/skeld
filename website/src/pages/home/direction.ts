@@ -8,7 +8,7 @@ export function direction() {
     <section class="direction-section section-shell" id="direction" aria-labelledby="direction-title">
       <div class="direction-top">
         <p class="section-label">
-          <span class="status-dot"></span>
+          <img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
           What comes next
         </p>
         <span class="development-label">Core complete</span>

@@ -1,12 +1,51 @@
 /* Does: Sets document defaults, focus and accessible scrolling. */
 /* Holds: Keyboard focus remains visible and high-contrast scrolling remains native. */
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0 solid;
 }
 html {
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  tab-size: 4;
   scroll-behavior: smooth;
   scroll-padding-top: 94px;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+  font-size: 1em;
+}
+small {
+  font-size: 80%;
+}
+img,
+svg {
+  display: block;
+  vertical-align: middle;
+}
+img {
+  max-width: 100%;
+  height: auto;
+}
+[hidden]:not([hidden="until-found"]) {
+  display: none;
 }
 body {
   margin: 0;
@@ -22,7 +61,10 @@ a {
 }
 button {
   font: inherit;
+  letter-spacing: inherit;
   color: inherit;
+  background: transparent;
+  appearance: button;
   cursor: pointer;
 }
 a {
@@ -41,9 +83,6 @@ a:focus-visible,
 }
 button {
   border-radius: 0;
-}
-svg {
-  display: block;
 }
 ::selection {
   background: var(--color-ice);

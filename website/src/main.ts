@@ -5,7 +5,7 @@ import tabs from '@lightstart/components/navigation/tabs.js';
 import View from '@lightstart/light';
 import { disposeTree, render } from '@lightstart/light/html';
 import { mountNavigation } from './components/site-header.ts';
-import { mountContractWalkthrough } from './pages/home/contract-walkthrough.ts';
+import { mountContractWalkthrough } from './pages/home/request-journey.ts';
 import { mountHeroMotion } from './pages/home/hero-motion.ts';
 import { homePage } from './pages/home/page.ts';
 
@@ -15,20 +15,20 @@ if (root === null) {
 }
 
 render(homePage(), root, { adopt: true });
-// Why: The site owns component styling through its Polar tokens, including the Light tabs.
 // Why: Package declarations allow explicit undefined; omit absent members under exactOptionalPropertyTypes.
 const { events, mixins, ...tabDefinition } = tabs;
 View.define({
   ...tabDefinition,
   ...(events === undefined ? {} : { events }),
   ...(mixins === undefined ? {} : { mixins }),
+  // Why: The design system owns the tabs' Polar styling.
   style: false,
   firstUpdated() {
     tabs.firstUpdated?.call(this);
     this.querySelector('[role=tablist]')?.setAttribute('aria-label', 'Contract flow');
   },
 });
-const cleanups = [mountNavigation(root), mountContractWalkthrough(), mountHeroMotion(root)];
+const cleanups = [mountNavigation(root), mountContractWalkthrough(root), mountHeroMotion(root)];
 document.documentElement.dataset.enhanced = 'true';
 
 if (import.meta.hot !== undefined) {

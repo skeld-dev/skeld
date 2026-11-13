@@ -13,9 +13,9 @@
   line-height: 1;
 }
 .brand-mark {
-  width: 28px;
+  width: 32px;
   height: 32px;
-  fill: var(--color-ice);
+  object-fit: contain;
 }
 .button {
   padding: 17px 21px;
@@ -77,10 +77,9 @@ p {
   gap: 12px;
   margin: 0 0 25px;
 }
-.mini-mark {
-  height: 9px;
-  width: 9px;
-  border: 1px solid var(--color-ice);
-  transform: rotate(-45deg);
-  opacity: 0.8;
+.section-label img {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }

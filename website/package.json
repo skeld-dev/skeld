@@ -12,12 +12,10 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
-    "@lightstart/components": "github:ul0gic/lightstart#a7dfbe763a5e840a4a8203aa10345ae26bcad72c",
-    "@lightstart/light": "github:ul0gic/lightstart#0b3411fbd265d20b748a09279d982376ae0e98fe"
+    "@lightstart/components": "github:ul0gic/lightstart#35c5a123d1e09f1c2fe9e1ce0b408ec7003a916e",
+    "@lightstart/light": "github:ul0gic/lightstart#7b8145a237e85bcc12195fba97ef78607cc73778"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "4.3.5",
-    "tailwindcss": "4.3.5",
     "vite": "8.3.8",
     "wrangler": "4.161.0"
   }

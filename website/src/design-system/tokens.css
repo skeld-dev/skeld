@@ -1,7 +1,7 @@
 /* Does: Defines the canonical Polar palette, typefaces and layout tokens. */
-/* Holds: Tailwind utilities and authored CSS share the same runtime variables. */
+/* Holds: All site styles share native CSS custom properties. */
 
-@theme static {
+:root {
   --color-graphite: #111820;
   --color-ice: #b7e4f4;
   --color-frost: #eef4f7;
@@ -26,7 +26,18 @@
   --color-type: #bacfe4;
   --color-ice-hover: #d4f0fb;
   --color-soft: #d5e0e6;
-  --font-sans: "Sora", system-ui, sans-serif;
+  --color-readable: #bdcbd4;
+  --color-editor: #e5eef3;
+  --color-editor-ink: #243443;
+  --color-editor-muted: #4d626e;
+  --color-editor-line: #bdced8;
+  --color-editor-selection: #ccdfeb;
+  --color-editor-keyword: #75429c;
+  --color-editor-function: #83521c;
+  --color-editor-property: #245e83;
+  --color-editor-string: #21664e;
+  --color-editor-number: #a13e39;
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
   --spacing-gutter: clamp(24px, 5.5vw, 96px);
   --breakpoint-tablet: 47.5rem;
