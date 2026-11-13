@@ -13,7 +13,7 @@ export function siteFooter() {
             <p>A TypeScript backend framework<br />for sensitive data.</p>
           </div>
           <nav class="footer-navigation" aria-label="Footer">
-            <div><h2>Explore</h2><a href="/">Home</a><a href="/docs/">Documentation</a><a href="/security/">Security</a><a href="/docs/concepts/threat-model/">Threat model</a></div>
+            <div><h2>Explore</h2><a href="/">Home</a><a href="/docs/">Documentation</a><a href="/explore/">Explore</a><a href="/security/">Security</a><a href="/docs/concepts/threat-model/">Threat model</a></div>
             <div><h2>Build</h2><a href="/docs/guides/first-request/">Get started</a><a href="/docs/api/">API reference</a><a href="https://github.com/skeld-dev">Skeld on GitHub</a></div>
             <div><h2>Website</h2><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/license.txt">MIT license</a></div>
           </nav>

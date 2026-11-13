@@ -150,7 +150,7 @@ export function contractWalkthrough() {
             <button type="button" class="journey-run" data-journey-run><span aria-hidden="true">${() => (journeyPlaying.value ? 'Ⅱ' : '→')}</span>${() => (journeyPlaying.value ? 'Pause' : 'Run request')}</button>
           </div>
         </div>
-        <div class="journey-caption"><span>Input limits. Typed handlers. Declared responses.</span><span>Explore each boundary above.</span></div>
+        <div class="journey-caption"><span>Input limits. Typed handlers. Declared responses.</span><a href="/explore/">Explore more scenarios →</a></div>
       </div>
     </section>
   `;

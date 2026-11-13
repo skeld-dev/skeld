@@ -8,11 +8,13 @@ import type { Connect, Plugin } from 'vite';
 import { homePage } from '../pages/home/page.ts';
 import { privacyPage } from '../pages/privacy/page.ts';
 import { securityPage } from '../pages/security/page.ts';
+import { explorePage } from '../pages/explore/page.ts';
 import { termsPage } from '../pages/terms/page.ts';
 
 const pages = [
   { name: 'home', url: '/', render: homePage },
   { name: 'docs', url: '/docs/', render: undefined },
+  { name: 'explore', url: '/explore/', render: explorePage },
   { name: 'security', url: '/security/', render: securityPage },
   { name: 'privacy', url: '/privacy/', render: privacyPage },
   { name: 'terms', url: '/terms/', render: termsPage },
@@ -24,18 +26,21 @@ const pages = [
 }));
 
 export const pageInputs = Object.fromEntries(pages.map((page) => [page.name, page.template]));
-const startPaths = ['/start', '/start/', '/start/index.html'];
-const firstRequest = '/docs/guides/first-request/';
+const redirects = [
+  ...['/start', '/start/', '/start/index.html'].map((path) => ({ path, destination: '/docs/guides/first-request/' })),
+  ...['/scenarios', '/scenarios/', '/scenarios/index.html'].map((path) => ({ path, destination: '/explore/' })),
+];
 const license = () => readFileSync(new URL('../../../LICENSE', import.meta.url), 'utf8');
 
-const redirectStart: Connect.NextHandleFunction = (request, response, next) => {
+const redirectPage: Connect.NextHandleFunction = (request, response, next) => {
   const url = new URL(request.url ?? '/', 'http://localhost');
-  if (!startPaths.includes(url.pathname)) {
+  const destination = redirects.find((entry) => entry.path === url.pathname)?.destination;
+  if (destination === undefined) {
     next();
     return;
   }
   response.statusCode = 301;
-  response.setHeader('Location', firstRequest + url.search);
+  response.setHeader('Location', destination + url.search);
   response.end();
 };
 
@@ -43,7 +48,7 @@ export function pagesPlugin(): Plugin {
   return {
     name: 'skeld-pages',
     configureServer(server) {
-      server.middlewares.use(redirectStart);
+      server.middlewares.use(redirectPage);
       server.middlewares.use('/license.txt', (_request, response) => {
         response.setHeader('Content-Type', 'text/plain; charset=utf-8');
         response.end(license());
@@ -77,7 +82,7 @@ export function pagesPlugin(): Plugin {
       });
     },
     configurePreviewServer(server) {
-      server.middlewares.use(redirectStart);
+      server.middlewares.use(redirectPage);
     },
     transformIndexHtml: {
       order: 'pre',
@@ -101,7 +106,7 @@ export function pagesPlugin(): Plugin {
         this.emitFile({
           type: 'asset',
           fileName: '_redirects',
-          source: `${startPaths.map((path) => `${path} ${firstRequest} 301`).join('\n')}\n`,
+          source: `${redirects.map(({ path, destination }) => `${path} ${destination} 301`).join('\n')}\n`,
         });
       },
     },

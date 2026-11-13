@@ -98,3 +98,26 @@ The docs browser entry loads the shared Light header plus small search/copy/cont
 The docs retain the existing checkout instructions and release caveats. Rendering them does not validate every framework example anew; the generated API freshness check and focused browser/code-text checks are separate from the repository's consumer and HTTP example checks.
 
 The canonical STRIDE model lives in `docs/concepts/threat-model.md` and is rendered at `/docs/concepts/threat-model/`. `/security/` summarizes the controls and application responsibilities, linking to the model and its evidence. Review dates and test counts describe that assessment, not a continuing audit guarantee.
+
+## Scenario library
+
+`/explore/` is a static library of 20 prepared scenes across Requests, Responses,
+Logging, Startup, Errors, Request lifetime, Browser policies and Typed client.
+The searchable sidebar uses native disclosures and buttons. Drag a card (the grip
+on touch screens), click/tap it, or press Enter/Space. Each scene shows a three-step
+path, its result, relevant code, limits and a related comparison. Mobile uses a
+collapsible library and an explicit return action; reduced motion skips travel.
+The full outcome reference remains readable without JavaScript.
+
+`src/pages/explore/examples.ts` owns the typed `Example` catalog and category
+list. To add a scenario, supply a stable ID, category, title/question, prepared
+input, three meaningful stages, the last reached stage, result excerpt, code,
+explanation, limits, docs link and a valid comparison ID. New modules can add
+categories and content without changing the interaction controller. Use synthetic
+values and verify claims against core source and real regression behavior before
+adding them. Never label authored animation as measured execution.
+
+There is no core import, execution service, file import, submitted data, remote
+search or new runtime dependency. Search is transient page state. The former
+Boundary Lab remains removed. Verification evidence is recorded locally under
+`.project/features/input-scenarios/`.

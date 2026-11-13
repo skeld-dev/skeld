@@ -66,6 +66,7 @@ export function securityPage() {
           <li><p class="security-owner">Application · Authority</p><h3>May this caller do this?</h3><p>Your code checks identity, resource access and tenant ownership before acting.</p><span class="security-flow-note">A schema cannot grant permission.</span></li>
           <li><p class="security-owner">Core · Output</p><h3>What may leave?</h3><p>Declared responses project fields. Classified log fields follow their own disclosure rules.</p><span class="security-flow-note">Raw replies bypass response projection.</span></li>
         </ol>
+        <p><a class="text-link" href="/explore/">See which requests reach the handler →</a></p>
         <p class="security-flow-caption">These are policy boundaries within one process. Application code and plugins share its privileges.</p>
       </section>
       <section class="security-controls section-shell" aria-labelledby="controls-heading">
