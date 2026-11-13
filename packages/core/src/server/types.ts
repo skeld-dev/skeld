@@ -44,8 +44,8 @@ export interface ServerOptions {
   /** Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB). */
   readonly maxHeaderSize?: number;
   /**
-   * Time a request has from its route match to its response, in ms, at most 2 147 483 647 (default 30 000).
-   * Past it: 503 `TIMEOUT`, connection closed, at most a tenth of the limit or 10 ms late, whichever is greater.
+   * Time from the first asynchronous body or application wait to the response, in ms, at most 2 147 483 647 (default 30 000).
+   * Past it: 503 `TIMEOUT` and connection closed when the deadline sweep runs; event-loop stalls can delay expiry.
    */
   readonly handlerTimeoutMs?: number;
   /**

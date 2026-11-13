@@ -29,7 +29,7 @@ Read these in order, or jump to the task you are working on:
 | [Run a service](guides/running-a-service.md)                    | Set the public origin, proxy trust, timeouts, logging, and shutdown behavior           |
 | [Troubleshoot](guides/troubleshooting.md)                       | Diagnose startup failures, refused requests, missing logs, and invalid responses       |
 
-Two explanations connect those guides: [the request lifecycle](concepts/request-lifecycle.md) shows when each stage runs; [security boundaries](concepts/security-boundaries.md) names what Skeld enforces and what the application must supply.
+These explanations connect the guides: [the request lifecycle](concepts/request-lifecycle.md) shows when each stage runs; [security boundaries](concepts/security-boundaries.md) names what Skeld enforces and what the application must supply. The [core threat model](concepts/threat-model.md) maps actors, data flows and trust boundaries to STRIDE threats, controls and residual responsibilities.
 
 ## Look up a detail
 

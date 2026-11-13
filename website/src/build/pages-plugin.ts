@@ -7,11 +7,13 @@ import { renderToString } from '@lightstart/light/markup';
 import type { Connect, Plugin } from 'vite';
 import { homePage } from '../pages/home/page.ts';
 import { privacyPage } from '../pages/privacy/page.ts';
+import { securityPage } from '../pages/security/page.ts';
 import { termsPage } from '../pages/terms/page.ts';
 
 const pages = [
   { name: 'home', url: '/', render: homePage },
   { name: 'docs', url: '/docs/', render: undefined },
+  { name: 'security', url: '/security/', render: securityPage },
   { name: 'privacy', url: '/privacy/', render: privacyPage },
   { name: 'terms', url: '/terms/', render: termsPage },
 ].map((page) => ({

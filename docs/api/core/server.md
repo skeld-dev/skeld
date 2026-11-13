@@ -746,25 +746,25 @@ export interface ServerOptions {
 }
 ```
 
-| Field                  | Summary                                                                                                           |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `bodyLimit`            | Largest request body accepted, in bytes; a larger one is refused with 413 (default 1 MiB).                        |
-| `maxParamLength`       | Longest path parameter accepted, in bytes as received; a longer one is refused with 414 (default 100).            |
-| `pluginTimeoutMs`      | Time each plugin has to settle at `listen`, in milliseconds, at most 2 147 483 647 (default 10 000).              |
-| `pluginCloseTimeoutMs` | Time each registered disposer has to settle, in ms, at most 2 147 483 647 (default 10 000).                       |
-| `closeTimeoutMs`       | Time `close` waits for open connections before closing them, in ms, at most 2 147 483 647 (default 10 000).       |
-| `keepAliveTimeout`     | Time an idle keep-alive connection stays open, in milliseconds (default 72 000).                                  |
-| `requestTimeout`       | Time allowed to receive a whole request, in milliseconds (default 300 000).                                       |
-| `headersTimeout`       | Time allowed to receive the request headers, in milliseconds; at most `requestTimeout` (default 60 000).          |
-| `maxHeaderSize`        | Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB).               |
-| `handlerTimeoutMs`     | Time a request has from its route match to its response, in ms, at most 2 147 483 647 (default 30 000).           |
-| `trustProxy`           | Proxy addresses and CIDR ranges whose `X-Forwarded-For` sets `clientAddress` (default none).                      |
-| `securityHeaders`      | Whether responses carry `nosniff`, a frame ban and `cache-control: no-store` unless set (default true).           |
-| `redirectOrigins`      | Origins an absolute redirect `Location` may name, each exactly as `new URL(x).origin` writes it (default none).   |
-| `cors`                 | The cross-origin policy of every route, unless a `routes()` group sets its own (default none: no CORS header).    |
-| `publicOrigin`         | The origins the service is reached at, each exactly as `new URL(x).origin` writes it (default none).              |
-| `csrf`                 | The cross-site check on POST, PUT, PATCH and DELETE, unless a `routes()` group sets its own (default `baseline`). |
-| `log`                  | The structured log on stdout or a sink; `false` writes no record and calls no sink (default: stdout, no options). |
+| Field                  | Summary                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `bodyLimit`            | Largest request body accepted, in bytes; a larger one is refused with 413 (default 1 MiB).                                |
+| `maxParamLength`       | Longest path parameter accepted, in bytes as received; a longer one is refused with 414 (default 100).                    |
+| `pluginTimeoutMs`      | Time each plugin has to settle at `listen`, in milliseconds, at most 2 147 483 647 (default 10 000).                      |
+| `pluginCloseTimeoutMs` | Time each registered disposer has to settle, in ms, at most 2 147 483 647 (default 10 000).                               |
+| `closeTimeoutMs`       | Time `close` waits for open connections before closing them, in ms, at most 2 147 483 647 (default 10 000).               |
+| `keepAliveTimeout`     | Time an idle keep-alive connection stays open, in milliseconds (default 72 000).                                          |
+| `requestTimeout`       | Time allowed to receive a whole request, in milliseconds (default 300 000).                                               |
+| `headersTimeout`       | Time allowed to receive the request headers, in milliseconds; at most `requestTimeout` (default 60 000).                  |
+| `maxHeaderSize`        | Largest request header block accepted, in bytes; a larger one is refused with 431 (default 16 KiB).                       |
+| `handlerTimeoutMs`     | Time from the first asynchronous body or application wait to the response, in ms, at most 2 147 483 647 (default 30 000). |
+| `trustProxy`           | Proxy addresses and CIDR ranges whose `X-Forwarded-For` sets `clientAddress` (default none).                              |
+| `securityHeaders`      | Whether responses carry `nosniff`, a frame ban and `cache-control: no-store` unless set (default true).                   |
+| `redirectOrigins`      | Origins an absolute redirect `Location` may name, each exactly as `new URL(x).origin` writes it (default none).           |
+| `cors`                 | The cross-origin policy of every route, unless a `routes()` group sets its own (default none: no CORS header).            |
+| `publicOrigin`         | The origins the service is reached at, each exactly as `new URL(x).origin` writes it (default none).                      |
+| `csrf`                 | The cross-site check on POST, PUT, PATCH and DELETE, unless a `routes()` group sets its own (default `baseline`).         |
+| `log`                  | The structured log on stdout or a sink; `false` writes no record and calls no sink (default: stdout, no options).         |
 
 Source: `packages/core/src/server/types.ts:15`
 

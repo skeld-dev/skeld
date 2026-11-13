@@ -44,7 +44,7 @@ A write finishing does not prove the client consumed the body. The same distinct
 
 ## The deadline covers more than the handler
 
-`handlerTimeoutMs` starts at route match. It includes asynchronous hooks, waiting for the body, validation and response work, not just the function registered as the handler. Timer scheduling still depends on the event loop being able to run.
+`handlerTimeoutMs` starts when the request first waits for body data or an application promise. The same deadline remains active through later waits in hooks, the handler, response work and error handling; it does not restart at each stage. Synchronous work before the first wait is not counted, and synchronous work at any stage cannot be interrupted. Timer scheduling depends on the event loop being able to run.
 
 Once time has expired, continuing application work must cooperate with `request.signal`. A late database write can still happen if its API ignores cancellation. Design side effects and retries with that possibility in mind.
 

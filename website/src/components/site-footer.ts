@@ -13,9 +13,9 @@ export function siteFooter() {
             <p>A TypeScript backend framework<br />for sensitive data.</p>
           </div>
           <nav class="footer-navigation" aria-label="Footer">
-            <div><h2>Build</h2><a href="/docs/">Documentation</a><a href="/docs/guides/first-request/">Get started</a><a href="/#build">Code example</a><a href="/#contract">Follow a request</a></div>
-            <div><h2>Project</h2><a href="/#principles">Why Skeld</a><a href="https://github.com/skeld-dev">Skeld on GitHub</a><a href="/license.txt">MIT license</a></div>
-            <div><h2>Website</h2><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></div>
+            <div><h2>Explore</h2><a href="/">Home</a><a href="/docs/">Documentation</a><a href="/security/">Security</a><a href="/docs/concepts/threat-model/">Threat model</a></div>
+            <div><h2>Build</h2><a href="/docs/guides/first-request/">Get started</a><a href="/docs/api/">API reference</a><a href="https://github.com/skeld-dev">Skeld on GitHub</a></div>
+            <div><h2>Website</h2><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/license.txt">MIT license</a></div>
           </nav>
         </div>
         <div class="footer-bottom"><span class="footer-copyright">© 2026 ul0gic</span><a class="footer-note" href="https://github.com/alantriesagain/lightstart">Built with Lightstart</a><a href="#main" class="back-top">Back to top<svg aria-hidden="true"><use href="#arrow" transform="rotate(-90 12 12)"></use></svg></a></div>

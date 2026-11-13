@@ -14,7 +14,7 @@ function toggleMenu() {
   menuOpen.value = !menuOpen.value;
 }
 
-export function siteHeader(current?: 'home' | 'docs') {
+export function siteHeader(current?: 'home' | 'docs' | 'security') {
   return html`
     <header class="header">
       <a class="brand" href="/" aria-label="Skeld home">
@@ -29,6 +29,7 @@ export function siteHeader(current?: 'home' | 'docs') {
       >
         <a href="/" aria-current=${current === 'home' ? 'page' : 'false'}>Home</a>
         <a href="/docs/" aria-current=${current === 'docs' ? 'page' : 'false'}>Docs</a>
+        <a href="/security/" aria-current=${current === 'security' ? 'page' : 'false'}>Security</a>
       </nav>
       <a class="header-cta" href="/docs/guides/first-request/">
         Get started

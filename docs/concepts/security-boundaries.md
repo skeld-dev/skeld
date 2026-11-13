@@ -2,6 +2,8 @@
 
 Skeld moves recurring boundary checks into the framework so that routes use consistent behavior. Its useful security claim is a set of named mechanisms with defined limits. It does not establish that an application is secure simply because it starts successfully.
 
+For the underlying analysis, read the [core threat model](threat-model.md): its STRIDE register ties each threat to a boundary, treatment and verification evidence.
+
 ## What the framework enforces
 
 | Boundary          | Built-in behavior                                                                           | What it does not establish                                                                                         |

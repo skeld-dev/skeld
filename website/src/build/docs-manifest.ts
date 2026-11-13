@@ -28,6 +28,7 @@ const groups = [
     [
       ['concepts/request-lifecycle', 'Request lifecycle'],
       ['concepts/security-boundaries', 'Security boundaries'],
+      ['concepts/threat-model', 'Threat model'],
     ],
   ],
   [
