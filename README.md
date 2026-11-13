@@ -2,7 +2,7 @@
 
 Skeld is a TypeScript framework for services on Node 26: one contract declares each route's schemas, the engine on `node:http` validates and serializes from it, and a typed client calls it.
 
-The package, its install and its example are documented in [`packages/core/README.md`](packages/core/README.md).
+Start with the [documentation](docs/README.md): run your first request, design a contract, and understand the framework's security boundaries. The [package README](packages/core/README.md) contains installation instructions and a compact feature reference.
 
 ## Logging
 
@@ -15,9 +15,11 @@ An npm workspaces monorepo. Source runs unbuilt with `node --conditions=skeld-so
 | Workspace       | What                                                                 |
 | --------------- | -------------------------------------------------------------------- |
 | `packages/core` | `@skeld/core`, the published package                                 |
+| `docs/`         | [guides, concepts, API and logging references](docs/README.md)       |
 | `examples/`     | runnable [hello, logging and service examples](examples/README.md)   |
 | `benchmarks`    | [performance workloads and type-cost fixtures](benchmarks/README.md) |
 | `tests`         | [correctness checks organized by behavior](tests/README.md)          |
+| `website`       | [Light website, design system and local preview](website/README.md)  |
 | `tools`         | repository tools, such as the README example check                   |
 
 ## Development
@@ -52,6 +54,10 @@ npm run call --workspace @skeld/example-hello
 
 Continue with the [logging example](examples/logging/README.md) for classified fields and request IDs, or the
 [service example](examples/service/README.md) for plugins, scoped hooks, declared errors and bounded state.
+
+## Contributing
+
+See [Contributing to Skeld](CONTRIBUTING.md) for setup, focused checks, and pull requests. Documentation contributors can follow the [writing guide](docs/maintainers/writing-docs.md).
 
 ## License
 

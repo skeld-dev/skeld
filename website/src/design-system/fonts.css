@@ -1,0 +1,45 @@
+/* Does: Loads the locally hosted display and code typefaces. */
+/* Holds: Font requests stay on the site origin. */
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/ibm-plex-mono-400.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/ibm-plex-mono-500.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/sora-400.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/sora-500.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/assets/sora-600.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/assets/sora-700.ttf") format("truetype");
+}

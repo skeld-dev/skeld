@@ -1,5 +1,7 @@
 # Logging
 
+New to the framework? Start with [the documentation home](../README.md). To learn classification by running a request, use the [classification guide](../guides/classification.md) and [logging example](../../examples/logging/README.md).
+
 A Skeld server writes structured records as JSON lines to stdout, or hands them to a `sink` you give it. The engine writes its own records about the server and its requests, and handlers, hooks and plugins get a logger. Every request the engine answers carries a request id in its `x-request-id` response header.
 
 - The line format and its OpenTelemetry mapping are in [record-format.md](record-format.md).

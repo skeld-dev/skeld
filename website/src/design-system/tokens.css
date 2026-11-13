@@ -1,0 +1,38 @@
+/* Does: Defines the canonical Polar palette, typefaces and layout tokens. */
+/* Holds: Tailwind utilities and authored CSS share the same runtime variables. */
+
+@theme static {
+  --color-graphite: #111820;
+  --color-ice: #b7e4f4;
+  --color-frost: #eef4f7;
+  --color-surface: #151f28;
+  --color-muted: #a6b6c1;
+  --color-line: #2b3943;
+  --color-depth: #0d171e;
+  --color-code: #121c25;
+  --color-on-ice: #13222c;
+  --color-result: #16242d;
+  --color-raised: #17232d;
+  --color-active: #1b2a35;
+  --color-control: #20313d;
+  --color-control-hover: #2a4353;
+  --color-warning-surface: #29251e;
+  --color-warning: #e5bb83;
+  --color-outline: #3c5464;
+  --color-quiet: #91a3b0;
+  --color-string: #9fc6b7;
+  --color-number: #c3bccf;
+  --color-keyword: #a7d4e6;
+  --color-type: #bacfe4;
+  --color-ice-hover: #d4f0fb;
+  --color-soft: #d5e0e6;
+  --font-sans: "Sora", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --spacing-gutter: clamp(24px, 5.5vw, 96px);
+  --breakpoint-tablet: 47.5rem;
+  --breakpoint-desktop: 70rem;
+  --breakpoint-wide: 105rem;
+  --radius-control: 0px;
+  --motion-duration: 200ms;
+  --motion-lift: -2px;
+}

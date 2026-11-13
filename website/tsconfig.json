@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "strict": true,
+    "noEmit": true,
+    "composite": true,
+    "tsBuildInfoFile": "./.tsbuildinfo",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedSideEffectImports": true,
+    "skipLibCheck": false
+  },
+  "include": ["src/**/*.ts", "vite.config.ts"]
+}

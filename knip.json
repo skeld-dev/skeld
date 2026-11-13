@@ -6,6 +6,10 @@
     "type": true
   },
   "workspaces": {
+    "website": {
+      "entry": ["src/design-system/styles.css"],
+      "project": ["src/**/*.{ts,css}"]
+    },
     "packages/*": {
       "project": ["src/**/*.ts"]
     },

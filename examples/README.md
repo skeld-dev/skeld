@@ -2,6 +2,8 @@
 
 Start with hello, then follow one request through the logging example. The service example shows how to give a feature its own contract, handlers and scope.
 
+For a guided walkthrough and the reasoning behind the APIs, use the [documentation](../docs/README.md). These folders contain the complete programs those guides refer to.
+
 | Example                      | Learn                                                                               | Default port |
 | ---------------------------- | ----------------------------------------------------------------------------------- | ------------ |
 | [hello](hello/README.md)     | Declare routes once; implement a server and call it with a typed client             | 3000         |

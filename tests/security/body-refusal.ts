@@ -158,7 +158,7 @@ async function main(): Promise<void> {
       ],
       ['declared-flood', head('/upload', 'Content-Length: 1073741824') + ' '.repeat(4096), false, true],
     ] as const;
-    await cases.reduce(async (previous, [label, request, blocked, flood]) => {
+    await cases.reduce(async (previous: Promise<void>, [label, request, blocked, flood]) => {
       await previous;
       const result = await exchange(child.port, request, blocked, flood);
       verify(problems, label, result);

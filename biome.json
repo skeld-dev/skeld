@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!!**/node_modules", "!!**/dist", "!!**/.tsout", "!!.project", "!!.claude"]
+    "includes": [
+      "**",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/.tsout",
+      "!!.project",
+      "!!.claude",
+      "!!website/.wrangler"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -237,6 +245,24 @@
         "rules": {
           "style": {
             "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["website/**/*.css"],
+      "css": {
+        "parser": {
+          "tailwindDirectives": true
+        }
+      }
+    },
+    {
+      "includes": ["website/vite.config.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
           }
         }
       }

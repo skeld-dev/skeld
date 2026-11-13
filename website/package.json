@@ -1,0 +1,24 @@
+{
+  "name": "@skeld/website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "check": "tsc -b",
+    "build": "npm run check && vite build",
+    "preview": "vite preview",
+    "lint": "biome check . --error-on-warnings",
+    "knip": "knip --directory .. --workspace @skeld/website",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "@lightstart/components": "github:ul0gic/lightstart#a7dfbe763a5e840a4a8203aa10345ae26bcad72c",
+    "@lightstart/light": "github:ul0gic/lightstart#0b3411fbd265d20b748a09279d982376ae0e98fe"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "tailwindcss": "4.3.5",
+    "vite": "8.3.8",
+    "wrangler": "4.161.0"
+  }
+}

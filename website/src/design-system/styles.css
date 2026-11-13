@@ -1,0 +1,12 @@
+/* Does: Assembles the site stylesheet with one Tailwind token source. */
+/* Holds: The page loads all authored styles through this single entry. */
+
+@import "tailwindcss" source(none);
+@import "./tokens.css";
+@import "./fonts.css";
+@import "./base.css";
+@import "./components.css";
+@import "./layout.css";
+@import "./home.css";
+@source "../";
+@source "../../index.html";

@@ -4,6 +4,8 @@ A TypeScript framework for services on Node with its own engine, modeled on Fast
 
 The engine is everything above `node:http`: the router, the request lifecycle, plugins, body parsing, validation and serialization compiled from the schema, and errors. Node's HTTP server and parser are the floor and are not rewritten. Schemas are built with the package's own builders from `@skeld/core/schema` and compiled once when the server starts listening; nothing from a request is ever compiled.
 
+For a guided introduction, start with the [documentation](../../docs/README.md). It covers [your first request](../../docs/guides/first-request.md), [contract design](../../docs/guides/contracts.md), [browser configuration](../../docs/guides/browser-security.md), and the [security boundaries](../../docs/concepts/security-boundaries.md). Exact signatures are in the [API reference](../../docs/api/README.md).
+
 ## Install
 
 Requires an ES module project (`"type": "module"` in your `package.json`).
@@ -241,16 +243,16 @@ The server writes structured records as JSON lines to stdout, one per line, or h
 
 The reference is in [`docs/logging/`](../../docs/logging/logging.md): the options and guarantees, the [record format](../../docs/logging/record-format.md), the [events](../../docs/logging/events.md), [errors in records](../../docs/logging/errors.md) and [ingestion with the OpenTelemetry Collector](../../docs/logging/collector.md).
 
-## License
-
-MIT
-
-### Plugin resource ownership
+## Plugin resource ownership
 
 Register `scope.onClose(() => resource.close())` immediately after acquiring a resource, before another await. `scope.signal` aborts when shutdown or failed-boot rollback begins. After HTTP draining, cleanup runs once in reverse registration order. Each callback has its own `pluginCloseTimeoutMs` deadline (default 10,000 ms, maximum 2,147,483,647). Every callback is attempted; `close()` rejects with an `AggregateError` if any fails or times out. Repeated calls share the completion. Failed startup preserves its original error with rollback failures attached.
 
 Closing during startup prevents subsequent plugins and binding, waits for the current plugin within its boot deadline, and unwinds resources. Plugins and cleanup callbacks must cooperate with cancellation: a timeout cannot terminate arbitrary JavaScript or reclaim resources acquired after a plugin has timed out. Total cleanup time can grow with callback count. Registration after scope sealing is refused.
 
-### Audit compatibility corrections
+## Additional boundary behavior
 
 Static dot segments and backslashes in declared paths are rejected. Handler and route-limit maps use only own properties. Schema builders capture child values once into owned frozen maps; caller-owned maps remain mutable. Widened sensitivity options infer raw-or-Secret values, requiring narrowing. Failed classified unions report a generic union-level issue. Framework error targets use route templates; public request context paths remain concrete. Diagnostic format version 2 uses route ids joined through the run route table, preserving repeated route names.
+
+## License
+
+MIT
