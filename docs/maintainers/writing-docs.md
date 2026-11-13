@@ -20,7 +20,7 @@ Use complete imports for a standalone snippet. Label an excerpt with its source 
 
 Use Mermaid for a flow that is easier to understand visually, and explain the same relationship in nearby prose. A diagram must say whether it shows the normal path or every path. Tables work well for defaults, status handling, and comparisons.
 
-Keep these repository pages in Markdown while there is no MDX renderer. When the website is built, use tabs for real alternatives—such as browser and Node setup—while keeping sequential steps visible together. Introduce MDX only where a component improves the explanation; do not duplicate the documentation into a second website tree.
+The website builds its public collection directly from these Markdown files. Keep sequential steps visible together; use tabs only for real alternatives, such as browser and Node setup. Introduce MDX only where a component improves the explanation. Do not duplicate the documentation into a second website tree.
 
 ## Verify the claims that changed
 
@@ -45,5 +45,7 @@ Never change a test expectation merely to match a surprising result. Determine w
 ## Website navigation
 
 Keep maintainer guidance in the repository, outside the website's learning navigation and published documentation collection. The website's contribution link should point to the repository's root `CONTRIBUTING.md`, which links here. Maintain these instructions in one place.
+
+`website/src/build/docs-manifest.ts` selects the public pages and navigation order. Add a page there when it is ready for readers. The website build checks relative document links and heading fragments. It serves explicitly referenced public checkout files as text while the framework repository is unpublished; point those source references to the repository when its public address exists. The contribution reference always originates from root `CONTRIBUTING.md`. Run the website build after changing links or headings.
 
 Return to the [documentation home](../README.md).

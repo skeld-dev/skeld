@@ -9,11 +9,11 @@ export function siteFooter() {
       <div class="section-shell footer-shell">
         <div class="footer-top">
           <div class="footer-identity">
-            <a class="brand" href="/#top" aria-label="Skeld home"><img class="brand-mark" src="/assets/skeld-icon.png" alt="" width="1254" height="1254" /><span>skeld</span></a>
+            <a class="brand" href="/" aria-label="Skeld home"><img class="brand-mark" src="/assets/skeld-icon.png" alt="" width="1254" height="1254" /><span>skeld</span></a>
             <p>A TypeScript backend framework<br />for sensitive data.</p>
           </div>
           <nav class="footer-navigation" aria-label="Footer">
-            <div><h2>Build</h2><a href="/start/">Get started</a><a href="/#build">Code example</a><a href="/#contract">Follow a request</a></div>
+            <div><h2>Build</h2><a href="/docs/">Documentation</a><a href="/docs/guides/first-request/">Get started</a><a href="/#build">Code example</a><a href="/#contract">Follow a request</a></div>
             <div><h2>Project</h2><a href="/#principles">Why Skeld</a><a href="https://github.com/skeld-dev">Skeld on GitHub</a><a href="/license.txt">MIT license</a></div>
             <div><h2>Website</h2><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></div>
           </nav>

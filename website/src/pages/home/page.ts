@@ -14,7 +14,7 @@ import { principles } from './principles.ts';
 export function homePage() {
   return html`
     <a class="skip" href="#main">Skip to content</a>
-    ${symbols()} ${siteHeader()}
+    ${symbols()} ${siteHeader('home')}
     <main id="main" tabindex="-1">${hero()} ${contractWalkthrough()} ${principles()} ${buildExample()} ${direction()}</main>
     ${siteFooter()}
   `;
