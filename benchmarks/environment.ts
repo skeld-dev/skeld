@@ -15,11 +15,7 @@ import type { BenchMachine, BenchSoftware } from './types.ts';
 export interface Packages {
   readonly skeld: string;
   readonly skeldResolvedFrom: string;
-  readonly fastify: string;
   readonly autocannon: string;
-  readonly hono: string;
-  readonly honoNodeServer: string;
-  readonly express: string;
 }
 
 const repositoryRoot = join(import.meta.dirname, '..');
@@ -90,19 +86,11 @@ export function resolvePackages(): Packages {
       `${displayPath(distFolder)}/ has no build. Run pnpm run bench, which builds the package first.`,
     );
   }
-  const fastifyFile = resolveFile('fastify', () => import.meta.resolve('fastify'));
   const autocannonFile = resolveFile('autocannon', () => import.meta.resolve('autocannon'));
-  const honoFile = resolveFile('hono', () => import.meta.resolve('hono'));
-  const honoNodeServerFile = resolveFile('@hono/node-server', () => import.meta.resolve('@hono/node-server'));
-  const expressFile = resolveFile('express', () => import.meta.resolve('express'));
   return {
     skeld: versionOf('@skeld/core', manifestFile),
     skeldResolvedFrom: displayPath(dirname(serverFile)),
-    fastify: versionOf('fastify', fastifyFile),
     autocannon: versionOf('autocannon', autocannonFile),
-    hono: versionOf('hono', honoFile),
-    honoNodeServer: versionOf('@hono/node-server', honoNodeServerFile),
-    express: versionOf('express', expressFile),
   };
 }
 
@@ -204,7 +192,7 @@ export function captureSoftware(
       displayPath(process.argv[1] ?? ''),
       ...process.argv.slice(2),
     ],
-    serverCommandLine: [...pinning.serverCommand, displayPath(join(serversFolder, '<server>.ts')), '--port', '0'],
+    serverCommandLine: [...pinning.serverCommand, displayPath(join(serversFolder, 'skeld.ts')), '--port', '0'],
     diagServerCommandLine,
     serverEnvironment: { NODE_ENV: 'production' },
     nodeOptions: nodeOptions(),
@@ -212,10 +200,6 @@ export function captureSoftware(
     skeldResolvedFrom: packages.skeldResolvedFrom,
     revision,
     uncommittedChanges: porcelain === null ? null : porcelain.trim() !== '',
-    fastify: packages.fastify,
     autocannon: packages.autocannon,
-    hono: packages.hono,
-    honoNodeServer: packages.honoNodeServer,
-    express: packages.express,
   };
 }

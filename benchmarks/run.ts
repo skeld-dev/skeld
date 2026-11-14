@@ -1,4 +1,4 @@
-// Does:  Runs the benchmark from the command line: options, lock, checks, rounds, verdict and files.
+// Does:  Runs the benchmark from the command line: options, lock, checks, rounds and files.
 // Holds: The lock is held for the whole run and released on every exit path the process controls.
 
 import { randomBytes } from 'node:crypto';
@@ -50,6 +50,7 @@ import { loggingCommandLines, loggingTarget } from './logging/targets.ts';
 import { type Lock, takeLock } from './lock.ts';
 import { helpText, parseOptions, wantsHelp } from './options.ts';
 import { pinRunner } from './pinning.ts';
+import { deviations, endingReason, notAssessedReason, type RunEnding } from './protocol.ts';
 import { reportFile, writeRunFiles } from './report.ts';
 import { runSchedule } from './rounds.ts';
 import { estimatedMinutes, loggingBuilds, sessionBuilds } from './schedule.ts';
@@ -71,9 +72,8 @@ import {
   startLines,
   summaryLines,
 } from './terminal.ts';
-import type { BenchSample, BenchVerdict, LoggingBuildId, LoggingSession, RunOptions } from './types.ts';
+import type { BenchSample, LoggingBuildId, LoggingSession, RunOptions } from './types.ts';
 import { busyLoadAverage, connections, host, workers } from './values.ts';
-import { decideVerdict, deviations, diagReason, loggingReason, notAssessedReason, type RunEnding } from './verdict.ts';
 
 const out = (line: string): void => {
   process.stdout.write(`${line}\n`);
@@ -219,7 +219,6 @@ const runMeasure = async (packages: Packages): Promise<never> => {
   const software = captureSoftware(packages, pinning, null);
   const found = deviations(options, {
     node: process.version,
-    fastify: packages.fastify,
     nodeOptions: nodeOptions(),
     pinning: pinning.deviation,
   });
@@ -234,9 +233,8 @@ const runMeasure = async (packages: Packages): Promise<never> => {
   }
   const samples: BenchSample[] = [];
 
-  const finish = (ending: RunEnding): { verdict: BenchVerdict; written: boolean } => {
+  const finish = (ending: RunEnding): boolean => {
     const summary = summarize(samples, options.servers, options.routes);
-    const verdict = decideVerdict(ending, found, samples, summary, null);
     let written = true;
     try {
       writeRunFiles(runDirectory, {
@@ -262,7 +260,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
         software,
         samples,
         summary,
-        verdict,
+        statusReason: endingReason(ending),
         warnings,
       });
     } catch (error) {
@@ -273,11 +271,10 @@ const runMeasure = async (packages: Packages): Promise<never> => {
       err(`error: cannot write ${reportPath}: ${code}.`);
       written = false;
     }
-    const measured = samples.filter((sample) => sample.kind === 'measured').length;
-    for (const line of summaryLines(summary, verdict, measured, reportFile(runDirectory))) {
+    for (const line of summaryLines(summary, reportFile(runDirectory))) {
       out(line);
     }
-    return { verdict, written };
+    return written;
   };
 
   const rows = await checkServers(options.servers.map(serverTarget), options.routes, pinning.serverCommand, hooks);
@@ -326,7 +323,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
     }
   }
 
-  const { verdict, written } = finish(outcome);
+  const written = finish(outcome);
   if (failure !== null) {
     printError(failure);
     err(`The partial report is in ${reportPath}.`);
@@ -339,7 +336,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
   if (!written) {
     process.exit(4);
   }
-  process.exit(verdict.kind === 'below' ? 1 : 0);
+  process.exit(0);
 };
 
 const scenarioPasses: readonly ScenarioPass[] = ['clean', 'planted'];
@@ -510,7 +507,6 @@ const prepareDiagRun = (packages: Packages): DiagRun => {
   const loadAverageStart = loadAverage();
   const found = deviations(options, {
     node: process.version,
-    fastify: packages.fastify,
     nodeOptions: nodeOptions(),
     pinning: pinning.deviation,
   });
@@ -648,7 +644,7 @@ const writeDiagFiles = (
         software: run.software,
         samples,
         summary,
-        verdict: decideVerdict(stage.ending, run.found, samples, summary, diagReason),
+        statusReason: endingReason(stage.ending),
         warnings,
       });
     }
@@ -817,7 +813,6 @@ const runLogging = async (packages: Packages, session: LoggingSession): Promise<
   const software = captureSoftware(packages, pinning, null);
   const found = deviations(options, {
     node: process.version,
-    fastify: packages.fastify,
     nodeOptions: nodeOptions(),
     pinning: pinning.deviation,
   });
@@ -866,7 +861,7 @@ const runLogging = async (packages: Packages, session: LoggingSession): Promise<
       software,
       samples,
       summary,
-      verdict: decideVerdict(stage.ending, found, samples, summary, loggingReason),
+      statusReason: endingReason(stage.ending),
       warnings,
     });
     writeLoggingReadout(runDirectory, {

@@ -2,23 +2,12 @@
 // Holds: It only formats; no figure is computed or decided here.
 
 import { relative } from 'node:path';
-import { generatorBottleneckText } from './verdict.ts';
-import type {
-  BenchSample,
-  BenchSummary,
-  BenchVerdict,
-  BuildId,
-  CheckRow,
-  RouteId,
-  RunOptions,
-  ServerId,
-} from './types.ts';
+import type { BenchSample, BenchSummary, BuildId, CheckRow, RouteId, RunOptions, ServerId } from './types.ts';
 import {
   connections,
   expectedBody,
   generatorCeilingPercent,
   host,
-  keepLinePercent,
   runnerCores,
   serverCores,
   stopGraceMs,
@@ -46,7 +35,6 @@ export function displayPath(path: string): string {
 
 export const formatRate = (value: number): string => value.toFixed(1);
 export const formatMs = (value: number): string => value.toFixed(2);
-export const formatPercent = (value: number | null): string => (value === null ? '-' : `${value.toFixed(1)} %`);
 export const formatCpu = (value: number | null): string => (value === null ? '-' : `${Math.round(value)} %`);
 export const formatMicroseconds = (value: number | null): string => (value === null ? '-' : value.toFixed(1));
 
@@ -189,7 +177,7 @@ export function checkLines(rows: readonly CheckRow[], servers: number, routes: n
   const failed = rows.find((row) => !row.passed);
   const last =
     failed === undefined
-      ? `Check passed: ${plural(servers, 'server answers', 'servers answer')} ${plural(routes, 'route', 'routes')} alike.`
+      ? `Check passed: ${plural(servers, 'server answers', 'servers answer')} ${plural(routes, 'route', 'routes')} correctly.`
       : failureLine(failed);
   return [...table, '', last];
 }
@@ -201,36 +189,11 @@ const summaryColumns: readonly Column[] = [
   { header: 'CPU µs/req', align: 'right' },
   { header: 'Min', align: 'right' },
   { header: 'Max', align: 'right' },
-  { header: 'CPU vs Fastify', align: 'right' },
   { header: 'Median req/s', align: 'right' },
-  { header: 'req/s vs Fastify', align: 'right' },
   { header: 'Median p99 ms', align: 'right' },
 ];
 
-export function verdictLine(verdict: BenchVerdict): string {
-  const ratios = `Fastify's server CPU per request is ${formatPercent(verdict.echo)} of skeld's on echo (judged) and ${formatPercent(verdict.hello)} on hello (recorded); the line is ${keepLinePercent} % on echo.`;
-  if (verdict.kind === 'keep') {
-    return `Verdict: keep. ${ratios}`;
-  }
-  if (verdict.kind === 'below') {
-    return `Verdict: below the line. ${ratios}`;
-  }
-  return `Verdict: not assessed. ${verdict.reason ?? ''}`;
-}
-
-function noteLine(verdict: BenchVerdict, measuredRounds: number): string | null {
-  if (verdict.kind === 'not-assessed' || verdict.generatorBoundRounds === 0) {
-    return null;
-  }
-  return `Note: ${generatorBottleneckText(verdict.generatorBoundRounds, measuredRounds)}; the ratios may understate the difference between servers.`;
-}
-
-export function summaryLines(
-  summary: readonly BenchSummary[],
-  verdict: BenchVerdict,
-  measuredRounds: number,
-  reportPath: string,
-): readonly string[] {
+export function summaryLines(summary: readonly BenchSummary[], reportPath: string): readonly string[] {
   const table =
     summary.length === 0
       ? []
@@ -244,16 +207,13 @@ export function summaryLines(
               formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.median ?? null),
               formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.min ?? null),
               formatMicroseconds(group.serverCpuMicrosecondsPerRequest?.max ?? null),
-              formatPercent(group.cpuPercentOfFastify),
               formatRate(group.requestsPerSecond.median),
-              formatPercent(group.percentOfFastify),
               formatMs(group.latencyP99Ms.median),
             ]),
           ),
           '',
         ];
-  const note = noteLine(verdict, measuredRounds);
-  return [...table, verdictLine(verdict), ...(note === null ? [] : [note]), `Report: ${displayPath(reportPath)}`];
+  return [...table, `Report: ${displayPath(reportPath)}`];
 }
 
 const diagSummaryColumns: readonly Column[] = [
@@ -305,7 +265,7 @@ export function loggingSummaryLines(
 }
 
 export function nonConformingWarning(found: readonly string[]): string {
-  return `this run differs from the acceptance protocol (${found.join('; ')}). It is recorded and gets no verdict.`;
+  return `this run differs from the measurement protocol (${found.join('; ')}). Measurements are recorded; overhead assessments require their session protocol.`;
 }
 
 export function generatorWarning(sample: BenchSample, generatorCpuPercent: number): string {

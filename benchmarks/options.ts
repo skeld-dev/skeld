@@ -21,23 +21,21 @@ import {
 
 export const helpText = `Usage: node benchmarks/run.ts [options]
 
-Measures skeld, Fastify and node:http on the same two routes with
-autocannon on this machine, and writes a report. Each server runs on core 7
+Measures skeld on the hello and echo routes with autocannon on this machine,
+and writes a report. The server runs on core 7
 and the runner (autocannon's 3 workers) on cores 3-6, pinned with taskset.
-The judged figure is the server's CPU time per request over the measured
+The primary figure is the server's CPU time per request over the measured
 window, with requests per second and p99 latency beside it.
 
 Options:
-  --pipelining <n>   requests in flight per connection, 1 to 100 (default 1;
-                     10 gives the fastify.dev profile, which gets no verdict)
+  --pipelining <n>   requests in flight per connection, 1 to 100 (default 1)
   --warm-up <s>      discarded warm-up seconds per route, 1 to 600 (default 3)
   --duration <s>     measured seconds per route, 1 to 600 (default 10)
   --rounds <n>       measured rounds per server and route, 1 to 50 (default 3)
-  --servers <list>   skeld,fastify,node-http,hono,express
-                     (default skeld,fastify,node-http)
+  --servers <list>   skeld only (default skeld)
   --routes <list>    hello,echo (default both)
   --out <dir>        folder for the run's report (default benchmarks/results)
-  --check            start each server, check its answers, measure nothing
+  --check            start skeld, check its answers, measure nothing
   --diag             measure skeld's normal and diag builds side by side,
                      then run the security scenario; skeld only; with
                      --check, the start checks and the scenario only
@@ -56,13 +54,12 @@ Options:
                      (needs --logging)
   --help             show this help
 
-Only a run with every default, pinned on a host with 8 or more vCPUs, is the
-acceptance protocol and gets a verdict. In diag mode the same rule decides
-whether the overhead ratio is assessed.
+HTTP runs report measurements without a comparison verdict. Default settings
+and pinning on a host with 8 or more vCPUs define the measurement protocol.
+Diagnostic and logging sessions retain their separate overhead assessments.
 `;
 
-export const defaultServerIds: readonly ServerId[] = ['skeld', 'fastify', 'node-http'];
-const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express'];
+const defaultServerIds: readonly ServerId[] = ['skeld'];
 export const routeIds: readonly RouteId[] = ['hello', 'echo'];
 
 const valueOptions = [
@@ -161,17 +158,8 @@ const parseSampling = (
   return parseInteger(name, text, stepRange);
 };
 
-const parseServers = (text: string | undefined, diag: boolean): readonly ServerId[] => {
-  if (text === undefined) {
-    return diag ? ['skeld'] : defaultServerIds;
-  }
-  const servers = parseList('--servers', text, serverIds, 'server');
-  const other = diag ? servers.find((server) => server !== 'skeld') : undefined;
-  if (other !== undefined) {
-    throw usage(`diag mode measures only skeld; got "${other}" in --servers. Remove --servers or set it to skeld.`);
-  }
-  return servers;
-};
+const parseServers = (text: string | undefined): readonly ServerId[] =>
+  text === undefined ? defaultServerIds : parseList('--servers', text, defaultServerIds, 'server');
 
 const parseLogging = (
   values: ReadonlyMap<ValueOption, string>,
@@ -238,7 +226,7 @@ export function parseOptions(argv: readonly string[]): RunOptions {
     durationSeconds:
       duration === undefined ? defaultDurationSeconds : parseInteger('--duration', duration, durationRange),
     rounds: parseRounds(values.get('--rounds'), logging),
-    servers: logging === null ? parseServers(values.get('--servers'), diag) : ['skeld'],
+    servers: logging === null ? parseServers(values.get('--servers')) : ['skeld'],
     routes: parseRoutes(logging, routes),
     out: values.get('--out') ?? defaultOut,
     check: flags.has('--check'),

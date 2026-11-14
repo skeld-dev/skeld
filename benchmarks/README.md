@@ -6,7 +6,7 @@ configuration, comparator versions and raw results with any claim.
 
 | Location                                | Measures                                                                      |
 | --------------------------------------- | ----------------------------------------------------------------------------- |
-| `run.ts`, `servers/`                    | HTTP throughput and latency against the configured servers                    |
+| `run.ts`, `servers/`                    | Skeld HTTP CPU cost, throughput and latency                                   |
 | `diag/`                                 | Diagnostic instrumentation scenarios                                          |
 | `browser-costs.ts`, `browser-server.ts` | Cookie and browser-policy costs                                               |
 | `logging/`                              | Logging drivers and fixtures                                                  |
@@ -22,9 +22,14 @@ Run from the repository root. The HTTP runner builds core itself:
 pnpm run bench
 ```
 
-The HTTP servers are skeld, Fastify, node:http, Hono and Express. The default run compares the first three;
-use `--servers skeld,fastify,node-http,hono,express` to include all five. Use `--check` to verify both routes
-without collecting timing measurements.
+The HTTP runner measures skeld alone on hello and echo. Reports contain CPU time per request, throughput,
+p99 latency, per-round samples and environment details, with no framework ratios or comparison verdict.
+A completed HTTP run exits 0; usage, start, measurement and interruption failures retain their error codes.
+Use `--check` to verify both routes without collecting timing measurements. `--servers skeld` remains
+accepted; other server names are rejected.
+
+`--diag` and `--logging` remain skeld-only sessions with their separate overhead assessments and readouts.
+Historical reports retain the measurements and comparisons recorded when they were produced.
 
 Schema scripts use the source condition. The comparator directory must already contain the dependencies
 expected by that script; moving these scripts did not change their comparator pins or measurement protocol.

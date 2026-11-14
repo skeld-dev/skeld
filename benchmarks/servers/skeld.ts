@@ -1,5 +1,5 @@
 // Does:  Serves the hello and echo routes with skeld: the server under test.
-// Holds: It serves the same two routes with the same bodies as every other server here.
+// Holds: Both routes return the expected JSON body through the response schema.
 
 import { defineContract } from '@skeld/core/contract';
 import * as t from '@skeld/core/schema';

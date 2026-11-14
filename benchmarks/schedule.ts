@@ -1,5 +1,5 @@
 // Does:  Builds the list of visits: every entrant once per round, in an order rotated each round.
-// Holds: Each entrant is measured once per round, and no entrant keeps the same position every round.
+// Holds: Each entrant is measured once per round, and multiple entrants rotate positions each round.
 
 import type { BuildId, LoggingBuildId, LoggingSession, RunOptions, ServerId, Visit } from './types.ts';
 
