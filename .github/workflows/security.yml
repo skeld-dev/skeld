@@ -38,6 +38,8 @@ jobs:
           build-mode: none
           queries: security-extended
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          wait-for-processing: true
       # Includes benchmark dependencies; alerts remain visible even when update PRs are disabled.
       - name: Dependency audit
-        run: pnpm audit --audit-level=high
+        run: pnpm audit --audit-level=low

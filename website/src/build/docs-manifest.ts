@@ -27,6 +27,7 @@ const groups = [
     'Understand the model',
     [
       ['concepts/request-lifecycle', 'Request lifecycle'],
+      ['reference/core', 'Core behavior reference'],
       ['concepts/security-boundaries', 'Security boundaries'],
       ['concepts/threat-model', 'Threat model'],
     ],

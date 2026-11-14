@@ -2,7 +2,7 @@
 // Holds: Every stdout line is kept and reported, one that does not parse as a JSON object included; none is dropped.
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { closeSync, mkdtempSync, openSync, readSync, rmSync, statSync } from 'node:fs';
+import { closeSync, fstatSync, mkdtempSync, openSync, readSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -199,17 +199,17 @@ export async function startLogChild(script: string, options: LogChildOptions = {
     if (outFile === null || fileClosed) {
       return;
     }
-    let size = 0;
+    let descriptor: number;
     try {
-      size = statSync(outFile).size;
+      descriptor = openSync(outFile, 'r');
     } catch {
       return;
     }
-    if (size <= offset) {
-      return;
-    }
-    const descriptor = openSync(outFile, 'r');
     try {
+      const size = fstatSync(descriptor).size;
+      if (size <= offset) {
+        return;
+      }
       const buffer = Buffer.alloc(size - offset);
       const got = readSync(descriptor, buffer, 0, buffer.length, offset);
       offset += got;

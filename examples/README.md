@@ -45,7 +45,7 @@ Use an ES module project (`"type": "module"`) and install `@skeld/core`. Copy th
 
 ```sh
 pnpm run examples-check
-pnpm run readme-check
+pnpm run reference-check
 ```
 
 The first command builds the projects, starts each example on an available local port, runs its client, checks refusal and logging behavior, and closes the servers it started. It leaves existing servers alone. The second keeps hello identical to the package README. These are behavior checks, not benchmarks.

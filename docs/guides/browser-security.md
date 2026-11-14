@@ -26,7 +26,7 @@ This configures policy; it does not create a session, authenticate a user, or st
 
 A disallowed origin receives no CORS grant. An actual request can still execute: CORS controls browser access to the response, so it cannot substitute for authorization or the cross-site check.
 
-Preflight is different. An `OPTIONS` preflight for a configured route is processed before hooks: an allowed origin gets a 204 grant, a disallowed one gets 403, and a missing route or route without CORS gets 404. The header grant lists the route's declared headers, `content-type` for a body, and configured `allowedHeaders`; it does not echo arbitrary requested headers. See the [complete CORS rules](../../packages/core/README.md#browsers-on-other-origins-cors-and-the-cross-site-check).
+Preflight is different. An `OPTIONS` preflight for a configured route is processed before hooks: an allowed origin gets a 204 grant, a disallowed one gets 403, and a missing route or route without CORS gets 404. The header grant lists the route's declared headers, `content-type` for a body, and configured `allowedHeaders`; it does not echo arbitrary requested headers. See the [complete CORS rules](../../docs/reference/core.md#browsers-on-other-origins-cors-and-the-cross-site-check).
 
 ## Admit cross-site mutations separately
 
@@ -70,7 +70,7 @@ export const client = createClient(contract, {
 
 This shows the client configuration for an assumed `/session` contract; it does not implement a session endpoint. Credentials mode does not bypass CORS, SameSite, or other browser cookie policies. Node's fetch does not supply a browser cookie jar.
 
-On the server, declared cookie fields arrive validated on `request.cookies`. Raw cookie reads deliberately preserve the wire value; duplicate names read as absent through `get(name)`, while a duplicate declared name is refused. See the [cookie API and limits](../../packages/core/README.md#redirects-and-cookies).
+On the server, declared cookie fields arrive validated on `request.cookies`. Raw cookie reads deliberately preserve the wire value; duplicate names read as absent through `get(name)`, while a duplicate declared name is refused. See the [cookie API and limits](../../docs/reference/core.md#redirects-and-cookies).
 
 ## Restrict redirect destinations
 

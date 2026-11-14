@@ -1,6 +1,6 @@
 # Hello: a contract, a server, a client
 
-This is the [package README's example](../../packages/core/README.md#example), kept identical by `pnpm run readme-check`.
+This is the [core reference example](../../docs/reference/core.md#example), kept identical by `pnpm run reference-check`.
 
 From the repository root, after `pnpm install`:
 

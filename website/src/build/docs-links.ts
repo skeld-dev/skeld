@@ -1,7 +1,7 @@
 // Does:  Resolves Markdown links to published pages or explicitly referenced checkout files.
 // Holds: Source reads stay inside the repository and never publish project, credential or maintainer files.
 
-import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import type { DocDefinition } from '../pages/docs/model.ts';
 
@@ -55,12 +55,22 @@ export function createLinkResolver(root: string, definitions: DocDefinition[]) {
       throw new Error(`Unpublished documentation link in ${source}: ${href}`);
     }
     const path = realpathSync(resolve(repository, target));
-    if (relative(repository, path).startsWith(`..${sep}`) || !statSync(path).isFile()) {
+    if (relative(repository, path).startsWith(`..${sep}`) || relative(repository, path) === '..') {
       throw new Error(`Documentation source link leaves the repository: ${target}`);
     }
     const asset = target === '.nvmrc' ? 'docs/files/node-version.txt' : `docs/files/${target}.txt`;
-    sourceFiles.add(path);
-    files.set(asset, readFileSync(path, 'utf8'));
+    // Inspect and read the same descriptor; refuse a final-component symlink replacement.
+    // The build checkout and its ancestor directories are controlled by the maintainer.
+    const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      if (!fstatSync(descriptor).isFile()) {
+        throw new Error(`Documentation source is not a regular file: ${target}`);
+      }
+      files.set(asset, readFileSync(descriptor, 'utf8'));
+      sourceFiles.add(path);
+    } finally {
+      closeSync(descriptor);
+    }
     return `/${asset}`;
   }
   return { resolveLink, files, links, sourceFiles };

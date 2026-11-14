@@ -1,5 +1,5 @@
-// Does:  Checks that the README's Example section shows the hello example exactly as the files have it.
-// Holds: Any line that differs between a README block and its source file fails the check with exit 1.
+// Does:  Checks that the core reference's Example section shows the hello example exactly as the files have it.
+// Holds: Any line that differs between a reference block and its source file fails the check with exit 1.
 
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -16,7 +16,7 @@ interface Expected {
 }
 
 const root = resolve(import.meta.dirname, '..');
-const readmePath = 'packages/core/README.md';
+const readmePath = 'docs/reference/core.md';
 
 const expected: readonly Expected[] = [
   ...['contract.ts', 'hello.ts', 'client.ts'].map((file) => {
@@ -69,14 +69,14 @@ if (fences.length !== expected.length) {
 expected.forEach((block, index) => {
   const fence = fences[index];
   if (fence === undefined || fence.lang !== block.lang) {
-    fail(`${block.name}: README block ${index + 1} is not a \`\`\`${block.lang} fence`);
+    fail(`${block.name}: reference block ${index + 1} is not a \`\`\`${block.lang} fence`);
   }
   const shown = `${fence.lines.join('\n')}\n`.split('\n');
   const source = block.text.split('\n');
   const length = Math.max(shown.length, source.length);
   for (let line = 0; line < length; line++) {
     if (shown[line] !== source[line]) {
-      fail(`${block.name}: README block differs at line ${line + 1}`);
+      fail(`${block.name}: reference block differs at line ${line + 1}`);
     }
   }
   process.stdout.write(`ok ${block.name}\n`);

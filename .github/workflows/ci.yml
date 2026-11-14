@@ -31,7 +31,7 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Dependency audit
-        run: pnpm audit --audit-level=high
+        run: pnpm audit --audit-level=low
       - name: Typecheck
         run: pnpm run check
       - name: Lint
@@ -46,7 +46,7 @@ jobs:
         run: |
           pnpm run api-docs --check
           pnpm run api-check
-          pnpm run readme-check
+          pnpm run reference-check
           pnpm run examples-check
       - name: Package and consumer checks
         run: |
