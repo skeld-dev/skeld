@@ -41,7 +41,10 @@ Benchmarks need a quiet dedicated machine and are not CI timing gates.
 plus a full-lockfile npm advisory audit. It runs on pull requests, `main`, daily, and during a release.
 High and critical dependency advisories fail the audit; registry failures are not ignored.
 
-Dependabot checks npm/pnpm dependencies and SHA-pinned GitHub Actions weekly. There is no automatic merge.
+Dependabot checks npm/pnpm dependencies and SHA-pinned GitHub Actions weekly. The benchmark workspace
+is excluded from update scans because comparator versions are deliberate measurement baselines; update
+them manually when refreshing those baselines. The full-lockfile dependency audit still covers benchmarks.
+There is no automatic merge.
 Git dependencies remain subject to source review and their immutable pins; registry auditing does not
 establish that a Git dependency or vendored archive is safe.
 
