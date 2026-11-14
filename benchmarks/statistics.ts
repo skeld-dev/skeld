@@ -2,7 +2,7 @@
 // Holds: A group's CPU figure is null unless every one of its rounds has one.
 
 import { loggingBuilds } from './schedule.ts';
-import type { BenchRatio, BenchSample, BenchSpread, BenchSummary, BuildId, RouteId } from './types.ts';
+import type { BenchRatio, BenchSample, BenchSpread, BenchSummary, BuildId, CpuSplit, RouteId } from './types.ts';
 
 export function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -25,6 +25,21 @@ const cpuSpread = (samples: readonly BenchSample[]): BenchSpread | null => {
     sample.serverCpuMicrosecondsPerRequest === null ? [] : [sample.serverCpuMicrosecondsPerRequest],
   );
   return values.length === samples.length ? spread(values) : null;
+};
+
+const splitMedians = (samples: readonly BenchSample[]): CpuSplit | null => {
+  const splits = samples.flatMap((sample) =>
+    sample.serverCpuSplitMicrosecondsPerRequest === null ? [] : [sample.serverCpuSplitMicrosecondsPerRequest],
+  );
+  if (splits.length !== samples.length) {
+    return null;
+  }
+  return {
+    user: median(splits.map((split) => split.user)),
+    system: median(splits.map((split) => split.system)),
+    mainThread: median(splits.map((split) => split.mainThread)),
+    otherThreads: median(splits.map((split) => split.otherThreads)),
+  };
 };
 
 const builds: readonly BuildId[] = ['skeld', 'skeld-diag', 'external', ...loggingBuilds];
@@ -51,6 +66,7 @@ export function summarize(
             route,
             rounds: measured.length,
             serverCpuMicrosecondsPerRequest: cpuSpread(measured),
+            serverCpuSplitMicrosecondsPerRequest: splitMedians(measured),
             requestsPerSecond: spread(measured.map((sample) => sample.requestsPerSecond)),
             latencyP99Ms: spread(measured.map((sample) => sample.latencyP99Ms)),
           },

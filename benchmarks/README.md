@@ -24,7 +24,8 @@ pnpm run bench
 
 The HTTP runner measures skeld on hello and echo, alone unless `--against` names an external server (below).
 Reports contain CPU time per request, throughput, p99 latency, per-round samples and environment details, with
-no comparison verdict.
+no comparison verdict. CPU time is also split into user against system and main thread against the other threads,
+read from `/proc`: the process's counters and its main thread's own.
 A completed HTTP run exits 0; usage, start, measurement and interruption failures retain their error codes.
 Use `--check` to verify both routes without collecting timing measurements. `--servers skeld` remains
 accepted; other server names are rejected.

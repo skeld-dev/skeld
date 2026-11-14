@@ -15,6 +15,8 @@ import {
   formatRatio,
   plural,
   ratioHeaders,
+  splitHeaders,
+  splitRow,
 } from './terminal.ts';
 import type { BenchComparison, BenchOptions, BenchRun, BenchSample, BenchSummary, RouteId } from './types.ts';
 import {
@@ -78,6 +80,18 @@ const resultsSection = (run: BenchRun): readonly string[] =>
       '',
     ];
   });
+
+const splitSection = (run: BenchRun): readonly string[] =>
+  run.summary.length === 0
+    ? []
+    : [
+        '### Server CPU by mode and by thread',
+        '',
+        'Medians in µs per request, from /proc: the counters of the process, as for the totals above, and those of its main thread. Within one round, user plus system and main thread plus other threads each equal the total of that round; each column here is its own median over the rounds, so the columns need not add up to the median total.',
+        '',
+        ...markdownTable(splitHeaders, run.summary.map(splitRow)),
+        '',
+      ];
 
 const comparisonSection = (comparison: BenchComparison | undefined): readonly string[] => {
   if (comparison === undefined) {
@@ -211,6 +225,7 @@ function renderReport(run: BenchRun): string {
     '## Results',
     '',
     ...resultsSection(run),
+    ...splitSection(run),
     ...comparisonSection(run.comparison),
     '## Rounds',
     '',

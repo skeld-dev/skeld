@@ -88,9 +88,19 @@ export interface BenchSample {
   readonly generatorCpuPercent: number | null;
   readonly serverCpuPercent: number | null;
   readonly serverCpuMicrosecondsPerRequest: number | null;
+  readonly serverCpuSplitMicrosecondsPerRequest: CpuSplit | null;
   readonly serverCores: string | null;
   readonly bound: Bound | null;
   readonly autocannon: unknown;
+}
+
+// Does:  Splits a server's CPU microseconds two ways: user against system, and main thread against the others.
+// Holds: In one reading, user + system and mainThread + otherThreads each equal the total; medians need not.
+export interface CpuSplit {
+  readonly user: number;
+  readonly system: number;
+  readonly mainThread: number;
+  readonly otherThreads: number;
 }
 
 export interface BenchSpread {
@@ -105,6 +115,7 @@ export interface BenchSummary {
   readonly route: RouteId;
   readonly rounds: number;
   readonly serverCpuMicrosecondsPerRequest: BenchSpread | null;
+  readonly serverCpuSplitMicrosecondsPerRequest: CpuSplit | null;
   readonly requestsPerSecond: BenchSpread;
   readonly latencyP99Ms: BenchSpread;
 }
