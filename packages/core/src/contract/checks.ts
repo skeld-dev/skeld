@@ -183,8 +183,33 @@ function checkPropertyKinds(route: RouteDefinition): string | null {
   return null;
 }
 
+// Why: A declaration is untrusted at boot and can bypass the types; a wrong shape is refused here, not by accident.
+function checkShape(route: RouteDefinition): string | null {
+  const declared: unknown = route;
+  if (typeof declared !== 'object' || declared === null) {
+    return 'route must be an object';
+  }
+  if (typeof route.path !== 'string') {
+    return 'path must be a string';
+  }
+  if (typeof route.responses !== 'object' || route.responses === null) {
+    return 'responses must be an object';
+  }
+  return null;
+}
+
+// Does:  Names a route by its method and path when both are text, since a declaration can hold anything there.
+function routeLabel(route: RouteDefinition): string {
+  const declared: unknown = route;
+  if (typeof declared !== 'object' || declared === null) {
+    return '';
+  }
+  return typeof route.method === 'string' && typeof route.path === 'string' ? ` (${route.method} ${route.path})` : '';
+}
+
 function checkRoute(route: RouteDefinition): string | null {
   return (
+    checkShape(route) ??
     checkMethod(route) ??
     checkPath(route.path) ??
     checkSchemas(route) ??
@@ -204,7 +229,7 @@ export function checkContract(routes: ContractRoutes): void {
     for (const [name, route] of Object.entries(routes)) {
       const failure = checkRoute(route);
       if (failure !== null) {
-        throw new TypeError(`Route ${name} (${route.method} ${route.path}): ${failure}`);
+        throw new TypeError(`Route ${name}${routeLabel(route)}: ${failure}`);
       }
     }
   } finally {
