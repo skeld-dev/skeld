@@ -78,7 +78,7 @@ export function docsPage(page: DocPage, definitions: DocDefinition[]) {
         </nav>
         <p class="sr-only" data-copy-status role="status" aria-live="polite"></p>
       </main>
-      <aside class="docs-contents"><nav aria-label="On this page"><p>On this page</p>${contents(page.headings)}</nav><a class="docs-github" href="https://github.com/skeld-dev">skeld on GitHub ↗</a></aside>
+      <aside class="docs-contents"><nav aria-label="On this page"><p>On this page</p>${contents(page.headings)}</nav><a class="docs-github" href="https://github.com/skeld-dev/skeld">skeld on GitHub ↗</a></aside>
     </div>${siteFooter()}
   `;
 }
