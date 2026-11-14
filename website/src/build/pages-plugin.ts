@@ -2,6 +2,7 @@
 // Holds: Page sources stay under pages; public routes never expose source-folder paths.
 
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderToString } from '@lightstart/light/markup';
 import type { Connect, Plugin } from 'vite';
@@ -11,6 +12,8 @@ import { privacyPage } from '../pages/privacy/page.ts';
 import { securityPage } from '../pages/security/page.ts';
 import { explorePage } from '../pages/explore/page.ts';
 import { termsPage } from '../pages/terms/page.ts';
+import { notFoundPage } from '../pages/not-found/page.ts';
+import { withSocialMetadata } from './social-metadata.ts';
 
 const pages = [
   { name: 'home', url: '/', render: homePage },
@@ -20,11 +23,12 @@ const pages = [
   { name: 'contributing', url: '/contributing/', render: contributingPage },
   { name: 'privacy', url: '/privacy/', render: privacyPage },
   { name: 'terms', url: '/terms/', render: termsPage },
+  { name: 'not-found', url: '/404.html', render: notFoundPage },
 ].map((page) => ({
   ...page,
   source: `src/pages/${page.name}/index.html`,
   template: fileURLToPath(new URL(`../pages/${page.name}/index.html`, import.meta.url)),
-  output: `${page.url.slice(1)}index.html`,
+  output: page.name === 'not-found' ? '404.html' : `${page.url.slice(1)}index.html`,
 }));
 
 export const pageInputs = Object.fromEntries(pages.map((page) => [page.name, page.template]));
@@ -33,6 +37,7 @@ const redirects = [
   ...['/scenarios', '/scenarios/', '/scenarios/index.html'].map((path) => ({ path, destination: '/explore/' })),
 ];
 const license = () => readFileSync(new URL('../../../LICENSE', import.meta.url), 'utf8');
+const notFoundTemplate = fileURLToPath(new URL('../pages/not-found/index.html', import.meta.url));
 
 const redirectPage: Connect.NextHandleFunction = (request, response, next) => {
   const url = new URL(request.url ?? '/', 'http://localhost');
@@ -77,20 +82,46 @@ export function pagesPlugin(): Plugin {
         void server
           .transformIndexHtml(page.url, readFileSync(page.template, 'utf8'))
           .then((document) => {
+            response.statusCode = page.name === 'not-found' ? 404 : 200;
             response.setHeader('Content-Type', 'text/html; charset=utf-8');
             response.end(document);
           })
           .catch(next);
       });
+      return () => {
+        server.middlewares.use((request, response, next) => {
+          void server
+            .transformIndexHtml('/404.html', readFileSync(notFoundTemplate, 'utf8'))
+            .then((document) => {
+              response.statusCode = 404;
+              response.setHeader('Content-Type', 'text/html; charset=utf-8');
+              response.end(request.method === 'HEAD' ? undefined : document);
+            })
+            .catch(next);
+        });
+      };
     },
     configurePreviewServer(server) {
       server.middlewares.use(redirectPage);
+      return () => {
+        server.middlewares.use((request, response) => {
+          response.statusCode = 404;
+          response.setHeader('Content-Type', 'text/html; charset=utf-8');
+          response.end(
+            request.method === 'HEAD'
+              ? undefined
+              : readFileSync(resolve(server.config.root, server.config.build.outDir, '404.html')),
+          );
+        });
+      };
     },
     transformIndexHtml: {
       order: 'pre',
       handler(document, context) {
         const page = pages.find((item) => context.filename === item.template || context.path === item.url);
-        return page?.render === undefined ? document : document.replace('<!-- app -->', renderToString(page.render()));
+        return page?.render === undefined
+          ? document
+          : withSocialMetadata(document.replace('<!-- app -->', renderToString(page.render())), page.url);
       },
     },
     generateBundle: {

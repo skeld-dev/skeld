@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "check": "tsc -b",
-    "build": "pnpm run check && vite build",
+    "build": "pnpm run check && vite build && pnpm run check:delivery",
+    "check:delivery": "node scripts/check-delivery.ts",
     "preview": "vite preview",
     "lint": "biome check . --error-on-warnings",
     "knip": "knip --directory .. --workspace @skeld/website",

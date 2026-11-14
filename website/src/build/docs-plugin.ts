@@ -10,6 +10,7 @@ import type { DocPage } from '../pages/docs/model.ts';
 import { buildDocumentation } from './docs-content.ts';
 import { escapeHtml } from './docs-links.ts';
 import { docDefinitions } from './docs-manifest.ts';
+import { withSocialMetadata } from './social-metadata.ts';
 
 const templatePath = fileURLToPath(new URL('../pages/docs/index.html', import.meta.url));
 const docsRoot = fileURLToPath(new URL('../../../docs/', import.meta.url));
@@ -17,13 +18,12 @@ function pagePath(path: string): string {
   return path.replace(/index\.html$/, '');
 }
 function renderPage(document: string, page: DocPage): string {
-  return document
+  const rendered = document
     .replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(page.title)} | skeld docs</title>`)
     .replace(
       /<meta name="description" content="[^"]*"\s*\/>/,
       `<meta name="description" content="${escapeHtml(page.description)}" />`,
     )
-    .replace('<!-- canonical -->', `<link rel="canonical" href="https://skeld.dev${page.url}" />`)
     .replace(
       '<!-- markdown -->',
       `<link rel="alternate" type="text/markdown" href="${page.markdownUrl}" /><link rel="describedby" href="/llms.txt" />`,
@@ -32,6 +32,18 @@ function renderPage(document: string, page: DocPage): string {
       /<!-- docs-start -->[\s\S]*?<!-- docs-end -->/,
       `<!-- docs-start -->${renderToString(docsPage(page, docDefinitions))}<!-- docs-end -->`,
     );
+  const parent = docDefinitions.find((entry) => entry.url === page.parent);
+  return withSocialMetadata(rendered, page.url, {
+    title: `${page.title} | skeld docs`,
+    description: page.description,
+    articleSection: page.group,
+    breadcrumbs: [
+      { name: 'skeld', path: '/' },
+      { name: 'Documentation', path: '/docs/' },
+      ...(parent === undefined ? [] : [{ name: parent.label, path: parent.url }]),
+      ...(page.url === '/docs/' ? [] : [{ name: page.title, path: page.url }]),
+    ],
+  });
 }
 export function docsPlugin(): Plugin {
   let collection = buildDocumentation();
@@ -117,7 +129,6 @@ export function docsPlugin(): Plugin {
         const templateSource =
           typeof template.source === 'string' ? template.source : new TextDecoder().decode(template.source);
         const document = templateSource
-          .replace(/<link rel="canonical"[^>]*>/, '<!-- canonical -->')
           .replace(/<link rel="alternate"[^>]*>/, '<!-- markdown -->')
           .replace(/<link rel="describedby"[^>]*>/, '');
         for (const page of collection.pages) {
@@ -133,12 +144,6 @@ export function docsPlugin(): Plugin {
         for (const [fileName, source] of collection.files) {
           this.emitFile({ type: 'asset', fileName, source });
         }
-        this.emitFile({
-          type: 'asset',
-          fileName: '_headers',
-          source:
-            '/docs/*/index.md\n  Content-Type: text/plain; charset=utf-8\n  X-Content-Type-Options: nosniff\n/docs/index.md\n  Content-Type: text/plain; charset=utf-8\n  X-Content-Type-Options: nosniff\n',
-        });
       },
     },
   };

@@ -13,7 +13,7 @@ import { createLinkResolver, escapeHtml } from './docs-links.ts';
 import { docDefinitions } from './docs-manifest.ts';
 import { renderDiagram } from './docs-diagrams.ts';
 import { renderModelDiagram } from './docs-model-diagram.ts';
-import { documentationIndex, markdownUrl, publicMarkdown } from './docs-markdown.ts';
+import { documentationIndex, fullDocumentation, markdownUrl, publicMarkdown } from './docs-markdown.ts';
 
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
 function plain(value: string): string {
@@ -112,5 +112,6 @@ export function buildDocumentation() {
   }
   const files = new Map([...resolver.files, ...markdownFiles]);
   files.set('llms.txt', documentationIndex(pages));
+  files.set('llms-full.txt', fullDocumentation(pages, markdownFiles));
   return { pages, search, files, sourceFiles: resolver.sourceFiles };
 }
