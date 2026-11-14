@@ -42,7 +42,11 @@ function refuseReserved(name: string): void {
   if (RESERVED.has(lower)) {
     event('err.reserved_header', name);
     const hint = refusalHint(lower);
-    throw engineFault('reserved_header', `header ${name} is reserved for the engine${hint}`, null);
+    // Why: The detail is the lower-case entry RESERVED matched, never the name as the application spelled it.
+    throw engineFault('reserved_header', `header ${name} is reserved for the engine${hint}`, [
+      'skeld.reserved_header',
+      lower,
+    ]);
   }
 }
 

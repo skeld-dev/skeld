@@ -11,13 +11,14 @@ import type { Logger } from '../log/types.ts';
 import type { RouteParams } from '../router/types.ts';
 import type { RawCookies } from '../server/types.ts';
 import type { DeadlineQueue } from './deadline.ts';
+import type { FaultDetail } from './engine-fault.ts';
 import type { EngineRuntime, RouteRuntime } from './types.ts';
 
 // Does:  A request's failure as the engine classified it when it happened, with the value its record may read.
 export interface Failure {
   readonly reason: RequestErrorReason;
   readonly value: unknown;
-  readonly location: string | null;
+  readonly detail: FaultDetail | null;
 }
 
 type ExchangeState = 'running' | 'sent-by-hook' | 'written' | 'timed-out';

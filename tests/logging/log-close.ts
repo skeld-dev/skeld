@@ -1,4 +1,4 @@
-// Does:  Proves close() flushes to a reading reader and, against a silent one, resolves in time with exact loss counts.
+// Does:  Proves close() flushes a reading reader, resolves in time against a silent one, and delivers its closed record.
 // Holds: Stats are sampled inside the served process in one tick, so every sample is one consistent view of a server.
 
 // biome-ignore-all lint/security/noSecrets: route templates and event names, not credentials
@@ -552,11 +552,89 @@ async function pairCase(report: ReturnType<typeof createReport>): Promise<void> 
   );
 }
 
+async function reserveCase(report: ReturnType<typeof createReport>): Promise<void> {
+  const problems: string[] = [];
+  const delivered: LogObject[] = [];
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+  const server = createServer({
+    log: {
+      sink: async (batch) => {
+        calls++;
+        if (calls === 1) {
+          await held;
+        }
+        for (const line of batch) {
+          const parsed = parseJson(line);
+          if (isRecord(parsed)) {
+            delivered.push(parsed);
+          }
+        }
+      },
+    },
+  });
+  server.routes(
+    contract,
+    handlersFor(server, () => ({})),
+  );
+  await server.listen({ port: 0, host: '127.0.0.1' });
+  let offered = 0;
+  while (server.logStats().dropped.reserve === undefined || server.logStats().dropped.reserve === 0) {
+    if (offered >= 3000) {
+      break;
+    }
+    offered++;
+    server.log.info(`fill ${offered} ${padding}`, { offered });
+  }
+  for (let extra = 0; extra < 5; extra++) {
+    server.log.info(`past the reserve ${extra}`, { extra });
+  }
+  const beforeClose = sampleOf(server);
+  check(
+    problems,
+    (beforeClose.dropped.reserve ?? 0) > 0,
+    `${beforeClose.dropped.reserve} info records dropped as reserve`,
+  );
+  check(
+    problems,
+    (beforeClose.dropped.queue_full ?? 0) === 0,
+    `${beforeClose.dropped.queue_full} records dropped as queue_full`,
+  );
+  const closing = server.close();
+  await delay(50);
+  release();
+  await closing;
+  const closed = delivered.filter((rec) => rec.event_name === 'skeld.server.closed');
+  check(problems, closed.length === 1, `${closed.length} skeld.server.closed records reached the sink`);
+  const [only] = closed;
+  check(problems, only?.severity_text === 'info', `the closed record has severity ${String(only?.severity_text)}`);
+  const reserveDrops = Number(only?.['skeld.log.dropped.reserve']);
+  check(
+    problems,
+    reserveDrops > 0,
+    `the closed record carries skeld.log.dropped.reserve ${String(only?.['skeld.log.dropped.reserve'])}`,
+  );
+  check(
+    problems,
+    reserveDrops >= (beforeClose.dropped.reserve ?? 0),
+    `the closed record counts ${reserveDrops} reserve drops, fewer than the ${beforeClose.dropped.reserve} counted before close()`,
+  );
+  report.result(
+    'AC-12 an overloaded queue still delivers the skeld.server.closed record, at info, carrying the reserve drops',
+    problems,
+    `${offered} info records offered, ${beforeClose.dropped.reserve} dropped as reserve before close(); closed record severity ${String(only?.severity_text)}, skeld.log.dropped.reserve ${String(only?.['skeld.log.dropped.reserve'])}`,
+  );
+}
+
 async function main(): Promise<void> {
   const report = createReport('log-close');
   await readingCase(report);
   await silentCases(report, 3);
   await pairCase(report);
+  await reserveCase(report);
   report.finish();
 }
 

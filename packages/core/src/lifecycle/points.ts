@@ -80,9 +80,9 @@ export function pointErrorWritten(
   status: number,
   errorType: string | null,
 ): void {
-  const { reason, value, location } = failure;
+  const { reason, value, detail } = failure;
   const read = reason === 'thrown' || reason === 'http_error';
-  exchange.runtime.log.failed('skeld.request.error', exchange.log, status, errorType, reason, read, value, location);
+  exchange.runtime.log.failed('skeld.request.error', exchange.log, status, errorType, reason, read, value, detail);
 }
 
 // Does:  Counts an observer's failure and offers its record at once, since the response it observed is unchanged.

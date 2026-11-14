@@ -72,7 +72,8 @@ export interface RecordParts {
 export type QueueCounts = Omit<LogStats, 'suppressed'>;
 
 export interface Destination {
-  enqueue(line: string, severityNumber: number): boolean;
+  // Does:  Queues one line; reserve is whether it may use the last part of the queue kept back from ordinary records.
+  enqueue(line: string, reserve: boolean): boolean;
   counts(): QueueCounts;
   close(timeoutMs: number): Promise<void>;
 }
@@ -112,7 +113,7 @@ export interface ServerLog {
     reason: RequestErrorReason | HookErrorReason,
     read: boolean,
     value: unknown,
-    location: string | null,
+    detail: readonly [string, string | number] | null,
   ): void;
   ended(request: RequestLog, outcome: 'completed' | 'aborted', status: number | null, durationMs: number): void;
   logger(request: RequestLog | null): Logger;

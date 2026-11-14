@@ -29,7 +29,10 @@ function checkLocation(res: ServerResponse, route: RouteRuntime): void {
   if (verdict.kind === 'refused') {
     res.removeHeader('location');
     event('refuse.redirect', route.info.name);
-    throw engineFault('redirect_refused', `redirect refused at ${route.info.name}: ${verdict.reason}`, null);
+    throw engineFault('redirect_refused', `redirect refused at ${route.info.name}: ${verdict.reason}`, [
+      'skeld.redirect_refusal',
+      verdict.reason,
+    ]);
   }
   res.setHeader('location', verdict.location);
 }

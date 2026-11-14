@@ -60,7 +60,7 @@ export function createDestination(resolved: ResolvedLog, onRecovered: () => void
   }
 
   return {
-    enqueue: (line, severityNumber) => queue.enqueue(line, severityNumber),
+    enqueue: (line, reserve) => queue.enqueue(line, reserve),
     counts: () => queue.counts(runner === null ? pendingMs() : runner.pendingMs()),
     close(timeoutMs) {
       if (closing !== null) {

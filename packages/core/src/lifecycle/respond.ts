@@ -7,7 +7,7 @@ import type { Serializer } from '../compile/types.ts';
 import { setAuthorHeaders } from './author-header.ts';
 import { collectCookies } from './cookies.ts';
 import { settle } from './deadline.ts';
-import { engineFault } from './engine-fault.ts';
+import { engineFault, type FaultDetail } from './engine-fault.ts';
 import { fail } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
 import { ResponseContextRecord, runStage } from './hooks.ts';
@@ -18,12 +18,15 @@ import { writeJson } from './wire.ts';
 const NO_CONTENT = 204;
 const NOT_MODIFIED = 304;
 const SCHEMA_MISMATCH = 'response does not match its schema';
+// Why: A three-digit integer is the most a status line can carry, so the logged value is bounded whatever was returned.
+const FIRST_LOGGED_STATUS = 100;
+const LAST_LOGGED_STATUS = 999;
 
 function mismatch(location: string | undefined): Error {
   if (location === undefined || location === '') {
     return engineFault('response_mismatch', SCHEMA_MISMATCH, null);
   }
-  return engineFault('response_mismatch', `${SCHEMA_MISMATCH} at ${location}`, location);
+  return engineFault('response_mismatch', `${SCHEMA_MISMATCH} at ${location}`, ['skeld.schema_location', location]);
 }
 
 function writePayload(exchange: Exchange, status: number, serialized: string): void {
@@ -129,7 +132,9 @@ export function respond(exchange: Exchange, reply: RuntimeReply): void {
     const declared = exchange.route.serializers.get(status);
     if (declared === undefined) {
       event('err.undeclared_status', status);
-      fail(exchange, engineFault('undeclared_status', `handler returned undeclared status ${status}`, null));
+      const logged = Number.isInteger(status) && status >= FIRST_LOGGED_STATUS && status <= LAST_LOGGED_STATUS;
+      const detail: FaultDetail | null = logged ? ['skeld.returned_status', status] : null;
+      fail(exchange, engineFault('undeclared_status', `handler returned undeclared status ${status}`, detail));
       return;
     }
     serializer = declared;

@@ -89,13 +89,13 @@ function closeChild(exchange: Exchange, token: Token): void {
 function failureOf(value: unknown): Failure {
   const fault = faultOf(value);
   if (fault !== undefined) {
-    return { reason: fault.reason, value, location: fault.location };
+    return { reason: fault.reason, value, detail: fault.detail };
   }
-  return { reason: isInstance(value, HttpError) ? 'http_error' : 'thrown', value, location: null };
+  return { reason: isInstance(value, HttpError) ? 'http_error' : 'thrown', value, detail: null };
 }
 
 function mismatchOf(value: unknown): Failure {
-  return { reason: 'response_mismatch', value, location: null };
+  return { reason: 'response_mismatch', value, detail: null };
 }
 
 // Does:  Collects the cookies an HttpError names for its response; throws when one of them is invalid.
@@ -201,7 +201,7 @@ function enterErrorPath(exchange: Exchange, error: unknown, failed: boolean): vo
   const { res } = exchange;
   // Why: Headers are already on the wire, so no error body can follow; the socket is destroyed instead.
   if (res.headersSent) {
-    const failure: Failure = { reason: 'headers_sent', value: error, location: null };
+    const failure: Failure = { reason: 'headers_sent', value: error, detail: null };
     pointFailed(exchange, failure);
     settle(exchange, 'written');
     event('err.headers_sent');
@@ -268,7 +268,7 @@ export function expire(exchange: Exchange): void {
   end(exchange.child);
   exchange.child = 0;
   end(exchange.stage);
-  const failure: Failure = { reason: 'timeout', value: null, location: null };
+  const failure: Failure = { reason: 'timeout', value: null, detail: null };
   pointFailed(exchange, failure);
   if (res.headersSent) {
     res.destroy();
