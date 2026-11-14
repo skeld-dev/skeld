@@ -61,7 +61,7 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
   }
   const head: OutgoingHttpHeaders = {};
   const { runtime, route, pendingCookies, cors } = exchange;
-  finishHead(res, status, head, runtime.securityHeaders, route, pendingCookies, cors);
+  finishHead(res, exchange.log.id, status, head, runtime.securityHeaders, route, pendingCookies, cors);
   end(exchange.stage);
   if (exchange.closeConnection || exchange.runtime.isClosing()) {
     res.setHeader('connection', 'close');
@@ -73,10 +73,10 @@ function sendReply(exchange: Exchange, reply: RawReply): void {
   res.writeHead(status, head);
   if (payload === undefined || method === 'HEAD') {
     res.end();
-    wrote(status, null, null);
+    wrote(status, head, null);
   } else {
     res.end(payload);
-    wrote(status, null, payload);
+    wrote(status, head, payload);
   }
   settle(exchange, 'sent-by-hook');
 }

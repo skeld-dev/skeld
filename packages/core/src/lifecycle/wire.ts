@@ -1,5 +1,5 @@
 // Does:  Writes JSON bodies and the engine's own error bodies, completing each head through finishHead.
-// Holds: An engine-written error keeps no earlier header but the request id; it adds only the cookies and grant given.
+// Holds: An engine-written error keeps no header set before it; it adds the request id and the cookies and grant given.
 
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { end, start, wrote } from '#diag';
@@ -9,7 +9,6 @@ import { finishHead } from './head.ts';
 import type { EngineRuntime, RouteRuntime } from './types.ts';
 
 const JSON_CONTENT_TYPE = 'application/json; charset=utf-8';
-const REQUEST_ID_HEADER = 'x-request-id';
 
 export const INTERNAL_BODY: ErrorBody = { status: 500, code: 'INTERNAL', message: 'Internal Server Error' };
 export const CROSS_ORIGIN_BODY: ErrorBody = {
@@ -24,6 +23,7 @@ const INTERNAL_TEXT = JSON.stringify(INTERNAL_BODY);
 // Does:  Writes a JSON response; route is null for an engine-written error, and a refused redirect throws unwritten.
 export function writeJson(
   res: ServerResponse,
+  requestId: string,
   method: string,
   status: number,
   payload: string,
@@ -40,7 +40,7 @@ export function writeJson(
   if (close) {
     headers.connection = 'close';
   }
-  finishHead(res, status, headers, secure, route, cookies, cors);
+  finishHead(res, requestId, status, headers, secure, route, cookies, cors);
   res.writeHead(status, headers);
   // Why: A HEAD response declares the length of the body it does not send.
   if (method === 'HEAD') {
@@ -66,6 +66,7 @@ function errorText(runtime: EngineRuntime, body: ErrorBody): string | null {
 export function writeErrorBody(
   runtime: EngineRuntime,
   res: ServerResponse,
+  requestId: string,
   method: string,
   body: ErrorBody,
   close: boolean,
@@ -77,17 +78,25 @@ export function writeErrorBody(
   const closing = close || runtime.isClosing();
   // Why: A header set before the failure (a cookie, a cache directive) must not ride out on the error.
   for (const name of res.getHeaderNames()) {
-    // Why: The request id is the engine's own header, set at the first step; every error must still carry it.
-    if (name !== REQUEST_ID_HEADER) {
-      res.removeHeader(name);
-    }
+    res.removeHeader(name);
   }
   // Why: removeHeader('date') turns sendDate off, which would leave the error without Node's Date header.
   res.sendDate = true;
   if (text === null) {
-    writeJson(res, method, INTERNAL_BODY.status, INTERNAL_TEXT, closing, runtime.securityHeaders, null, null, cors);
+    writeJson(
+      res,
+      requestId,
+      method,
+      INTERNAL_BODY.status,
+      INTERNAL_TEXT,
+      closing,
+      runtime.securityHeaders,
+      null,
+      null,
+      cors,
+    );
   } else {
-    writeJson(res, method, body.status, text, closing, runtime.securityHeaders, null, cookies, cors);
+    writeJson(res, requestId, method, body.status, text, closing, runtime.securityHeaders, null, cookies, cors);
   }
   end(span);
   return text !== null;

@@ -13,8 +13,6 @@ import { resolveClient } from './client-address.ts';
 import type { Exchange, Failure } from './exchange.ts';
 import type { EngineRuntime, RouteRuntime } from './types.ts';
 
-const REQUEST_ID_HEADER = 'x-request-id';
-
 const NO_CORRELATION: Correlation = Object.freeze({ inboundId: null, traceId: null, traceFlags: null });
 
 // Does:  Counts the response's close and offers the access record when the access option is on.
@@ -26,7 +24,7 @@ function pointClosed(log: ServerLog, request: RequestLog, res: ServerResponse): 
   }
 }
 
-// Does:  Starts a request: mints its id, sets it as x-request-id and watches the response's one close.
+// Does:  Starts a request: mints the id its response head will carry and watches the response's one close.
 // Holds: The close listener is the only one this feature attaches, and Node emits a response's close at most once.
 export function pointStart(runtime: EngineRuntime, req: IncomingMessage, res: ServerResponse): RequestLog {
   const startedAt = performance.now();
@@ -46,7 +44,6 @@ export function pointStart(runtime: EngineRuntime, req: IncomingMessage, res: Se
     // Why: Read now, while the socket is open, so a record written after the client left still has the address.
     address: log.clientAddress ? resolveClient(req, runtime.trustProxy) : null,
   };
-  res.setHeader(REQUEST_ID_HEADER, request.id);
   res.once('close', () => pointClosed(log, request, res));
   return request;
 }
