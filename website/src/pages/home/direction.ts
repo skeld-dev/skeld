@@ -11,7 +11,7 @@ export function direction() {
         <p class="section-label"><img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />Start building</p>
         <h2 id="direction-title">Make your first<br /><span>request.</span></h2>
         <p class="direction-description">Define a contract. Write a handler. See what skeld checks before the data reaches your code.</p>
-        <a class="button button-large primary" href="/docs/guides/first-request/">Get started<svg aria-hidden="true"><use href="#arrow"></use></svg></a>
+        <a class="button button-large primary" href="/docs/guides/install/">Get started<svg aria-hidden="true"><use href="#arrow"></use></svg></a>
       </div>
     </section>
   `;

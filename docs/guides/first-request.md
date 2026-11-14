@@ -2,7 +2,7 @@
 
 Run a small service, call it through its contract, then send input the contract refuses. You need the Node version in [`.nvmrc`](../../.nvmrc), pnpm 12.19.0, and a terminal in the repository root.
 
-This walkthrough uses the checkout, so you can follow it before the package is published. For a separate application, see the [package installation instructions](../../packages/core/README.md#install) once the package is available.
+This walkthrough runs the hello example from a checkout of the [skeld repository](https://github.com/skeld-dev/skeld). To add skeld to your own project from npm, start with [Install skeld](install.md).
 
 ## Start the server and client
 

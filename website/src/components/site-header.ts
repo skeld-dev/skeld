@@ -32,7 +32,7 @@ export function siteHeader(current?: 'home' | 'docs' | 'security' | 'explore') {
         <a href="/explore/" aria-current=${current === 'explore' ? 'page' : 'false'}>Explore</a>
         <a href="/security/" aria-current=${current === 'security' ? 'page' : 'false'}>Security</a>
       </nav>
-      <a class="button header-cta" href="/docs/guides/first-request/">
+      <a class="button header-cta" href="/docs/guides/install/">
         Get started
         <svg aria-hidden="true"><use href="#arrow"></use></svg>
       </a>

@@ -8,6 +8,7 @@ const groups = [
     'Start here',
     [
       ['README', 'Overview'],
+      ['guides/install', 'Install skeld'],
       ['guides/first-request', 'Your first request'],
     ],
   ],

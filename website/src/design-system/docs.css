@@ -261,19 +261,6 @@
   outline-color: var(--color-editor-property);
   outline-offset: -3px;
 }
-.docs-checkout {
-  margin-bottom: 28px;
-  border-left: 2px solid var(--color-ice);
-  padding: 14px 18px;
-  background: var(--color-raised);
-  color: var(--color-readable);
-  font-size: 12px;
-  line-height: 1.9;
-}
-.docs-checkout strong {
-  color: var(--color-frost);
-  font-weight: 500;
-}
 .docs-prose {
   color: var(--color-soft);
   font-size: 14px;

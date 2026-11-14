@@ -38,12 +38,12 @@ export function buildExample() {
           )}
         </lc-tabs>
         <details class="build-run" id="run-example">
-          <summary><span>Run this example locally</span><span class="build-run-context">From a skeld checkout</span><svg aria-hidden="true"><use href="#arrow"></use></svg></summary>
+          <summary><span>Run this example locally</span><span class="build-run-context">With npm</span><svg aria-hidden="true"><use href="#arrow"></use></svg></summary>
           <div class="build-run-body">
-            <p>Use the Node version in the checkout's <code>.nvmrc</code> and pnpm 12.19.0, then run <code>pnpm install</code> at the repository root. Save all three files together in a new folder under <code>examples/hello/</code>, where the workspace provides skeld.</p>
+            <p>Install Node.js 26.12 or later. In a new folder, run <code>npm init -y</code>, <code>npm pkg set type=module</code> and <code>npm install @skeld/core</code>. Save all three files in that folder.</p>
             <div class="build-terminals">
-              <div><span>In that folder · terminal one</span><pre tabindex="0" aria-label="Start the example server"><code>node --conditions=skeld-source server.ts</code></pre></div>
-              <div><span>In that folder · terminal two</span><pre tabindex="0" aria-label="Call the example server"><code>node --conditions=skeld-source client.ts</code></pre></div>
+              <div><span>In that folder · terminal one</span><pre tabindex="0" aria-label="Start the example server"><code>node server.ts</code></pre></div>
+              <div><span>In that folder · terminal two</span><pre tabindex="0" aria-label="Call the example server"><code>node client.ts</code></pre></div>
             </div>
             <p>The client prints <code>Hello, Ada!</code>. Stop the server with Ctrl-C. To use a port other than 3000, update it in both the server and client.</p>
           </div>
