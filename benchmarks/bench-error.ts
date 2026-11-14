@@ -1,5 +1,5 @@
 // Does:  Defines the benchmark's error, which carries the exit code the run ends with.
-// Holds: An error always carries exit code 2, 3 or 4; 0 and 1 are verdicts and never errors.
+// Holds: An error always carries exit code 2, 3 or 4; 0 is success; 1 is reserved for session assessment failures.
 
 export class BenchError extends Error {
   override readonly name = 'BenchError';

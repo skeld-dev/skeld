@@ -1,13 +1,12 @@
-// Does:  Declares the benchmark's shapes: options, samples, summaries, the verdict and the run.
-// Holds: A verdict is keep, below or not-assessed, and a not-assessed one always carries its reason.
+// Does:  Declares the benchmark's shapes: options, samples, summaries and the run.
+// Holds: HTTP samples measure skeld; optional sessions distinguish its builds.
 
-export type ServerId = 'skeld' | 'fastify' | 'node-http' | 'hono' | 'express';
+export type ServerId = 'skeld';
 export type RouteId = 'hello' | 'echo';
 export type LoggingBuildId = 'before-a' | 'before-b' | 'off' | 'default' | 'access';
 export type BuildId = 'skeld' | 'skeld-diag' | LoggingBuildId;
 type RunStatus = 'complete' | 'invalid' | 'interrupted';
 export type Bound = 'server' | 'generator' | 'neither' | 'unknown';
-type VerdictKind = 'keep' | 'below' | 'not-assessed';
 
 export interface LoggingSession {
   readonly baseline: string;
@@ -66,11 +65,7 @@ export interface BenchSoftware {
   readonly skeldResolvedFrom: string;
   readonly revision: string | null;
   readonly uncommittedChanges: boolean | null;
-  readonly fastify: string;
   readonly autocannon: string;
-  readonly hono: string;
-  readonly honoNodeServer: string;
-  readonly express: string;
 }
 
 export interface BenchSample {
@@ -109,20 +104,8 @@ export interface BenchSummary {
   readonly route: RouteId;
   readonly rounds: number;
   readonly serverCpuMicrosecondsPerRequest: BenchSpread | null;
-  readonly cpuPercentOfFastify: number | null;
   readonly requestsPerSecond: BenchSpread;
   readonly latencyP99Ms: BenchSpread;
-  readonly percentOfFastify: number | null;
-  readonly percentOfNodeHttp: number | null;
-}
-
-export interface BenchVerdict {
-  readonly kind: VerdictKind;
-  readonly linePercent: 100;
-  readonly hello: number | null;
-  readonly echo: number | null;
-  readonly reason: string | null;
-  readonly generatorBoundRounds: number;
 }
 
 export interface BenchRun {
@@ -137,7 +120,7 @@ export interface BenchRun {
   readonly software: BenchSoftware;
   readonly samples: readonly BenchSample[];
   readonly summary: readonly BenchSummary[];
-  readonly verdict: BenchVerdict;
+  readonly statusReason: string | null;
   readonly warnings: readonly string[];
 }
 

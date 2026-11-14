@@ -8,7 +8,6 @@ export const connections = 100;
 export const workers = 3;
 export const saturationPercent = 90;
 export const generatorCeilingPercent = saturationPercent * workers;
-export const keepLinePercent = 100;
 
 export const defaultPipelining = 1;
 export const defaultWarmUpSeconds = 3;
@@ -50,7 +49,6 @@ export const browserOrigin = 'http://app.bench.test';
 
 export const busyLoadAverage = 1.0;
 export const protocolNode = 'v26.13.0';
-export const protocolFastify = '5.12.7';
 export const tasksetPath = '/usr/bin/taskset';
 export const serverCores = '7';
 export const runnerCores = '3-6';

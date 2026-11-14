@@ -1,23 +1,20 @@
-// Does:  Decides the verdict: keep, below the line, or not assessed with the reason.
+// Does:  Records protocol deviations and gates the diagnostic and logging overhead assessments.
 // Holds: A run that deviates from the protocol, was interrupted or was generator-bound is never assessed.
 
-import { defaultServerIds, routeIds } from './options.ts';
-import type { BenchSample, BenchSummary, BenchVerdict, RouteId, RunOptions } from './types.ts';
+import { routeIds } from './options.ts';
+import type { BenchSample, RunOptions } from './types.ts';
 import {
   defaultDurationSeconds,
   defaultPipelining,
   defaultRounds,
   defaultWarmUpSeconds,
-  keepLinePercent,
   loggingRounds,
-  protocolFastify,
   protocolNode,
   serverCores,
 } from './values.ts';
 
 interface Installed {
   readonly node: string;
-  readonly fastify: string;
   readonly nodeOptions: string | null;
   readonly pinning: string | null;
 }
@@ -46,19 +43,11 @@ export function deviations(options: RunOptions, installed: Installed): readonly 
   } else if (options.rounds !== protocolRounds) {
     found.push(`${roundsText(options.rounds)}, not ${protocolRounds}`);
   }
-  const comparesFrameworks = !options.diag && options.logging === null;
-  const missing = defaultServerIds.filter((server) => !options.servers.includes(server));
-  if (comparesFrameworks && missing.length > 0) {
-    found.push(`servers ${options.servers.join(',')} only`);
-  }
-  if (comparesFrameworks && options.routes.length !== routeIds.length) {
+  if (!options.diag && options.logging === null && options.routes.length !== routeIds.length) {
     found.push(`route ${options.routes.join(',')} only`);
   }
   if (installed.node !== protocolNode) {
     found.push(`Node ${installed.node.replace(/^v/, '')}, not ${protocolNode.replace(/^v/, '')}`);
-  }
-  if (comparesFrameworks && installed.fastify !== protocolFastify) {
-    found.push(`Fastify ${installed.fastify}, not ${protocolFastify}`);
   }
   if (installed.nodeOptions !== null) {
     found.push(`NODE_OPTIONS=${JSON.stringify(installed.nodeOptions)}`);
@@ -69,14 +58,11 @@ export function deviations(options: RunOptions, installed: Installed): readonly 
   return found;
 }
 
-const skeldPercent = (summary: readonly BenchSummary[], route: RouteId): number | null =>
-  summary.find((group) => group.server === 'skeld' && group.route === route)?.cpuPercentOfFastify ?? null;
-
-export function generatorBottleneckText(generatorBound: number, measured: number): string {
+function generatorBottleneckText(generatorBound: number, measured: number): string {
   return `the load generator was the bottleneck in ${generatorBound} of ${measured} measured rounds`;
 }
 
-const endingReason = (ending: RunEnding): string | null => {
+export const endingReason = (ending: RunEnding): string | null => {
   if (ending.status === 'invalid') {
     return `The run is invalid: ${ending.reason}.`;
   }
@@ -87,9 +73,6 @@ const endingReason = (ending: RunEnding): string | null => {
   }
   return null;
 };
-
-export const diagReason = 'Diag mode compares builds, not frameworks.';
-export const loggingReason = 'The logging session compares builds, not frameworks; its verdict is in the readout.';
 
 export function notAssessedReason(
   ending: RunEnding,
@@ -108,32 +91,10 @@ export function notAssessedReason(
   if (strayCores !== undefined) {
     return `The run was not pinned: ${strayCores.server} in round ${strayCores.round} was allowed cores ${strayCores.serverCores ?? 'unknown'}, not ${serverCores}.`;
   }
-  if (measured.some((sample) => sample.bound === 'generator' && sample.server !== 'node-http')) {
+  if (measured.some((sample) => sample.bound === 'generator')) {
     const generatorBound = measured.filter((sample) => sample.bound === 'generator').length;
     const text = generatorBottleneckText(generatorBound, measured.length);
     return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
   }
   return null;
-}
-
-export function decideVerdict(
-  ending: RunEnding,
-  found: readonly string[],
-  samples: readonly BenchSample[],
-  summary: readonly BenchSummary[],
-  buildsReason: string | null,
-): BenchVerdict {
-  const hello = skeldPercent(summary, 'hello');
-  const echo = skeldPercent(summary, 'echo');
-  const reason =
-    (buildsReason === null ? notAssessedReason(ending, found, samples) : (endingReason(ending) ?? buildsReason)) ??
-    (echo === null ? 'The server CPU per request could not be read on this system.' : null);
-  const generatorBoundRounds = samples.filter(
-    (sample) => sample.kind === 'measured' && sample.bound === 'generator',
-  ).length;
-  if (reason !== null || echo === null) {
-    return { kind: 'not-assessed', linePercent: keepLinePercent, hello, echo, reason, generatorBoundRounds };
-  }
-  const kind = echo >= keepLinePercent ? 'keep' : 'below';
-  return { kind, linePercent: keepLinePercent, hello, echo, reason: null, generatorBoundRounds };
 }
