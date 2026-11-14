@@ -1,0 +1,7 @@
+# Release and supply-chain changes require maintainer review.
+/.github/ @ul0gic
+/.nvmrc @ul0gic
+/pnpm-workspace.yaml @ul0gic
+/pnpm-lock.yaml @ul0gic
+/**/package.json @ul0gic
+/website/wrangler.json @ul0gic

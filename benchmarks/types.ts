@@ -1,7 +1,7 @@
 // Does:  Declares the benchmark's shapes: options, samples, summaries, the verdict and the run.
 // Holds: A verdict is keep, below or not-assessed, and a not-assessed one always carries its reason.
 
-export type ServerId = 'skeld' | 'fastify' | 'node-http' | 'hono' | 'express' | 'light';
+export type ServerId = 'skeld' | 'fastify' | 'node-http' | 'hono' | 'express';
 export type RouteId = 'hello' | 'echo';
 export type LoggingBuildId = 'before-a' | 'before-b' | 'off' | 'default' | 'access';
 export type BuildId = 'skeld' | 'skeld-diag' | LoggingBuildId;
@@ -71,7 +71,6 @@ export interface BenchSoftware {
   readonly hono: string;
   readonly honoNodeServer: string;
   readonly express: string;
-  readonly light: string;
 }
 
 export interface BenchSample {

@@ -144,8 +144,8 @@ const methodLines = (options: BenchOptions, unpinnedReason: string | null): read
     "- Beside it: autocannon's mean requests per second for each round and its p99 latency, each with median, minimum and maximum over the rounds.",
     `- The load generator runs on the same machine as the servers and competes with them for CPU; every server carries the same handicap. A round is generator-bound when the runner process (${workers} workers and the main thread) used ${generatorCeilingPercent} % or more of one core, ${saturationPercent} % of the workers' ${workers} cores, whatever the server used; such a round of any server but node-http voids the verdict (ADR-009).`,
     '- Loggers off. No TLS. No compression.',
-    '- Routes: hello returns { hello: "world" } through a response schema; echo parses a JSON body and returns it. skeld and Fastify validate the echo body against { hello: string }, closed to other keys; node:http parses and serializes with JSON.parse and JSON.stringify and validates nothing. fastify/benchmarks\' POST route does not validate; this one does, so both frameworks do the same work. Hono and Express, when run, parse the echo body and validate nothing, like node:http; light checks the body by hand (hello is a string), as its own hello benchmark does.',
-    '- Server options: skeld, engine defaults; fastify, { logger: false }; node-http, http.createServer with no options; hono, @hono/node-server serve() with no options; express, express() with express.json() on the echo route; light, @lightstart/server/node serve() with no options.',
+    '- Routes: hello returns { hello: "world" } through a response schema; echo parses a JSON body and returns it. skeld and Fastify validate the echo body against { hello: string }, closed to other keys; node:http parses and serializes with JSON.parse and JSON.stringify and validates nothing. fastify/benchmarks\' POST route does not validate; this one does, so both frameworks do the same work. Hono and Express, when run, parse the echo body and validate nothing, like node:http.',
+    '- Server options: skeld, engine defaults; fastify, { logger: false }; node-http, http.createServer with no options; hono, @hono/node-server serve() with no options; express, express() with express.json() on the echo route.',
   ];
 };
 
@@ -226,10 +226,6 @@ function renderReport(run: BenchRun): string {
       ['autocannon', software.autocannon],
       ['Hono', `hono ${software.hono}, @hono/node-server ${software.honoNodeServer}`],
       ['Express', software.express],
-      [
-        'light',
-        `@lightstart/server ${software.light} (alantriesagain/lightstart 0b4cc663, packed by its scripts/pack.js)`,
-      ],
     ]),
     '',
     '## Method',

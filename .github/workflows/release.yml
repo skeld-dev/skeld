@@ -1,0 +1,130 @@
+name: Stage npm release
+
+# Run this workflow manually against a version tag, for example v0.1.0.
+# npm approval with 2FA is a separate, intentional release action.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      node: ${{ steps.version.outputs.node }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Validate version and repository
+        id: version
+        env:
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('packages/core/package.json', 'utf8'));
+          assert.equal(process.env.RELEASE_REPOSITORY, 'skeld-dev/skeld');
+          assert.equal(pkg.name, '@skeld/core');
+          assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+          assert.equal(process.env.RELEASE_REF, `refs/tags/v${pkg.version}`);
+          assert.equal(pkg.repository.url, 'git+https://github.com/skeld-dev/skeld.git');
+          assert.equal(pkg.publishConfig.access, 'public');
+          const node = readFileSync('.nvmrc', 'utf8').trim();
+          assert.match(node, /^\d+\.\d+\.\d+$/);
+          appendFileSync(process.env.GITHUB_OUTPUT, `node=${node}\n`);
+          NODE
+          git merge-base --is-ancestor HEAD origin/main
+
+  checks:
+    name: Release checks
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  security:
+    name: Release security
+    needs: validate
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+      security-events: write
+
+  package:
+    name: Build verified package
+    needs: [ checks, security ]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b packages/core
+      - name: Pack and verify the exact release artifact
+        run: |
+          mkdir release
+          pnpm --filter @skeld/core pack --pack-destination "$GITHUB_WORKSPACE/release"
+          node tools/check-pack-markers.ts release/skeld-core-*.tgz
+          cd release
+          sha256sum skeld-core-*.tgz > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-${{ github.sha }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+
+  stage:
+    name: Stage on npm
+    needs: [ validate, package ]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ needs.validate.outputs.node }}
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-${{ github.sha }}
+          path: release
+      - name: Check npm supports staged publishing
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const [major, minor] = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number);
+          assert(major > 11 || (major === 11 && minor >= 15), 'npm >=11.15.0 is required');
+          NODE
+      - name: Stage verified tarball with trusted publishing
+        working-directory: release
+        run: |
+          sha256sum --check SHA256SUMS
+          npm stage publish ./skeld-core-*.tgz --access public --tag latest --provenance --ignore-scripts --registry https://registry.npmjs.org

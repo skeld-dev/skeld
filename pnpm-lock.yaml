@@ -194,9 +194,6 @@ importers:
       '@hono/node-server':
         specifier: 2.1.5
         version: 2.1.5(hono@4.13.14)
-      '@lightstart/server':
-        specifier: file:vendor/lightstart-server-0.1.0-0b4cc663.tgz
-        version: file:benchmarks/vendor/lightstart-server-0.1.0-0b4cc663.tgz
       '@skeld/core':
         specifier: workspace:*
         version: link:../packages/core
@@ -821,10 +818,6 @@ packages:
         optional: true
       typescript:
         optional: true
-
-  '@lightstart/server@file:benchmarks/vendor/lightstart-server-0.1.0-0b4cc663.tgz':
-    resolution: {integrity: sha512-Fhk5aR8/fp1xT62Og4QZNxcvKMJ6WZ5GgJTqucd0NTA0/Ux/N/Fz8/bMZkz4XU+Hg4abWnjG5M8HTujPtO0Ndw==, tarball: file:benchmarks/vendor/lightstart-server-0.1.0-0b4cc663.tgz}
-    version: 0.1.0
 
   '@minimistjs/subarg@1.0.0':
     resolution: {integrity: sha512-Q/ONBiM2zNeYUy0mVSO44mWWKYM3UHuEK43PKIOzJCbvUnPoMH1K+gk3cf1kgnCVJFlWmddahQQCmrmBGlk9jQ==}
@@ -2578,8 +2571,6 @@ snapshots:
   '@lightstart/light@https://codeload.github.com/ul0gic/lightstart/tar.gz/7b8145a237e85bcc12195fba97ef78607cc73778(typescript@7.0.2)':
     optionalDependencies:
       typescript: 7.0.2
-
-  '@lightstart/server@file:benchmarks/vendor/lightstart-server-0.1.0-0b4cc663.tgz': {}
 
   '@minimistjs/subarg@1.0.0':
     dependencies:

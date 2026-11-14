@@ -33,7 +33,7 @@ Options:
   --warm-up <s>      discarded warm-up seconds per route, 1 to 600 (default 3)
   --duration <s>     measured seconds per route, 1 to 600 (default 10)
   --rounds <n>       measured rounds per server and route, 1 to 50 (default 3)
-  --servers <list>   skeld,fastify,node-http,hono,express,light
+  --servers <list>   skeld,fastify,node-http,hono,express
                      (default skeld,fastify,node-http)
   --routes <list>    hello,echo (default both)
   --out <dir>        folder for the run's report (default benchmarks/results)
@@ -62,7 +62,7 @@ whether the overhead ratio is assessed.
 `;
 
 export const defaultServerIds: readonly ServerId[] = ['skeld', 'fastify', 'node-http'];
-const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express', 'light'];
+const serverIds: readonly ServerId[] = [...defaultServerIds, 'hono', 'express'];
 export const routeIds: readonly RouteId[] = ['hello', 'echo'];
 
 const valueOptions = [

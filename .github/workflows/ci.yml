@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm run check
+      - name: Lint
+        run: pnpm exec biome check . --error-on-warnings
+      - name: Unused dependencies and exports
+        run: pnpm run knip
+      - name: Correctness tests
+        run: pnpm test
+      - name: Diagnostic correctness tests
+        run: pnpm test diag
+      - name: Public API and examples
+        run: |
+          pnpm run api-docs --check
+          pnpm run api-check
+          pnpm run readme-check
+          pnpm run examples-check
+      - name: Package and consumer checks
+        run: |
+          pnpm run pack-check
+          pnpm run consumer-check
+      - name: Website build
+        run: pnpm --filter @skeld/website run build

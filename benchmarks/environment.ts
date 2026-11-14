@@ -20,7 +20,6 @@ export interface Packages {
   readonly hono: string;
   readonly honoNodeServer: string;
   readonly express: string;
-  readonly light: string;
 }
 
 const repositoryRoot = join(import.meta.dirname, '..');
@@ -96,7 +95,6 @@ export function resolvePackages(): Packages {
   const honoFile = resolveFile('hono', () => import.meta.resolve('hono'));
   const honoNodeServerFile = resolveFile('@hono/node-server', () => import.meta.resolve('@hono/node-server'));
   const expressFile = resolveFile('express', () => import.meta.resolve('express'));
-  const lightFile = resolveFile('@lightstart/server', () => import.meta.resolve('@lightstart/server'));
   return {
     skeld: versionOf('@skeld/core', manifestFile),
     skeldResolvedFrom: displayPath(dirname(serverFile)),
@@ -105,7 +103,6 @@ export function resolvePackages(): Packages {
     hono: versionOf('hono', honoFile),
     honoNodeServer: versionOf('@hono/node-server', honoNodeServerFile),
     express: versionOf('express', expressFile),
-    light: versionOf('@lightstart/server', lightFile),
   };
 }
 
@@ -220,6 +217,5 @@ export function captureSoftware(
     hono: packages.hono,
     honoNodeServer: packages.honoNodeServer,
     express: packages.express,
-    light: packages.light,
   };
 }

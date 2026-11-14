@@ -22,6 +22,10 @@ Run from the repository root. The HTTP runner builds core itself:
 pnpm run bench
 ```
 
+The HTTP servers are skeld, Fastify, node:http, Hono and Express. The default run compares the first three;
+use `--servers skeld,fastify,node-http,hono,express` to include all five. Use `--check` to verify both routes
+without collecting timing measurements.
+
 Schema scripts use the source condition. The comparator directory must already contain the dependencies
 expected by that script; moving these scripts did not change their comparator pins or measurement protocol.
 
