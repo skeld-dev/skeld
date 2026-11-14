@@ -47,8 +47,8 @@ async function retention(stage: 'handler' | 'hook', disconnect: boolean): Promis
   try {
     const signal = await entered.promise;
     assert.equal(queue.size, 1, `${stage}: pending request must actually be retained before close`);
-    const exchange = queue.values().next().value;
-    assert(exchange !== undefined);
+    const exchange = queue.first;
+    assert(exchange !== null);
     if (disconnect) {
       client.destroy();
       await clientClosed.promise;

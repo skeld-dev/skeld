@@ -10,17 +10,10 @@ const MIN_PERIOD_MS = 10;
 
 // Does:  Holds the requests waiting under one time limit as a list threaded through them, oldest deadline first.
 // Holds: Joining and leaving allocate nothing, a request is in at most one queue, and size counts those in it.
-export class DeadlineQueue {
-  first: Exchange | null = null;
-  last: Exchange | null = null;
-  size = 0;
-
-  // Does:  Yields the waiting requests, oldest deadline first.
-  *values(): Generator<Exchange> {
-    for (let exchange = this.first; exchange !== null; exchange = exchange.waitingAfter) {
-      yield exchange;
-    }
-  }
+export interface DeadlineQueue {
+  first: Exchange | null;
+  last: Exchange | null;
+  size: number;
 }
 
 function append(queue: DeadlineQueue, exchange: Exchange): void {
@@ -133,7 +126,7 @@ export function createDeadlines(expire: (exchange: Exchange) => void): Deadlines
       if (found !== undefined) {
         return found;
       }
-      const created = new DeadlineQueue();
+      const created: DeadlineQueue = { first: null, last: null, size: 0 };
       queues.set(limitMs, created);
       periodMs = Math.min(periodMs, Math.max(MIN_PERIOD_MS, Math.floor(limitMs / CHECKS_PER_LIMIT)));
       return created;
