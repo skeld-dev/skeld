@@ -1,7 +1,8 @@
 // Does:  Takes the machine-wide benchmark lock, so two runs never measure at the same time.
 // Holds: The lock is taken with an atomic link; a lock whose holder is dead is replaced, a live one refuses the run.
 
-import { linkSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { BenchError, errorCode } from './bench-error.ts';
 import { isoSeconds } from './terminal.ts';
 import { lockFile } from './values.ts';
@@ -80,9 +81,13 @@ export interface Lock {
 }
 
 export function takeLock(): Lock {
-  const staged = `${lockFile}.${process.pid}`;
-  writeFileSync(staged, JSON.stringify({ pid: process.pid, startedAt: isoSeconds(new Date()) }));
+  const stagingDirectory = mkdtempSync(`${lockFile}.`);
+  const staged = join(stagingDirectory, 'holder');
   try {
+    writeFileSync(staged, JSON.stringify({ pid: process.pid, startedAt: isoSeconds(new Date()) }), {
+      flag: 'wx',
+      mode: 0o600,
+    });
     let replacedPid: number | null = null;
     if (!tryLink(staged)) {
       const holder = readHolder();
@@ -113,6 +118,6 @@ export function takeLock(): Lock {
       },
     };
   } finally {
-    unlinkSync(staged);
+    rmSync(stagingDirectory, { recursive: true, force: true });
   }
 }
