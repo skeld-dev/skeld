@@ -1,4 +1,4 @@
-// Does:  Introduces Skeld with an illustrated schema-to-log classification example.
+// Does:  Introduces skeld with an illustrated schema-to-log classification example.
 // Holds: Copy and the complete example remain readable without motion or JavaScript.
 
 import { html } from '@lightstart/light/html/core';
@@ -22,15 +22,15 @@ export function hero() {
           </h1>
           <p class="hero-description">
             Define data limits and sensitive fields in your schema.
-            Skeld applies them to requests, responses and schema-aware logs.
+            skeld applies them to requests, responses and schema-aware logs.
           </p>
           <div class="hero-actions">
-            <a class="button primary" href="#contract">
+            <a class="button button-large primary" href="#contract">
               See the contract
               <svg aria-hidden="true"><use href="#arrow"></use></svg>
             </a>
             <a class="text-link" href="#principles">
-              Why Skeld
+              Why skeld
               <span aria-hidden="true">↘</span>
             </a>
           </div>

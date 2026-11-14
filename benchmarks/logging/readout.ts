@@ -272,7 +272,7 @@ const linesSection = (readout: LoggingReadout): readonly string[] => {
 
 function renderReadout(readout: LoggingReadout): string {
   return [
-    `# Skeld logging readout ${readout.runId}`,
+    `# skeld logging readout ${readout.runId}`,
     '',
     sessionVerdictLine(readout.result),
     '',

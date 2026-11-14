@@ -140,11 +140,11 @@ const methodLines = (options: BenchOptions, unpinnedReason: string | null): read
     `- autocannon \`${flags}\`, run through its API in the runner's process on ${workers} worker threads; autocannon divides the ${connections} connections ${perWorker} per worker (${perWorker * workers} in all) and applies -p per connection in each worker (ADR-010).`,
     ...options.routes.map((route) => `- ${route}: \`${routeCommandLine(route, flags)}\``),
     `- ${plural(options.rounds, 'measured round', 'measured rounds')} per server and route. Each round starts every server in a fresh process, warms each route up for ${options.warmUpSeconds} s (discarded), measures it for ${options.durationSeconds} s, and stops the server. The server order rotates each round.`,
-    `- Judged statistic: the server's CPU time per request in each measured round, its utime plus stime from /proc/<pid>/stat over the measured window only (the warm-up excluded) divided by the requests autocannon completed in that window; median, minimum and maximum over the rounds. CPU vs Fastify is Fastify's median divided by the server's, so 100 % or more means the server spends no more CPU per request than Fastify. The verdict is keep when Skeld's echo ratio is ${keepLinePercent} % or more; hello is recorded and not judged (ADR-015).`,
+    `- Judged statistic: the server's CPU time per request in each measured round, its utime plus stime from /proc/<pid>/stat over the measured window only (the warm-up excluded) divided by the requests autocannon completed in that window; median, minimum and maximum over the rounds. CPU vs Fastify is Fastify's median divided by the server's, so 100 % or more means the server spends no more CPU per request than Fastify. The verdict is keep when skeld's echo ratio is ${keepLinePercent} % or more; hello is recorded and not judged (ADR-015).`,
     "- Beside it: autocannon's mean requests per second for each round and its p99 latency, each with median, minimum and maximum over the rounds.",
     `- The load generator runs on the same machine as the servers and competes with them for CPU; every server carries the same handicap. A round is generator-bound when the runner process (${workers} workers and the main thread) used ${generatorCeilingPercent} % or more of one core, ${saturationPercent} % of the workers' ${workers} cores, whatever the server used; such a round of any server but node-http voids the verdict (ADR-009).`,
     '- Loggers off. No TLS. No compression.',
-    '- Routes: hello returns { hello: "world" } through a response schema; echo parses a JSON body and returns it. Skeld and Fastify validate the echo body against { hello: string }, closed to other keys; node:http parses and serializes with JSON.parse and JSON.stringify and validates nothing. fastify/benchmarks\' POST route does not validate; this one does, so both frameworks do the same work. Hono and Express, when run, parse the echo body and validate nothing, like node:http; light checks the body by hand (hello is a string), as its own hello benchmark does.',
+    '- Routes: hello returns { hello: "world" } through a response schema; echo parses a JSON body and returns it. skeld and Fastify validate the echo body against { hello: string }, closed to other keys; node:http parses and serializes with JSON.parse and JSON.stringify and validates nothing. fastify/benchmarks\' POST route does not validate; this one does, so both frameworks do the same work. Hono and Express, when run, parse the echo body and validate nothing, like node:http; light checks the body by hand (hello is a string), as its own hello benchmark does.',
     '- Server options: skeld, engine defaults; fastify, { logger: false }; node-http, http.createServer with no options; hono, @hono/node-server serve() with no options; express, express() with express.json() on the echo route; light, @lightstart/server/node serve() with no options.',
   ];
 };
@@ -162,7 +162,7 @@ const diagCommandRow = (commandLine: readonly string[] | null): readonly (readon
 function renderReport(run: BenchRun): string {
   const { machine, software } = run;
   const lines = [
-    `# Skeld benchmark ${run.id}`,
+    `# skeld benchmark ${run.id}`,
     '',
     verdictLine(run.verdict),
     '',
@@ -221,7 +221,7 @@ function renderReport(run: BenchRun): string {
       ],
       ...diagCommandRow(software.diagServerCommandLine),
       ['NODE_OPTIONS', software.nodeOptions === null ? 'unset' : JSON.stringify(software.nodeOptions)],
-      ['Skeld', `@skeld/core ${software.skeld}, ${revisionText(run)}, from ${software.skeldResolvedFrom}`],
+      ['skeld', `@skeld/core ${software.skeld}, ${revisionText(run)}, from ${software.skeldResolvedFrom}`],
       ['Fastify', software.fastify],
       ['autocannon', software.autocannon],
       ['Hono', `hono ${software.hono}, @hono/node-server ${software.honoNodeServer}`],

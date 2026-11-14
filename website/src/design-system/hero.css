@@ -102,9 +102,6 @@
   align-items: center;
   gap: 28px;
 }
-.hero-actions .primary {
-  padding: 19px 24px;
-}
 .hero-example {
   align-self: end;
   width: 100%;
@@ -434,9 +431,6 @@
   }
   .hero-actions {
     gap: 24px;
-  }
-  .hero-actions .primary {
-    padding: 16px 19px;
   }
   .hero-example {
     margin: 0;

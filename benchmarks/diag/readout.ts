@@ -457,7 +457,7 @@ const overheadSection = (readout: Readout): readonly string[] => {
 
 function renderReadout(readout: Readout): string {
   return [
-    `# Skeld diag readout ${readout.runId}`,
+    `# skeld diag readout ${readout.runId}`,
     '',
     '## Run header',
     '',

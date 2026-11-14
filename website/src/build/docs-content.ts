@@ -12,6 +12,8 @@ import type { DocHeading, DocPage, SearchEntry } from '../pages/docs/model.ts';
 import { createLinkResolver, escapeHtml } from './docs-links.ts';
 import { docDefinitions } from './docs-manifest.ts';
 import { renderDiagram } from './docs-diagrams.ts';
+import { renderModelDiagram } from './docs-model-diagram.ts';
+import { documentationIndex, markdownUrl, publicMarkdown } from './docs-markdown.ts';
 
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
 function plain(value: string): string {
@@ -31,11 +33,12 @@ function renderCode(text: string, language: string): string {
   const highlighted = ['ts', 'typescript', 'js', 'javascript', 'json'].includes(language)
     ? renderToString(html`${codeExample(text)}`)
     : escapeHtml(text);
-  return `<div class="docs-code"><div class="docs-code-bar"><span>${escapeHtml(language || 'text')}</span><button type="button" data-copy-code hidden aria-label="Copy code">Copy</button></div><pre tabindex="0" aria-label="${escapeHtml(language || 'Text')} code"><code>${highlighted}</code></pre></div>`;
+  return `<div class="docs-code"><div class="docs-code-bar"><span>${escapeHtml(language || 'text')}</span><button type="button" class="button button-small" data-copy-code hidden aria-label="Copy code">Copy</button></div><pre tabindex="0" aria-label="${escapeHtml(language || 'Text')} code"><code>${highlighted}</code></pre></div>`;
 }
 export function buildDocumentation() {
   const resolver = createLinkResolver(repository, docDefinitions);
   const search: SearchEntry[] = [];
+  const markdownFiles = new Map<string, string>();
   const pages: DocPage[] = docDefinitions.map((definition) => {
     const markdown = readFileSync(resolve(repository, definition.source), 'utf8');
     const headings: DocHeading[] = [];
@@ -73,15 +76,27 @@ export function buildDocumentation() {
       if (language !== 'mermaid') {
         return renderCode(text, language);
       }
-      return renderDiagram(text, title);
+      return definition.url === '/docs/' ? renderModelDiagram(text) : renderDiagram(text, title);
     };
     renderer.table = function (table) {
       return `<div class="docs-table" tabindex="0" role="region" aria-label="Reference table">${Renderer.prototype.table.call(this, table)}</div>`;
     };
     const parser = new Marked({ renderer, gfm: true });
     const content = parser.parse(markdown, { async: false });
+    const markdownPath = markdownUrl(definition.url);
+    markdownFiles.set(
+      markdownPath.slice(1),
+      publicMarkdown(markdown, (href) => {
+        const destination = resolver.resolveLink(definition.source, href);
+        const [path = '', fragment] = destination.split('#');
+        const page = docDefinitions.find((item) => item.url === path);
+        return page === undefined
+          ? destination
+          : `${markdownUrl(page.url)}${fragment === undefined ? '' : `#${fragment}`}`;
+      }),
+    );
     search.push({ url: definition.url, title, group: definition.group, text: plain(markdown).replace(/\s+/g, ' ') });
-    return { ...definition, title, titleId, description, html: content, headings };
+    return { ...definition, markdownUrl: markdownPath, title, titleId, description, html: content, headings };
   });
   for (const link of resolver.links) {
     if (link.fragment === '') {
@@ -95,5 +110,7 @@ export function buildDocumentation() {
       throw new Error(`Missing heading from ${link.source}: ${link.target}#${link.fragment}`);
     }
   }
-  return { pages, search, files: resolver.files, sourceFiles: resolver.sourceFiles };
+  const files = new Map([...resolver.files, ...markdownFiles]);
+  files.set('llms.txt', documentationIndex(pages));
+  return { pages, search, files, sourceFiles: resolver.sourceFiles };
 }

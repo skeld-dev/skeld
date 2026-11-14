@@ -1,4 +1,4 @@
-// Does:  Reads the CPU cost per request of the browser-boundary paths against a plain GET on one Skeld server.
+// Does:  Reads the CPU cost per request of the browser-boundary paths against a plain GET on one skeld server.
 // Holds: A variant counts only when every response had its expected status; the lock keeps it from overlapping a run.
 
 import { join } from 'node:path';

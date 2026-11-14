@@ -48,7 +48,7 @@ Source: `packages/core/src/contract/types.ts:122`
 
 ## ErrorBody
 
-The one error body every Skeld server writes.
+The one error body every skeld server writes.
 
 ```ts
 export interface ErrorBody {
@@ -142,7 +142,7 @@ Source: `packages/core/src/contract/types.ts:18`
 
 ## errorBodySchema
 
-The schema of the error body every Skeld server writes: `{ status, code, message, details? }`.
+The schema of the error body every skeld server writes: `{ status, code, message, details? }`.
 
 Its strings and its `details` are `unbounded`, so a client accepts a server's error message of any length.
 

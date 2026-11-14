@@ -1,6 +1,6 @@
 # Write and check documentation
 
-This is repository guidance for documentation contributors. Start with [Contributing to Skeld](../../CONTRIBUTING.md) for setup and submitting changes.
+This is repository guidance for documentation contributors. Start with [Contributing to skeld](../../CONTRIBUTING.md) for setup and submitting changes.
 
 Write for someone trying to make a service work. Start a guide with the task and prerequisites, show a concrete action, then explain what the reader should observe and why. Include the failure case that reveals the boundary being taught.
 

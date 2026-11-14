@@ -76,7 +76,7 @@ A log call made by the formatter, or by anything it calls, writes its errors wit
 
 ### What enabling `errorFrames` means
 
-Enabling errorFrames permits application stack-formatting code to execute synchronously during logging. Skeld catches formatter exceptions and omits frames for non-string results, but cannot bound execution time or undo side effects. Frame limits bound the output, not the work required to obtain it.
+Enabling errorFrames permits application stack-formatting code to execute synchronously during logging. skeld catches formatter exceptions and omits frames for non-string results, but cannot bound execution time or undo side effects. Frame limits bound the output, not the work required to obtain it.
 
 `errorFrames` is an explicit exception to logging's request-isolation guarantee. Suppression and the limit of 2 errors per record bound how often the formatter runs, never its time or its allocation.
 

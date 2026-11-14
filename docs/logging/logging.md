@@ -2,7 +2,7 @@
 
 New to the framework? Start with [the documentation home](../README.md). To learn classification by running a request, use the [classification guide](../guides/classification.md) and [logging example](../../examples/logging/README.md).
 
-A Skeld server writes structured records as JSON lines to stdout, or hands them to a `sink` you give it. The engine writes its own records about the server and its requests, and handlers, hooks and plugins get a logger. Every request the engine answers carries a request id in its `x-request-id` response header.
+A skeld server writes structured records as JSON lines to stdout, or hands them to a `sink` you give it. The engine writes its own records about the server and its requests, and handlers, hooks and plugins get a logger. Every request the engine answers carries a request id in its `x-request-id` response header.
 
 - The line format and its OpenTelemetry mapping are in [record-format.md](record-format.md).
 - Every event the engine writes is listed in [events.md](events.md).
@@ -175,7 +175,7 @@ On Linux, writing records never blocks the event loop and a failing destination 
 Two exceptions:
 
 - **A synchronous sink.** A sink runs on the event loop. Synchronous work inside it blocks every request for as long as it runs; neither a promise nor a `try`/`catch` can isolate it. Keep a sink's work asynchronous and short.
-- **`errorFrames`.** Enabling errorFrames permits application stack-formatting code to execute synchronously during logging. Skeld catches formatter exceptions and omits frames for non-string results, but cannot bound execution time or undo side effects. Frame limits bound the output, not the work required to obtain it.
+- **`errorFrames`.** Enabling errorFrames permits application stack-formatting code to execute synchronously during logging. skeld catches formatter exceptions and omits frames for non-string results, but cannot bound execution time or undo side effects. Frame limits bound the output, not the work required to obtain it.
 
 ## Queue, flush and shutdown
 
@@ -233,6 +233,6 @@ process.stderr.write(`dropped at shutdown: ${stats.dropped.shutdown}, in flight:
 
 ## Accepted risks
 
-- **Shared stdout.** Valid JSON serialization does not guarantee intact lines when uncoordinated writers share the pipe. Reserve stdout for structured logs and send incidental output to stderr. Skeld's writer coordination covers its own writes.
+- **Shared stdout.** Valid JSON serialization does not guarantee intact lines when uncoordinated writers share the pipe. Reserve stdout for structured logs and send incidental output to stderr. skeld's writer coordination covers its own writes.
 - **Hung sink.** Delivery stops for that server's sink until the pending call settles; a permanently pending call requires a restart under this design. Queue limits and drop accounting remain active. `logStats()` needs an independent monitoring path: the broken sink cannot report its own failure reliably.
 - **Final record.** `skeld.server.closed` contains a snapshot before flushing, not final delivery totals. Post-close statistics distinguish known discarded records (`dropped.shutdown`) from still-uncertain in-flight delivery (`inFlight`).

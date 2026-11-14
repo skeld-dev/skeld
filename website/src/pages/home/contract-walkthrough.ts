@@ -39,8 +39,8 @@ function validationPanel() {
       <h3>${() => (journeyInvalid.value ? 'The limit holds.' : 'Check before the handler.')}</h3>
       <p>${() =>
         journeyInvalid.value
-          ? 'The name exceeds its declared limit. Skeld returns a validation error without calling the route handler.'
-          : 'Skeld checks field types and bounds. A valid secret field becomes a Secret<string> before the handler receives it.'}</p>
+          ? 'The name exceeds its declared limit. skeld returns a validation error without calling the route handler.'
+          : 'skeld checks field types and bounds. A valid secret field becomes a Secret<string> before the handler receives it.'}</p>
       <div class=${() => (journeyInvalid.value ? 'journey-limit is-over-limit' : 'journey-limit')}>
         <div class="limit-label"><code>name.length</code><span><strong>${() => name().length}</strong> / ${projectNameLimit} max</span></div>
         <div class="limit-meter" aria-hidden="true"><span></span><i></i></div>
@@ -74,7 +74,7 @@ function responsePanel() {
     <div class="journey-panel" slot="panel" tabindex="0">
       <div class="journey-panel-heading"><span>04 / Response serialization</span><span>${() => (journeyInvalid.value ? 'Not reached' : '201 · Created')}</span></div>
       <h3>${() => (journeyInvalid.value ? 'No success response.' : 'Only declared fields leave.')}</h3>
-      <p>${() => (journeyInvalid.value ? 'Skeld returns a 400 validation error instead. This handler never reaches response serialization.' : 'Skeld checks the declared response values while serializing. The internal ID is absent from this response schema, so it is omitted.')}</p>
+      <p>${() => (journeyInvalid.value ? 'skeld returns a 400 validation error instead. This handler never reaches response serialization.' : 'skeld checks the declared response values while serializing. The internal ID is absent from this response schema, so it is omitted.')}</p>
       <div class="journey-projection" ?hidden=${() => journeyInvalid.value}>
         <div class="projection-source"><span class="payload-key">Handler result</span><code>name: <span class="syntax-string">'polar'</span></code><code class="projection-omitted">internalId: 'prj_01'</code><span class="projection-caption">Not in the response schema</span></div>
         <span class="projection-arrow" aria-hidden="true">→</span>
@@ -97,8 +97,8 @@ export function contractWalkthrough() {
           <div class="journey-toolbar">
             <div class="journey-endpoint"><span>POST</span><code>/projects</code><span class="journey-example-label">Illustrated example</span></div>
             <div class="journey-scenarios" role="group" aria-label="Request example">
-              <button type="button" data-scenario="valid" aria-pressed=${() => String(!journeyInvalid.value)}>Valid request</button>
-              <button type="button" data-scenario="invalid" aria-pressed=${() => String(journeyInvalid.value)}>Exceed a limit <span aria-hidden="true">↗</span></button>
+              <button type="button" class="button" data-scenario="valid" aria-pressed=${() => String(!journeyInvalid.value)}>Valid request</button>
+              <button type="button" class="button" data-scenario="invalid" aria-pressed=${() => String(journeyInvalid.value)}>Exceed a limit <span class="button-glyph" aria-hidden="true">↗</span></button>
             </div>
           </div>
           <div class="journey-workspace">
@@ -147,7 +147,7 @@ export function contractWalkthrough() {
           </div>
           <div class="journey-footer">
             <p class="journey-outcome" role="status" aria-live="polite">${() => (journeyInvalid.value && journeyStep.value >= 1 ? '400 · Rejected before the handler' : journeyStep.value === 3 ? '201 · Declared fields sent. Secret masked in the log.' : journeyPlaying.value ? 'Following the request…' : 'Select a stage to inspect the data.')}</p>
-            <button type="button" class="journey-run" data-journey-run><span aria-hidden="true">${() => (journeyPlaying.value ? 'Ⅱ' : '→')}</span>${() => (journeyPlaying.value ? 'Pause' : 'Run request')}</button>
+            <button type="button" class="button journey-run" data-journey-run><span class="button-glyph" aria-hidden="true">${() => (journeyPlaying.value ? 'Ⅱ' : '→')}</span>${() => (journeyPlaying.value ? 'Pause' : 'Run request')}</button>
           </div>
         </div>
         <div class="journey-caption"><span>Input limits. Typed handlers. Declared responses.</span><a href="/explore/">Explore more scenarios →</a></div>

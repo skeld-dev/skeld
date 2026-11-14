@@ -1,17 +1,17 @@
-# Skeld documentation
+# skeld documentation
 
 Build a service around one contract. Use it to validate incoming data, constrain outgoing data, and type the client that calls it.
 
-If you are new to Skeld, start with [your first request](guides/first-request.md). You will run a server and client, send an invalid request, and see exactly where the contract takes effect. The examples work from this checkout without an npm publication or an external service.
+If you are new to skeld, start with [your first request](guides/first-request.md). You will run a server and client, send an invalid request, and see exactly where the contract takes effect. The examples work from this checkout without an npm publication or an external service.
 
 ## Learn the model
 
 ```mermaid
-flowchart LR
-    Contract["Contract: routes and schemas"] --> Server["Server: validate input, serialize output"]
-    Contract --> Client["Client: typed calls, validate replies"]
-    Client -->|HTTP request| Server
-    Server -->|HTTP response| Client
+flowchart TD
+    Contract["Contract<br/>Routes and schemas"] -->|Defines| Client["Client<br/>Typed calls<br/>Validate replies"]
+    Contract -->|Defines| Server["Server<br/>Validate input<br/>Serialize output"]
+    Client -->|HTTP<br/>request| Server
+    Server -->|HTTP<br/>response| Client
 ```
 
 The contract supplies both sides. HTTP still crosses a trust boundary: server validation protects the handler, and client validation checks responses for declared statuses. Sharing TypeScript types alone would establish neither property.
@@ -29,7 +29,7 @@ Read these in order, or jump to the task you are working on:
 | [Run a service](guides/running-a-service.md)                    | Set the public origin, proxy trust, timeouts, logging, and shutdown behavior           |
 | [Troubleshoot](guides/troubleshooting.md)                       | Diagnose startup failures, refused requests, missing logs, and invalid responses       |
 
-These explanations connect the guides: [the request lifecycle](concepts/request-lifecycle.md) shows when each stage runs; [security boundaries](concepts/security-boundaries.md) names what Skeld enforces and what the application must supply. The [core threat model](concepts/threat-model.md) maps actors, data flows and trust boundaries to STRIDE threats, controls and residual responsibilities.
+These explanations connect the guides: [the request lifecycle](concepts/request-lifecycle.md) shows when each stage runs; [security boundaries](concepts/security-boundaries.md) names what skeld enforces and what the application must supply. The [core threat model](concepts/threat-model.md) maps actors, data flows and trust boundaries to STRIDE threats, controls and residual responsibilities.
 
 ## Look up a detail
 
@@ -38,4 +38,4 @@ These explanations connect the guides: [the request lifecycle](concepts/request-
 - [Runnable examples](../examples/README.md): hello, classified logging, and a scoped task service.
 - [Package README](../packages/core/README.md): installation, runtime requirements, and a compact feature reference.
 
-To improve Skeld or its documentation, see the repository's [contribution guide](../CONTRIBUTING.md).
+To improve skeld or its documentation, see the repository's [contribution guide](../CONTRIBUTING.md).

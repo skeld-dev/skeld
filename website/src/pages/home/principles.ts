@@ -10,11 +10,11 @@ export function principles() {
         <div class="principles-heading">
           <p class="section-label">
             <img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
-            Why Skeld
+            Why skeld
           </p>
           <h2 id="principles-title">The defaults<br /><span>are deliberate.</span></h2>
           <p class="principles-intro">
-            Skeld makes limits, secret exposure and response checks part of how you define an API.
+            skeld makes limits, secret exposure and response checks part of how you define an API.
           </p>
           <div class="principles-art" aria-hidden="true">
             <img
@@ -46,7 +46,7 @@ export function principles() {
           <article class="principle">
             <h3>The client checks, too.</h3>
             <p>
-              Skeld's client validates declared JSON responses against the contract before returning typed data
+              skeld's client validates declared JSON responses against the contract before returning typed data
               to your code.
             </p>
             <div class="principle-detail">

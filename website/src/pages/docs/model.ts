@@ -14,6 +14,7 @@ export interface DocHeading {
   depth: number;
 }
 export interface DocPage extends DocDefinition {
+  markdownUrl: string;
   title: string;
   titleId: string;
   description: string;

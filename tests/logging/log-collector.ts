@@ -332,7 +332,7 @@ async function main(): Promise<void> {
   const version = versionLine(binary);
   const report = createReport('log-collector');
   const work = mkdtempSync(join(tmpdir(), 'skeld-collector-'));
-  report.note('AC-13: a Skeld service on stdout, Collector contrib read through docs/logging/collector.yaml');
+  report.note('AC-13: a skeld service on stdout, Collector contrib read through docs/logging/collector.yaml');
   report.note(`collector version line: ${version}`);
   report.note(`collector command: ${binary} --config ${configPath}`);
   report.note(

@@ -16,8 +16,8 @@ function toggleMenu() {
 
 export function siteHeader(current?: 'home' | 'docs' | 'security' | 'explore') {
   return html`
-    <header class="header">
-      <a class="brand" href="/" aria-label="Skeld home">
+    <header class="header" id="top" tabindex="-1">
+      <a class="brand" href="/" aria-label="skeld home">
         <img class="brand-mark" src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />
         <span>skeld</span>
       </a>
@@ -32,13 +32,13 @@ export function siteHeader(current?: 'home' | 'docs' | 'security' | 'explore') {
         <a href="/explore/" aria-current=${current === 'explore' ? 'page' : 'false'}>Explore</a>
         <a href="/security/" aria-current=${current === 'security' ? 'page' : 'false'}>Security</a>
       </nav>
-      <a class="header-cta" href="/docs/guides/first-request/">
+      <a class="button header-cta" href="/docs/guides/first-request/">
         Get started
         <svg aria-hidden="true"><use href="#arrow"></use></svg>
       </a>
       <button
         type="button"
-        class="menu-toggle"
+        class="button button-icon menu-toggle"
         aria-expanded=${() => String(menuOpen.value)}
         @click=${toggleMenu}
         aria-controls="navigation"

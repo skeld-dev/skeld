@@ -57,7 +57,7 @@ export function securityPage() {
       <header class="security-heading section-shell">
         <p class="section-label"><img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />Security</p>
         <h1>Know where the<br /><span>boundaries are.</span></h1>
-        <div class="security-intro"><p>Skeld checks incoming data, constrains declared responses and masks classified log fields. Our threat model follows those boundaries through the code, including the places where your application takes over.</p><a class="button primary" href=${model}>Read the threat model<svg aria-hidden="true"><use href="#arrow"></use></svg></a></div>
+        <div class="security-intro"><p>skeld checks incoming data, constrains declared responses and masks classified log fields. Our threat model follows those boundaries through the code, including the places where your application takes over.</p><a class="button button-large primary" href=${model}>Read the threat model<svg aria-hidden="true"><use href="#arrow"></use></svg></a></div>
       </header>
       <section class="security-boundaries section-shell" aria-labelledby="boundary-heading">
         <div class="security-section-heading"><h2 id="boundary-heading">A request crosses more<br />than one boundary.</h2><p>Validation, authorization and disclosure answer different questions. Each needs an explicit decision.</p></div>

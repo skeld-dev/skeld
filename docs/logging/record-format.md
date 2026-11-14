@@ -36,7 +36,7 @@ Every key below `trace_flags` maps to an OpenTelemetry log attribute of the same
 | `skeld.schema_location`                                                                                                                | string, cut at 256 units                                                                      | a `response_mismatch` error record whose mismatch has a location | Attributes, same key                                 |
 | `skeld.omitted`                                                                                                                        | number                                                                                        | something did not fit                                            | Attributes, same key                                 |
 
-The request id has two places: `skeld.request_id` is the id Skeld minted for the request and sent in its `x-request-id` response header; `http.request.header.x-request-id` is the id the client sent, written only with `correlation` on and only when it is well formed. A trace id is never a request id.
+The request id has two places: `skeld.request_id` is the id skeld minted for the request and sent in its `x-request-id` response header; `http.request.header.x-request-id` is the id the client sent, written only with `correlation` on and only when it is well formed. A trace id is never a request id.
 
 ## Inbound correlation headers
 

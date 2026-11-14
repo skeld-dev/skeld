@@ -1,8 +1,8 @@
 # Run a service
 
-Skeld's server runs on `node:http` and requires Node 26.12 or later. This repository pins its development version in [`.nvmrc`](../../.nvmrc). The server compiles validators and serializers at `listen()`, so a runtime that prohibits code generation from strings cannot start it.
+skeld's server runs on `node:http` and requires Node 26.12 or later. This repository pins its development version in [`.nvmrc`](../../.nvmrc). The server compiles validators and serializers at `listen()`, so a runtime that prohibits code generation from strings cannot start it.
 
-A documentation website hosted on a Cloudflare Worker would be a separate application. It would not make the Skeld server compatible with the Workers runtime.
+A documentation website hosted on a Cloudflare Worker would be a separate application. It would not make the skeld server compatible with the Workers runtime.
 
 ## Set the network boundary deliberately
 
@@ -17,7 +17,7 @@ Behind a reverse proxy, these settings answer different questions:
 | `trustProxy`             | Which peer addresses may supply a forwarded client-address chain?  |
 | `cors` and `csrf`        | Which browser origins receive grants or pass the cross-site check? |
 
-Without `trustProxy`, `request.clientAddress` is the socket peer. With trusted peers, Skeld walks `X-Forwarded-For` from right to left and stops at the first untrusted address. Trust only your actual proxy addresses or ranges and control direct access to the origin. A forwarded address is still not user identity. See [the exact walk and refusal rules](../../packages/core/README.md#timeouts-client-address-and-headers).
+Without `trustProxy`, `request.clientAddress` is the socket peer. With trusted peers, skeld walks `X-Forwarded-For` from right to left and stops at the first untrusted address. Trust only your actual proxy addresses or ranges and control direct access to the origin. A forwarded address is still not user identity. See [the exact walk and refusal rules](../../packages/core/README.md#timeouts-client-address-and-headers).
 
 ## Budget time at each layer
 

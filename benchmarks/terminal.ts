@@ -81,7 +81,7 @@ export function startLines(
   unpinnedReason: string | null,
 ): readonly string[] {
   return [
-    `Skeld benchmark: ${plural(options.servers.length, 'server', 'servers')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
+    `skeld benchmark: ${plural(options.servers.length, 'server', 'servers')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
     `Cores: ${coresText(unpinnedReason)}`,
     `Results: ${displayPath(runDirectory)}/`,
   ];
@@ -94,8 +94,8 @@ export function diagStartLines(
   unpinnedReason: string | null,
 ): readonly string[] {
   const first = options.check
-    ? 'Skeld diag check: the normal and diag builds start once, then the clean and planted scenario passes; nothing is measured'
-    : `Skeld diag benchmark: the normal and diag builds, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min, then the clean and planted scenario passes`;
+    ? 'skeld diag check: the normal and diag builds start once, then the clean and planted scenario passes; nothing is measured'
+    : `skeld diag benchmark: the normal and diag builds, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min, then the clean and planted scenario passes`;
   return [
     first,
     `Sampling: steps on 1 in ${options.stepN} requests, CPU on 1 in ${options.cpuN}`,
@@ -112,7 +112,7 @@ export function loggingStartLines(
   unpinnedReason: string | null,
 ): readonly string[] {
   return [
-    `Skeld logging session: ${entrants.join(', ')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
+    `skeld logging session: ${entrants.join(', ')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
     `Cores: ${coresText(unpinnedReason)}`,
     `Results: ${displayPath(runDirectory)}/`,
   ];
@@ -208,7 +208,7 @@ const summaryColumns: readonly Column[] = [
 ];
 
 export function verdictLine(verdict: BenchVerdict): string {
-  const ratios = `Fastify's server CPU per request is ${formatPercent(verdict.echo)} of Skeld's on echo (judged) and ${formatPercent(verdict.hello)} on hello (recorded); the line is ${keepLinePercent} % on echo.`;
+  const ratios = `Fastify's server CPU per request is ${formatPercent(verdict.echo)} of skeld's on echo (judged) and ${formatPercent(verdict.hello)} on hello (recorded); the line is ${keepLinePercent} % on echo.`;
   if (verdict.kind === 'keep') {
     return `Verdict: keep. ${ratios}`;
   }

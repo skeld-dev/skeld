@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderToString } from '@lightstart/light/markup';
-import type { Plugin } from 'vite';
+import type { Connect, Plugin } from 'vite';
 import { docsPage } from '../pages/docs/page.ts';
 import type { DocPage } from '../pages/docs/model.ts';
 import { buildDocumentation } from './docs-content.ts';
@@ -18,12 +18,16 @@ function pagePath(path: string): string {
 }
 function renderPage(document: string, page: DocPage): string {
   return document
-    .replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(page.title)} | Skeld docs</title>`)
+    .replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(page.title)} | skeld docs</title>`)
     .replace(
       /<meta name="description" content="[^"]*"\s*\/>/,
       `<meta name="description" content="${escapeHtml(page.description)}" />`,
     )
     .replace('<!-- canonical -->', `<link rel="canonical" href="https://skeld.dev${page.url}" />`)
+    .replace(
+      '<!-- markdown -->',
+      `<link rel="alternate" type="text/markdown" href="${page.markdownUrl}" /><link rel="describedby" href="/llms.txt" />`,
+    )
     .replace(
       /<!-- docs-start -->[\s\S]*?<!-- docs-end -->/,
       `<!-- docs-start -->${renderToString(docsPage(page, docDefinitions))}<!-- docs-end -->`,
@@ -31,9 +35,18 @@ function renderPage(document: string, page: DocPage): string {
 }
 export function docsPlugin(): Plugin {
   let collection = buildDocumentation();
+  const markdownHeaders: Connect.NextHandleFunction = (request, response, next) => {
+    const path = new URL(request.url ?? '/', 'http://localhost').pathname;
+    if (collection.pages.some((page) => page.markdownUrl === path)) {
+      response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      response.setHeader('X-Content-Type-Options', 'nosniff');
+    }
+    next();
+  };
   return {
     name: 'skeld-documentation',
     configureServer(server) {
+      server.middlewares.use(markdownHeaders);
       server.watcher.add([docsRoot, ...collection.sourceFiles]);
       const refresh = (path: string) => {
         if (path.startsWith(docsRoot) || collection.sourceFiles.has(path)) {
@@ -83,6 +96,9 @@ export function docsPlugin(): Plugin {
           .catch(next);
       });
     },
+    configurePreviewServer(server) {
+      server.middlewares.use(markdownHeaders);
+    },
     transformIndexHtml: {
       order: 'pre',
       handler(document, context) {
@@ -100,7 +116,10 @@ export function docsPlugin(): Plugin {
         }
         const templateSource =
           typeof template.source === 'string' ? template.source : new TextDecoder().decode(template.source);
-        const document = templateSource.replace(/<link rel="canonical"[^>]*>/, '<!-- canonical -->');
+        const document = templateSource
+          .replace(/<link rel="canonical"[^>]*>/, '<!-- canonical -->')
+          .replace(/<link rel="alternate"[^>]*>/, '<!-- markdown -->')
+          .replace(/<link rel="describedby"[^>]*>/, '');
         for (const page of collection.pages) {
           if (page.url !== '/docs/') {
             this.emitFile({
@@ -114,6 +133,12 @@ export function docsPlugin(): Plugin {
         for (const [fileName, source] of collection.files) {
           this.emitFile({ type: 'asset', fileName, source });
         }
+        this.emitFile({
+          type: 'asset',
+          fileName: '_headers',
+          source:
+            '/docs/*/index.md\n  Content-Type: text/plain; charset=utf-8\n  X-Content-Type-Options: nosniff\n/docs/index.md\n  Content-Type: text/plain; charset=utf-8\n  X-Content-Type-Options: nosniff\n',
+        });
       },
     },
   };

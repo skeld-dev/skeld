@@ -1,6 +1,6 @@
-# Skeld
+# skeld
 
-Skeld is a TypeScript framework for services on Node 26: one contract declares each route's schemas, the engine on `node:http` validates and serializes from it, and a typed client calls it.
+skeld is a TypeScript framework for services on Node 26: one contract declares each route's schemas, the engine on `node:http` validates and serializes from it, and a typed client calls it.
 
 Start with the [documentation](docs/README.md): run your first request, design a contract, and understand the framework's security boundaries. The [package README](packages/core/README.md) contains installation instructions and a compact feature reference.
 
@@ -19,7 +19,7 @@ A pnpm workspaces monorepo. Source runs unbuilt with `node --conditions=skeld-so
 | `examples/`     | runnable [hello, logging and service examples](examples/README.md)   |
 | `benchmarks`    | [performance workloads and type-cost fixtures](benchmarks/README.md) |
 | `tests`         | [correctness checks organized by behavior](tests/README.md)          |
-| `website`       | [Light website, design system and local preview](website/README.md)  |
+| `website`       | [Marketing and documentation website](website/)                      |
 | `tools`         | repository tools, such as the README example check                   |
 
 ## Development
@@ -57,7 +57,7 @@ Continue with the [logging example](examples/logging/README.md) for classified f
 
 ## Contributing
 
-See [Contributing to Skeld](CONTRIBUTING.md) for setup, focused checks, and pull requests. Documentation contributors can follow the [writing guide](docs/maintainers/writing-docs.md).
+See [Contributing to skeld](CONTRIBUTING.md) for setup, focused checks, and pull requests. Documentation contributors can follow the [writing guide](docs/maintainers/writing-docs.md).
 
 ## License
 

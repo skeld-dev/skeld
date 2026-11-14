@@ -18,16 +18,68 @@
   object-fit: contain;
 }
 .button {
-  padding: 17px 21px;
+  --button-height: var(--button-height-standard);
+  --button-padding: var(--button-padding-standard);
+  --button-font: var(--button-font-standard);
+  --button-icon: var(--button-icon-standard);
+  --button-gap: var(--button-gap-standard);
   display: inline-flex;
   align-items: center;
-  gap: 30px;
-  font-size: 12px;
-  font-weight: 500;
-  min-height: 52px;
+  justify-content: center;
+  gap: var(--button-gap);
+  min-height: var(--button-height);
+  min-width: var(--button-height);
+  max-width: 100%;
+  padding: 0 var(--button-padding);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font: 500 var(--button-font) / 1.5 var(--font-sans);
+  text-align: center;
   transition:
     background var(--motion-duration),
     transform var(--motion-duration);
+}
+.button-small {
+  --button-height: var(--button-height-small);
+  --button-padding: var(--button-padding-small);
+  --button-font: var(--button-font-small);
+  --button-icon: var(--button-icon-small);
+  --button-gap: var(--button-gap-small);
+}
+.button-large {
+  --button-height: var(--button-height-large);
+  --button-padding: var(--button-padding-large);
+  --button-font: var(--button-font-large);
+  --button-icon: var(--button-icon-large);
+  --button-gap: var(--button-gap-large);
+}
+.button-icon {
+  flex-shrink: 0;
+  width: var(--button-height);
+  padding: 0;
+}
+.button > svg,
+.button-glyph {
+  flex: none;
+  width: var(--button-icon);
+  height: var(--button-icon);
+}
+.button-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--button-icon);
+  line-height: 1;
+}
+/* Why: Compact utilities keep a full touch target, including on hybrid devices. */
+@media (any-pointer: coarse) {
+  .button-small {
+    --button-height: var(--button-height-standard);
+    --button-padding: var(--button-padding-standard);
+    --button-font: var(--button-font-standard);
+    --button-icon: var(--button-icon-standard);
+    --button-gap: var(--button-gap-standard);
+  }
 }
 .primary {
   background: var(--color-ice);

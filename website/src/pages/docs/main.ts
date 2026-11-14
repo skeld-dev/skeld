@@ -5,6 +5,7 @@ import { configure, disposeTree, render } from '@lightstart/light/html';
 import { effect } from '@lightstart/light/signals';
 import { mountNavigation, siteHeader } from '../../components/site-header.ts';
 import { mountReading } from './reading.ts';
+import { mountMarkdown } from './markdown.ts';
 import { mountSearch } from './search.ts';
 
 const header = document.getElementById('docs-site-header');
@@ -14,7 +15,7 @@ if (header === null) {
 // Why: Direct renderer entries must install the signal effect adapter before adoption.
 configure({ effect });
 render(siteHeader('docs'), header, { adopt: true });
-const cleanups = [mountNavigation(header), mountSearch(document), mountReading(document)];
+const cleanups = [mountNavigation(header), mountSearch(document), mountReading(document), mountMarkdown(document)];
 document.documentElement.dataset.enhanced = 'true';
 if (import.meta.hot !== undefined) {
   import.meta.hot.dispose(() => {

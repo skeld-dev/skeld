@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { renderToString } from '@lightstart/light/markup';
 import type { Connect, Plugin } from 'vite';
 import { homePage } from '../pages/home/page.ts';
+import { contributingPage } from '../pages/contributing/page.ts';
 import { privacyPage } from '../pages/privacy/page.ts';
 import { securityPage } from '../pages/security/page.ts';
 import { explorePage } from '../pages/explore/page.ts';
@@ -16,6 +17,7 @@ const pages = [
   { name: 'docs', url: '/docs/', render: undefined },
   { name: 'explore', url: '/explore/', render: explorePage },
   { name: 'security', url: '/security/', render: securityPage },
+  { name: 'contributing', url: '/contributing/', render: contributingPage },
   { name: 'privacy', url: '/privacy/', render: privacyPage },
   { name: 'terms', url: '/terms/', render: termsPage },
 ].map((page) => ({

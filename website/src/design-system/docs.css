@@ -149,10 +149,7 @@
   color: var(--color-readable);
 }
 .docs-search button {
-  min-height: 44px;
-  padding: 10px 14px;
   color: var(--color-ice);
-  font-size: 11px;
 }
 .docs-search-status {
   min-height: 22px;
@@ -202,6 +199,67 @@
   letter-spacing: -0.045em;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+.docs-page-formats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.docs-format-action {
+  border-color: var(--color-outline);
+  background: var(--color-surface);
+  color: var(--color-frost);
+}
+.docs-format-action:hover {
+  border-color: var(--color-ice);
+  background: var(--color-control);
+}
+.docs-format-action[data-copy-markdown] {
+  min-width: calc(14ch + 2 * var(--button-padding));
+}
+.docs-format-action:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+.docs-llms-link {
+  margin-inline: 8px;
+  color: var(--color-ice);
+}
+.docs-markdown-status {
+  min-height: 24px;
+  margin-block: 8px 20px;
+  color: var(--color-readable);
+  font-size: 12px;
+}
+.docs-markdown-fallback {
+  margin-bottom: 28px;
+  border: 1px solid var(--color-outline);
+  background: var(--color-surface);
+}
+.docs-markdown-fallback summary {
+  padding: 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.docs-markdown-fallback textarea {
+  display: block;
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  padding: 16px;
+  border-top: 1px solid var(--color-outline);
+  background: var(--color-editor);
+  color: var(--color-editor-ink);
+  font: 12px / 1.8 var(--font-mono);
+}
+.docs-markdown-fallback :is(summary, textarea):focus-visible {
+  outline: 2px solid var(--color-ice);
+  outline-offset: 2px;
+}
+.docs-markdown-fallback textarea:focus-visible {
+  outline-color: var(--color-editor-property);
+  outline-offset: -3px;
 }
 .docs-checkout {
   margin-bottom: 28px;
@@ -302,16 +360,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
+  min-height: 40px;
   padding-inline: 20px 8px;
   border-bottom: 1px solid var(--color-editor-line);
   color: var(--color-editor-muted);
   font: 10px var(--font-mono);
 }
 .docs-code-bar button {
-  min-height: 32px;
-  min-width: 56px;
-  font-size: 10px;
+  min-width: calc(8ch + 2 * var(--button-padding));
 }
 .docs-code-bar button:hover {
   background: var(--color-editor-selection);
@@ -405,6 +461,91 @@
   --_group-hdr: var(--color-raised);
   --_inner-stroke: var(--color-line);
   --_key-badge: var(--color-active);
+}
+.docs-diagram-fit .docs-diagram-canvas {
+  container-type: inline-size;
+  overflow: visible;
+  max-height: none;
+  padding: 20px 12px;
+}
+.docs-diagram-fit svg {
+  width: 100%;
+  height: min(calc(var(--diagram-height) * 1px), calc(100cqw * var(--diagram-height) / var(--diagram-width)));
+}
+/* Why: Keep the approved outer frame as the drawing changes inside it. */
+.docs-model-diagram {
+  --diagram-width: 283.63525;
+  --diagram-height: 466.1;
+}
+.docs-model-diagram .docs-model-portrait {
+  display: none;
+}
+.docs-model-node rect {
+  fill: var(--color-raised);
+  stroke: var(--color-outline);
+  stroke-width: 1.5;
+}
+.docs-model-node[data-model-node="contract"] rect {
+  stroke: var(--color-ice);
+}
+.docs-model-title,
+.docs-model-detail,
+.docs-model-label,
+.docs-model-http-label {
+  text-anchor: middle;
+}
+.docs-model-title {
+  fill: var(--color-frost);
+  font-size: 22px;
+  font-weight: 500;
+}
+.docs-model-detail {
+  fill: var(--color-soft);
+  font-size: 16px;
+}
+.docs-model-label {
+  fill: var(--color-muted);
+  font-size: 14px;
+}
+.docs-model-http-label {
+  fill: var(--color-ice);
+  font-size: 14px;
+}
+.docs-model-contract-links,
+.docs-model-http-links {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.docs-model-contract-links {
+  stroke: var(--color-muted);
+  stroke-dasharray: 5 5;
+}
+.docs-model-http-links {
+  stroke: var(--color-ice);
+}
+.docs-model-contract-head {
+  fill: var(--color-muted);
+}
+.docs-model-http-head {
+  fill: var(--color-ice);
+}
+.docs-model-portrait .docs-model-title {
+  font-size: 18px;
+}
+.docs-model-portrait .docs-model-detail {
+  font-size: 14px;
+}
+.docs-model-portrait :is(.docs-model-label, .docs-model-http-label) {
+  font-size: 12px;
+}
+@container (max-width: 559px) {
+  .docs-model-diagram .docs-model-landscape {
+    display: none;
+  }
+  .docs-model-diagram .docs-model-portrait {
+    display: block;
+  }
 }
 .docs-diagram details {
   border-top: 1px solid var(--color-line);

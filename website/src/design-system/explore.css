@@ -82,7 +82,7 @@
   background: var(--color-depth);
   color: var(--color-frost);
   border-radius: 2px;
-  padding: 10px 32px 10px 10px;
+  padding: 10px calc(var(--button-height-standard) + 4px) 10px 10px;
   font: 13px var(--font-sans);
 }
 .scene-search input::placeholder {
@@ -96,10 +96,7 @@
   position: absolute;
   right: 0;
   top: 0;
-  width: 38px;
-  height: 44px;
   color: var(--color-ice);
-  font-size: 23px;
 }
 .scene-library-count {
   color: var(--color-muted);
@@ -201,6 +198,7 @@
 .scene-toolbar {
   padding: 12px 24px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
@@ -209,12 +207,9 @@
   font-size: 13px;
 }
 .scene-replay {
-  min-height: 40px;
-  padding: 6px 12px;
-  border: 1px solid var(--color-quiet);
+  min-width: calc(15ch + var(--button-icon) + var(--button-gap) + 2 * var(--button-padding));
+  border-color: var(--color-quiet);
   color: var(--color-frost);
-  border-radius: 2px;
-  font-size: 13px;
 }
 .scene-replay:hover {
   background: var(--color-control);
@@ -481,7 +476,6 @@
 }
 .scene-compare button {
   color: var(--color-ice);
-  min-height: 40px;
   text-align: left;
 }
 .scene-compare button:hover {
@@ -573,11 +567,10 @@
 }
 @media (max-width: 900px) {
   .scene-browse {
-    display: block;
-    min-height: 48px;
+    display: flex;
+    justify-content: flex-start;
     width: 100%;
-    padding: 12px 18px;
-    border-top: 1px solid var(--color-outline);
+    border-top-color: var(--color-outline);
     color: var(--color-ice);
     text-align: left;
   }

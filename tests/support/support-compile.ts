@@ -1,4 +1,4 @@
-// Does:  Type-checks a source text against the Skeld sources, under the engine's lib, and reports tsc's verdict.
+// Does:  Type-checks a source text against the skeld sources, under the engine's lib, and reports tsc's verdict.
 // Holds: The scratch folder holds only the probe and is removed whatever tsc answers.
 
 import { spawnSync } from 'node:child_process';

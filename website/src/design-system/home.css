@@ -29,13 +29,6 @@
   }
   .header-cta {
     margin-left: auto;
-    font-size: 10px;
-    gap: 16px;
-    padding: 11px 13px;
-  }
-  .header-cta svg {
-    width: 16px;
-    height: 16px;
   }
   .menu-toggle {
     display: flex;
@@ -44,9 +37,6 @@
     gap: 6px;
     border: 0;
     background: none;
-    width: 24px;
-    height: 44px;
-    padding: 0;
   }
   .menu-toggle span {
     display: block;
@@ -75,12 +65,6 @@
   .navigation a {
     font-size: 12px;
   }
-  .button {
-    font-size: 11px;
-    padding: 15px 17px;
-    gap: 20px;
-    min-height: 48px;
-  }
   .text-link {
     font-size: 11px;
     gap: 10px;
@@ -98,11 +82,12 @@
     --spacing-gutter: 22px;
   }
   .header {
-    gap: 14px;
+    gap: 8px;
   }
-  .header-cta {
-    font-size: 9px;
-    gap: 10px;
+}
+@media (max-width: 360px) {
+  .header-cta svg {
+    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

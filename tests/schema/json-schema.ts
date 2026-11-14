@@ -238,7 +238,7 @@ function newAjv(): Ajv2020 {
   return ajv;
 }
 
-// Why: JSON Schema counts all own keys; Skeld's open-object minimum counts only declared keys.
+// Why: JSON Schema counts all own keys; skeld's open-object minimum counts only declared keys.
 function countDeclared(document: Record<string, unknown>): Record<string, unknown> {
   const adjusted = Object.fromEntries(
     Object.entries(document).map(([key, value]) => [
@@ -423,7 +423,7 @@ function main(argv: readonly string[]): void {
   const agreement = proveAgreement(schemas, seed, all);
   const agreed = agreement.divergences === 0;
   process.stdout.write(
-    `excluded: ${agreement.excludedSchemas} schemas (a key __proto__ or "" that Ajv 2020 ignores or mishandles)\nopen-minimum: ${agreement.openSchemas} schemas, ${agreement.openPairs} pairs, ${agreement.openDiffer} differ (the export accepts, Skeld refuses; the reverse fails)\n`,
+    `excluded: ${agreement.excludedSchemas} schemas (a key __proto__ or "" that Ajv 2020 ignores or mishandles)\nopen-minimum: ${agreement.openSchemas} schemas, ${agreement.openPairs} pairs, ${agreement.openDiffer} differ (the export accepts, skeld refuses; the reverse fails)\n`,
   );
   process.stdout.write(
     `${agreed ? 'pass' : 'fail'} Ajv 2020 on the export agrees with the closure check ${JSON.stringify({ ...agreement, seed })}\n`,

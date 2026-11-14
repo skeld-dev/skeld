@@ -1,8 +1,8 @@
 # Core threat model
 
-This model describes the threats at Skeld's framework boundaries, the controls implemented in core, and the work a service still owns. It uses STRIDE to examine specific actors, processes, stores and data flows. A schema-valid request is not an authorized request.
+This model describes the threats at skeld's framework boundaries, the controls implemented in core, and the work a service still owns. It uses STRIDE to examine specific actors, processes, stores and data flows. A schema-valid request is not an authorized request.
 
-Reviewed on November 13, 2026 against source revision `80e9731`, with `@skeld/core` version `0.0.2`. This is a source-backed engineering assessment, not a certification, independent penetration test or security guarantee for applications built with Skeld.
+Reviewed on November 13, 2026 against source revision `80e9731`, with `@skeld/core` version `0.0.2`. This is a source-backed engineering assessment, not a certification, independent penetration test or security guarantee for applications built with skeld.
 
 ## Scope and assumptions
 
@@ -12,7 +12,7 @@ The model assumes:
 
 - Remote callers control request bytes, paths, headers and bodies, within what the transport accepts. A hostile browser origin can induce requests subject to browser restrictions. Non-browser callers can forge origin and forwarding headers.
 - An upstream service can return an unexpected status, malicious payload, redirect or response that never completes.
-- Application code, plugins, schema declarations, custom fetch implementations and log sinks are trusted executable code. They can still contain mistakes. Skeld does not isolate them from the process, its credentials or its data.
+- Application code, plugins, schema declarations, custom fetch implementations and log sinks are trusted executable code. They can still contain mistakes. skeld does not isolate them from the process, its credentials or its data.
 - Node, the operating system and the installed framework are trusted dependencies. A compromised maintainer, package, runtime or host defeats that assumption and needs controls outside this library.
 - TLS, reverse proxies, ingress restrictions, aggregate traffic limits, databases and log retention belong to the deployment. An optional proxy must preserve HTTP framing and sanitize forwarding headers. The proxy-to-core hop needs its own network protection.
 
@@ -47,7 +47,7 @@ flowchart TB
   subgraph Service["One Node process: shared privileges"]
     Boot("P6 Boot and contract compiler")
     Routes[("D2 Compiled routes and policies")]
-    Core("P1 Node HTTP parser and Skeld lifecycle")
+    Core("P1 Node HTTP parser and skeld lifecycle")
     App("P2 Application hooks and handlers")
     Boot -->|F09 compiled declarations| Routes
     Routes -->|F09 runtime policy| Core
@@ -65,7 +65,7 @@ flowchart TB
   Store -->|F10 result / B7| App
 ```
 
-Without a proxy, the caller connects directly to core's HTTP listener. Core binds loopback by default. The diagram does not imply that core terminates TLS, that every caller uses HTTPS, or that the illustrated data store is part of Skeld.
+Without a proxy, the caller connects directly to core's HTTP listener. Core binds loopback by default. The diagram does not imply that core terminates TLS, that every caller uses HTTPS, or that the illustrated data store is part of skeld.
 
 F02 matters: `onRequest` runs before body reading and schema validation. F03 reaches `preHandler` and the normal handler after validation. Early hook replies use a raw payload path. A declared oversized body is marked for connection refusal before asynchronous `onRequest` work can admit later pipelined requests; an oversized streamed body is discovered during reading.
 
@@ -172,7 +172,7 @@ Each record names a feasible path, current treatment and residual responsibility
 | ID and attack path | Current treatment | Residual responsibility and evidence |
 | --- | --- | --- |
 | R1: an actor denies an operation because relevant evidence was never recorded, was dropped or was deleted (A5; B4/B7) | **Partially treated by operational logging.** Local request IDs, lifecycle events and loss/suppression counters explain some missing records. | Access logging is optional. Parser-level failures lack framework request records; suppression, queue loss, crashes and collector retention create gaps. No durable business audit or non-repudiation guarantee exists. Record authenticated actor/action/outcome and protect retained evidence separately. E08, E09 |
-| R2: attacker-controlled text fabricates a log line or overwrites engine metadata (A5; B4) | **Mitigated within Skeld records.** Strings are JSON-escaped; author fields are nested away from engine fields. | A trusted author can emit a false event. Other stdout writers can interleave bytes. Collectors need safe rendering, access control, retention and integrity checks. JSON validity is not a signature. E08 |
+| R2: attacker-controlled text fabricates a log line or overwrites engine metadata (A5; B4) | **Mitigated within skeld records.** Strings are JSON-escaped; author fields are nested away from engine fields. | A trusted author can emit a false event. Other stdout writers can interleave bytes. Collectors need safe rendering, access control, retention and integrity checks. JSON validity is not a signature. E08 |
 
 ### Information disclosure
 
@@ -199,7 +199,7 @@ Each record names a feasible path, current treatment and residual responsibility
 
 | ID and attack path | Current treatment | Residual responsibility and evidence |
 | --- | --- | --- |
-| E1: a valid identifier or writable field lets one user read or modify another tenant's resource (A1/A2; B2/B7) | **Application control required.** A contract validates the supplied value, not the caller's entitlement. | Enforce object-, function- and field-level authorization at every operation. Auth is not yet supplied as a Skeld module. CORS, cookie flags, request IDs and successful validation do not substitute for it. E02, E06 |
+| E1: a valid identifier or writable field lets one user read or modify another tenant's resource (A1/A2; B2/B7) | **Application control required.** A contract validates the supplied value, not the caller's entitlement. | Enforce object-, function- and field-level authorization at every operation. Auth is not yet supplied as a skeld module. CORS, cookie flags, request IDs and successful validation do not substitute for it. E02, E06 |
 | E2: a malicious plugin or compromised release acts with the server's process privileges (A1/A2/A6; B5) | **Application/deployment control required.** Scope encapsulation governs registration and hook inheritance, not OS or JavaScript privileges. | Review and pin dependencies, protect publishing identities and artifacts, and run with least privilege. Package export boundaries and recorder exclusion are packaging controls, not a malicious-code sandbox. E03, E11 |
 | E3: a validated string becomes SQL, shell, HTML or an unrestricted outbound request (A1/A2/A4; B7) | **Application control required.** Schema checks constrain shape and declared bounds only. | Use parameterized database APIs, safe process APIs and context-specific output encoding. Restrict outbound destinations and credentials; schema validation does not prevent every injection or SSRF path in application code. E02, E07 |
 
@@ -262,4 +262,4 @@ A change should identify the affected element, flow, boundary and asset; revisit
 
 For configuration details, see [security boundaries](security-boundaries.md), [the request lifecycle](request-lifecycle.md), [browser policies](../guides/browser-security.md), [data classification](../guides/classification.md) and [logging](../logging/logging.md).
 
-Method references: Microsoft's [STRIDE and data-flow analysis](https://learn.microsoft.com/en-us/archive/msdn-magazine/2006/november/uncover-security-design-flaws-using-the-stride-approach) and OWASP's [threat-modeling process](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html). The Skeld-specific threats and treatments above come from the repository review, not from those method guides.
+Method references: Microsoft's [STRIDE and data-flow analysis](https://learn.microsoft.com/en-us/archive/msdn-magazine/2006/november/uncover-security-design-flaws-using-the-stride-approach) and OWASP's [threat-modeling process](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html). The skeld-specific threats and treatments above come from the repository review, not from those method guides.

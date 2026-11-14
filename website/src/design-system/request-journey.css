@@ -84,18 +84,15 @@
   margin-left: 12px;
 }
 .journey-scenarios {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   padding: 3px;
   border: 1px solid var(--color-line);
 }
 .journey-scenarios button {
-  min-height: 38px;
-  border: 1px solid transparent;
   background: none;
-  padding: 8px 14px;
   color: var(--color-muted);
-  font-size: 11px;
   transition:
     color var(--motion-duration),
     background var(--motion-duration),
@@ -633,16 +630,9 @@
   margin: 0;
 }
 .journey-run {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
   min-width: 132px;
-  min-height: 44px;
-  border: 1px solid var(--color-outline);
+  border-color: var(--color-outline);
   background: var(--color-control);
-  padding: 10px 16px;
-  font-size: 11px;
 }
 .journey-run:hover {
   background: var(--color-control-hover);
@@ -650,7 +640,6 @@
 }
 .journey-run > span {
   color: var(--color-ice);
-  font-size: 17px;
 }
 .journey-caption {
   display: flex;
@@ -835,10 +824,6 @@ html:not([data-enhanced]) .journey-log[data-reached] .journey-log-pending {
   }
   .journey-scenarios {
     align-self: flex-start;
-  }
-  .journey-scenarios button {
-    font-size: 10px;
-    padding-inline: 12px;
   }
   .journey-endpoint > code {
     font-size: 12px;

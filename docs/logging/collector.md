@@ -1,6 +1,6 @@
 # Ingesting records with the OpenTelemetry Collector
 
-Skeld's JSON lines map onto the OpenTelemetry log data model as [record-format.md](record-format.md#keys) lists. [collector.yaml](collector.yaml) is a Collector configuration that reads those lines from a file and sets each mapped field.
+skeld's JSON lines map onto the OpenTelemetry log data model as [record-format.md](record-format.md#keys) lists. [collector.yaml](collector.yaml) is a Collector configuration that reads those lines from a file and sets each mapped field.
 
 This is verified with contrib v0.165.0 and this configuration.
 
@@ -31,7 +31,7 @@ SKELD_LOG_FILE="$PWD/skeld.log" SKELD_OTEL_OUT="$PWD/otel.jsonl" otelcol-contrib
 
 ## Fields observed
 
-From four lines written by Skeld, two of them with trace context:
+From four lines written by skeld, two of them with trace context:
 
 | Destination field | Value observed                                                                                                                                                                                          |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -44,4 +44,4 @@ From four lines written by Skeld, two of them with trace context:
 | TraceFlags        | `trace_flags`, as an integer; absent on records without trace context                                                                                                                                   |
 | Attributes        | every other key under its own name: `skeld.request_id` a string, `http.request.header.x-request-id` an array of one string, integers as integers, `fields` a map with an error field as a map inside it |
 
-Not set by Skeld's lines: SpanId, which Skeld does not write, and the resource. Set `service.name` and other resource attributes in your Collector configuration.
+Not set by skeld's lines: SpanId, which skeld does not write, and the resource. Set `service.name` and other resource attributes in your Collector configuration.

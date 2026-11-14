@@ -1,8 +1,8 @@
-# Contributing to Skeld
+# Contributing to skeld
 
 Useful contributions make a service easier to build, clarify a guarantee, or fix an observable defect. Keep each change focused enough that a reviewer can understand the problem, the resulting behavior, and the evidence.
 
-For a substantial API or behavior change, open an issue to discuss the use case and tradeoffs before building it. Small fixes and documentation corrections can go directly to a pull request. A bug report should include the Node and Skeld versions, a minimal reproduction, and expected versus actual behavior; remove credentials and private data.
+For a substantial API or behavior change, open an issue to discuss the use case and tradeoffs before building it. Small fixes and documentation corrections can go directly to a pull request. A bug report should include the Node and skeld versions, a minimal reproduction, and expected versus actual behavior; remove credentials and private data.
 
 ## Set up the checkout
 

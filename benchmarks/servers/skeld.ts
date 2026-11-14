@@ -1,4 +1,4 @@
-// Does:  Serves the hello and echo routes with Skeld: the server under test.
+// Does:  Serves the hello and echo routes with skeld: the server under test.
 // Holds: It serves the same two routes with the same bodies as every other server here.
 
 import { defineContract } from '@skeld/core/contract';

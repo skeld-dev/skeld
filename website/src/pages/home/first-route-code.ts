@@ -1,5 +1,5 @@
 // Does:  Supplies the complete source files shown and downloaded by the first-route section.
-// Holds: These are example strings; the website never imports or executes Skeld core.
+// Holds: These are example strings; the website never imports or executes skeld core.
 
 export const firstRouteFiles = [
   {
@@ -30,7 +30,7 @@ export const contract = defineContract({
     name: 'server.ts',
     title: 'Write the handler.',
     description: 'Implement the named route. The contract supplies the handler types and checks the data at runtime.',
-    note: 'Skeld checks the routes before listening. Ctrl-C closes this example server.',
+    note: 'skeld checks the routes before listening. Ctrl-C closes this example server.',
     source: `import { once } from 'node:events';
 import { createServer } from '@skeld/core/server';
 import { contract } from './contract.ts';

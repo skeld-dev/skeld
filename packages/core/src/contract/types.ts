@@ -103,7 +103,7 @@ export interface HttpErrorOptions {
   readonly cause?: unknown;
 }
 
-/** The one error body every Skeld server writes. */
+/** The one error body every skeld server writes. */
 export interface ErrorBody {
   /** The HTTP status, from 400 to 599. */
   readonly status: number;

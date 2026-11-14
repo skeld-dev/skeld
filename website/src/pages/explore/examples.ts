@@ -117,7 +117,7 @@ export const examples: readonly Example[] = [
     'Wrong type',
     'A number cannot stand in for a string.',
     '{ "name": 42 }',
-    'The name is a number. Skeld rejects it instead of coercing it into a string.',
+    'The name is a number. skeld rejects it instead of coercing it into a string.',
   ),
   inputExample(
     'missing',
@@ -169,7 +169,7 @@ export const examples: readonly Example[] = [
     tone: 'warning',
     outcome: '500 · The invalid body is not sent.',
     reason:
-      'The handler already ran, but its result violates the response contract. Skeld sends the fixed internal error instead of that body.',
+      'The handler already ran, but its result violates the response contract. skeld sends the fixed internal error instead of that body.',
     outputLabel: 'Response body',
     output: internal,
     outputNote: 'Fixed error envelope; the invalid value is absent.',
@@ -322,7 +322,7 @@ request.log.info('received', {
     tone: 'warning',
     outcome: 'Startup refused · SECRET_IN_RESPONSE',
     reason:
-      'Skeld refuses the declaration when listen inspects the routes. No request is needed to discover this problem.',
+      'skeld refuses the declaration when listen inspects the routes. No request is needed to discover this problem.',
     outputLabel: 'Startup error code',
     output: 'SECRET_IN_RESPONSE',
     outputNote: 'BootError excerpt. This is not an HTTP status.',
@@ -440,7 +440,7 @@ name: t.string({ maxLength: 24 })`,
     input: 'handlerTimeoutMs: 20\nhandler awaits work lasting 100 ms',
     stages: [
       stage('Handler waits', 'Pending promise', 'The request is waiting on asynchronous work.'),
-      stage('Deadline expires', 'Request signal aborts', 'Skeld finishes the request with a timeout.'),
+      stage('Deadline expires', 'Request signal aborts', 'skeld finishes the request with a timeout.'),
       stage('Success result', 'Late return value', 'Not used. The late success result is discarded.'),
     ],
     stopAt: 2,

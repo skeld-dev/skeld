@@ -1,4 +1,4 @@
-# Learn Skeld by running it
+# Learn skeld by running it
 
 Start with hello, then follow one request through the logging example. The service example shows how to give a feature its own contract, handlers and scope.
 
@@ -12,7 +12,7 @@ For a guided walkthrough and the reasoning behind the APIs, use the [documentati
 
 ## Run from this repository
 
-Use the Node version in [`.nvmrc`](../.nvmrc), then run `pnpm install` from the repository root. Each example has two commands: `start` in one terminal and `call` in another. The individual READMEs give the exact commands and expected results. Stop a server with Ctrl-C; it closes through Skeld and flushes its logger.
+Use the Node version in [`.nvmrc`](../.nvmrc), then run `pnpm install` from the repository root. Each example has two commands: `start` in one terminal and `call` in another. The individual READMEs give the exact commands and expected results. Stop a server with Ctrl-C; it closes through skeld and flushes its logger.
 
 All servers bind to `127.0.0.1`. To choose another port, set `PORT` for the server and the matching `BASE_URL` for the client:
 

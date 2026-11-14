@@ -21,7 +21,7 @@ import {
 
 export const helpText = `Usage: node benchmarks/run.ts [options]
 
-Measures Skeld, Fastify and node:http on the same two routes with
+Measures skeld, Fastify and node:http on the same two routes with
 autocannon on this machine, and writes a report. Each server runs on core 7
 and the runner (autocannon's 3 workers) on cores 3-6, pinned with taskset.
 The judged figure is the server's CPU time per request over the measured
@@ -38,7 +38,7 @@ Options:
   --routes <list>    hello,echo (default both)
   --out <dir>        folder for the run's report (default benchmarks/results)
   --check            start each server, check its answers, measure nothing
-  --diag             measure Skeld's normal and diag builds side by side,
+  --diag             measure skeld's normal and diag builds side by side,
                      then run the security scenario; skeld only; with
                      --check, the start checks and the scenario only
   --step-n <n>       diag build: time the steps of 1 in n requests, 1 to 1024

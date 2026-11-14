@@ -57,11 +57,18 @@ export function docsPage(page: DocPage, definitions: DocDefinition[]) {
       <main class="docs-main" id="main" tabindex="-1">
         <form class="docs-search" role="search">
           <label class="sr-only" for="docs-search-input">Search documentation</label>
-          <div class="docs-search-control"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="m16 16 5 5" stroke="currentColor" stroke-width="1.5"></path></svg><input id="docs-search-input" type="search" placeholder="Search documentation" autocomplete="off" aria-controls="docs-search-results" disabled /><button type="button" data-clear-search aria-label="Clear search" disabled>Clear</button></div>
+          <div class="docs-search-control"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="m16 16 5 5" stroke="currentColor" stroke-width="1.5"></path></svg><input id="docs-search-input" type="search" placeholder="Search documentation" autocomplete="off" aria-controls="docs-search-results" disabled /><button type="button" class="button button-icon" data-clear-search aria-label="Clear search" disabled><span class="button-glyph" aria-hidden="true">×</span></button></div>
           <p class="docs-search-status" role="status" aria-live="polite"></p><noscript><p class="docs-search-status">Search needs JavaScript. Use the topic navigation to browse.</p></noscript><ul id="docs-search-results" class="docs-search-results" hidden></ul>
         </form>
         <details class="docs-mobile-navigation"><summary>Browse documentation</summary><nav aria-label="Documentation topics">${navigation(page, definitions)}</nav></details>
         <header class="docs-heading"><p class="section-label"><img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />${page.group}</p><h1 id=${page.titleId}>${page.title}</h1></header>
+        <div class="docs-page-formats" role="group" aria-label="Page formats">
+          <button type="button" class="button docs-format-action" data-copy-markdown hidden>Copy Markdown</button>
+          <a class="button docs-format-action" href=${page.markdownUrl} data-view-markdown>View Markdown</a>
+          <a class="text-link docs-llms-link" href="/llms.txt">LLM index <span aria-hidden="true">↗</span></a>
+        </div>
+        <p class="docs-markdown-status" data-markdown-status role="status" aria-live="polite"></p>
+        <details class="docs-markdown-fallback" data-markdown-fallback hidden><summary>Select Markdown to copy</summary><textarea readonly aria-label="Page Markdown" spellcheck="false"></textarea></details>
         ${page.url === '/docs/guides/first-request/' ? html`<aside class="docs-checkout"><strong>Run from a source checkout.</strong> Public release downloads and npm installation are not available yet.</aside>` : ''}
         <details class="docs-mobile-contents"><summary>On this page</summary><nav aria-label="On this page">${contents(page.headings)}</nav></details>
         <article class="docs-prose" aria-labelledby=${page.titleId}>${unsafeHTML(page.html)}</article>
@@ -71,7 +78,7 @@ export function docsPage(page: DocPage, definitions: DocDefinition[]) {
         </nav>
         <p class="sr-only" data-copy-status role="status" aria-live="polite"></p>
       </main>
-      <aside class="docs-contents"><nav aria-label="On this page"><p>On this page</p>${contents(page.headings)}</nav><a class="docs-github" href="https://github.com/skeld-dev">Skeld on GitHub ↗</a></aside>
+      <aside class="docs-contents"><nav aria-label="On this page"><p>On this page</p>${contents(page.headings)}</nav><a class="docs-github" href="https://github.com/skeld-dev">skeld on GitHub ↗</a></aside>
     </div>${siteFooter()}
   `;
 }

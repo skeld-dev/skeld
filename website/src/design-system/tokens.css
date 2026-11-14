@@ -44,6 +44,21 @@
   --breakpoint-desktop: 70rem;
   --breakpoint-wide: 105rem;
   --radius-control: 0px;
+  --button-height-small: 32px;
+  --button-height-standard: 44px;
+  --button-height-large: 52px;
+  --button-padding-small: 10px;
+  --button-padding-standard: 14px;
+  --button-padding-large: 20px;
+  --button-font-small: 11px;
+  --button-font-standard: 12px;
+  --button-font-large: 13px;
+  --button-icon-small: 16px;
+  --button-icon-standard: 18px;
+  --button-icon-large: 20px;
+  --button-gap-small: 6px;
+  --button-gap-standard: 8px;
+  --button-gap-large: 12px;
   --motion-duration: 200ms;
   --motion-lift: -2px;
 }
