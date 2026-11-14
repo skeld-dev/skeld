@@ -38,6 +38,7 @@ import {
   refuseConditions,
   resolvePackages,
 } from './environment.ts';
+import { externalTarget, identifyExternal } from './external.ts';
 import { loadAutocannon } from './load.ts';
 import {
   decideSession,
@@ -55,7 +56,7 @@ import { reportFile, writeRunFiles } from './report.ts';
 import { runSchedule } from './rounds.ts';
 import { estimatedMinutes, loggingBuilds, sessionBuilds } from './schedule.ts';
 import type { ServerProcess } from './server-process.ts';
-import { summarize } from './statistics.ts';
+import { ratiosToExternal, summarize } from './statistics.ts';
 import {
   busyWarning,
   checkLines,
@@ -72,7 +73,7 @@ import {
   startLines,
   summaryLines,
 } from './terminal.ts';
-import type { BenchSample, LoggingBuildId, LoggingSession, RunOptions } from './types.ts';
+import type { BenchExternal, BenchSample, LoggingBuildId, LoggingSession, RunOptions } from './types.ts';
 import { busyLoadAverage, connections, host, workers } from './values.ts';
 
 const out = (line: string): void => {
@@ -173,8 +174,26 @@ const hooks: CheckHooks = {
 const sessionTargets = (session: LoggingSession): readonly Target[] =>
   sessionBuilds(session).map((build) => loggingTarget(session, build));
 
+const identify = async (): Promise<BenchExternal | null> => {
+  if (options.against === null) {
+    return null;
+  }
+  const external = await identifyExternal(options.against, pinning.serverCommand, hooks);
+  if (interrupted()) {
+    err('Interrupted while identifying the external entrant. Servers stopped; nothing was measured.');
+    process.exit(130);
+  }
+  return external;
+};
+
+const plainTargets = (external: BenchExternal | null): readonly Target[] => [
+  ...options.servers.map(serverTarget),
+  ...(external === null ? [] : [externalTarget(external)]),
+];
+
 const runCheckMode = async (): Promise<never> => {
-  const targets = options.logging === null ? options.servers.map(serverTarget) : sessionTargets(options.logging);
+  const external = await identify();
+  const targets = options.logging === null ? plainTargets(external) : sessionTargets(options.logging);
   const rows = await checkServers(targets, options.routes, pinning.serverCommand, hooks);
   if (interrupted()) {
     process.exit(130);
@@ -208,6 +227,8 @@ const failureReason = (error: BenchError): string =>
   error.reason ?? error.message.replace(/ Its last output:$/, '').replace(/\.$/, '');
 
 const runMeasure = async (packages: Packages): Promise<never> => {
+  const external = await identify();
+  const servers = external === null ? options.servers : [...options.servers, external.server];
   const startedAt = new Date();
   const id = `${isoSeconds(startedAt).replaceAll(':', '-')}-p${options.pipelining}`;
   const outFolder = resolve(options.out);
@@ -222,7 +243,13 @@ const runMeasure = async (packages: Packages): Promise<never> => {
     nodeOptions: nodeOptions(),
     pinning: pinning.deviation,
   });
-  for (const line of startLines(options, runDirectory, estimatedMinutes(options), pinning.deviation)) {
+  for (const line of startLines(
+    options,
+    external,
+    runDirectory,
+    estimatedMinutes(options, external?.server ?? null),
+    pinning.deviation,
+  )) {
     err(line);
   }
   if (found.length > 0) {
@@ -234,7 +261,8 @@ const runMeasure = async (packages: Packages): Promise<never> => {
   const samples: BenchSample[] = [];
 
   const finish = (ending: RunEnding): boolean => {
-    const summary = summarize(samples, options.servers, options.routes);
+    const summary = summarize(samples, servers, options.routes);
+    const comparison = external === null ? null : { external, ratios: ratiosToExternal(summary, options.routes) };
     let written = true;
     try {
       writeRunFiles(runDirectory, {
@@ -249,7 +277,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
           warmUpSeconds: options.warmUpSeconds,
           durationSeconds: options.durationSeconds,
           rounds: options.rounds,
-          servers: options.servers,
+          servers,
           routes: options.routes,
           diag: options.diag,
           logging: null,
@@ -262,6 +290,7 @@ const runMeasure = async (packages: Packages): Promise<never> => {
         summary,
         statusReason: endingReason(ending),
         warnings,
+        ...(comparison === null ? {} : { comparison }),
       });
     } catch (error) {
       const code = errorCode(error);
@@ -271,19 +300,20 @@ const runMeasure = async (packages: Packages): Promise<never> => {
       err(`error: cannot write ${reportPath}: ${code}.`);
       written = false;
     }
-    for (const line of summaryLines(summary, reportFile(runDirectory))) {
+    for (const line of summaryLines(summary, comparison, reportFile(runDirectory))) {
       out(line);
     }
     return written;
   };
 
-  const rows = await checkServers(options.servers.map(serverTarget), options.routes, pinning.serverCommand, hooks);
+  const targets = plainTargets(external);
+  const rows = await checkServers(targets, options.routes, pinning.serverCommand, hooks);
   if (interrupted()) {
     finish({ status: 'interrupted', round: 1 });
     err(`Interrupted in round 1. Servers stopped; the partial report is in ${reportPath}.`);
     process.exit(130);
   }
-  for (const line of checkLines(rows, options.servers.length, options.routes.length)) {
+  for (const line of checkLines(rows, targets.length, options.routes.length)) {
     err(line);
   }
   if (!rows.every((row) => row.passed)) {
@@ -295,9 +325,11 @@ const runMeasure = async (packages: Packages): Promise<never> => {
   try {
     const result = await runSchedule({
       options,
+      external: external?.server ?? null,
       autocannon: loadAutocannon(),
       serverCommand: pinning.serverCommand,
-      target: (visit) => serverTarget(visit.server),
+      target: (visit) =>
+        visit.build === 'external' && external !== null ? externalTarget(external) : serverTarget('skeld'),
       samples,
       interruption: interruption.promise,
       interrupted,
@@ -510,7 +542,7 @@ const prepareDiagRun = (packages: Packages): DiagRun => {
     nodeOptions: nodeOptions(),
     pinning: pinning.deviation,
   });
-  for (const line of diagStartLines(options, runDirectory, estimatedMinutes(options), pinning.deviation)) {
+  for (const line of diagStartLines(options, runDirectory, estimatedMinutes(options, null), pinning.deviation)) {
     err(line);
   }
   if (found.length > 0) {
@@ -557,10 +589,11 @@ const measureDiagBuilds = async (run: DiagRun, samples: BenchSample[]): Promise<
   try {
     const result = await runSchedule({
       options,
+      external: null,
       autocannon: loadAutocannon(),
       serverCommand: pinning.serverCommand,
       target: (visit) =>
-        visit.build === 'skeld-diag' ? diagTarget(run.roundFolder(visit.round), options) : serverTarget(visit.server),
+        visit.build === 'skeld-diag' ? diagTarget(run.roundFolder(visit.round), options) : serverTarget('skeld'),
       samples,
       interruption: interruption.promise,
       interrupted,
@@ -775,6 +808,7 @@ const measureLogging = async (
   try {
     const result = await runSchedule({
       options,
+      external: null,
       autocannon: loadAutocannon(),
       serverCommand: pinning.serverCommand,
       target: (visit) => loggingTarget(session, loggingBuild(visit.build)),
@@ -817,7 +851,13 @@ const runLogging = async (packages: Packages, session: LoggingSession): Promise<
     pinning: pinning.deviation,
   });
   const entrants = sessionBuilds(session);
-  for (const line of loggingStartLines(options, entrants, runDirectory, estimatedMinutes(options), pinning.deviation)) {
+  for (const line of loggingStartLines(
+    options,
+    entrants,
+    runDirectory,
+    estimatedMinutes(options, null),
+    pinning.deviation,
+  )) {
     err(line);
   }
   if (found.length > 0) {

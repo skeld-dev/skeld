@@ -1,8 +1,8 @@
-// Does:  Reduces the measured samples to a median and range per server, build and route.
+// Does:  Reduces the measured samples to a median and range per server, build and route, and skeld's ratios to them.
 // Holds: A group's CPU figure is null unless every one of its rounds has one.
 
 import { loggingBuilds } from './schedule.ts';
-import type { BenchSample, BenchSpread, BenchSummary, BuildId, RouteId, ServerId } from './types.ts';
+import type { BenchRatio, BenchSample, BenchSpread, BenchSummary, BuildId, RouteId } from './types.ts';
 
 export function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -27,11 +27,11 @@ const cpuSpread = (samples: readonly BenchSample[]): BenchSpread | null => {
   return values.length === samples.length ? spread(values) : null;
 };
 
-const builds: readonly BuildId[] = ['skeld', 'skeld-diag', ...loggingBuilds];
+const builds: readonly BuildId[] = ['skeld', 'skeld-diag', 'external', ...loggingBuilds];
 
 export function summarize(
   samples: readonly BenchSample[],
-  servers: readonly ServerId[],
+  servers: readonly string[],
   routes: readonly RouteId[],
 ): readonly BenchSummary[] {
   return routes.flatMap((route) =>
@@ -58,4 +58,24 @@ export function summarize(
       }),
     ),
   );
+}
+
+// Does:  Divides skeld's medians by the external entrant's on each route where both were measured.
+export function ratiosToExternal(summary: readonly BenchSummary[], routes: readonly RouteId[]): readonly BenchRatio[] {
+  return routes.flatMap((route): BenchRatio[] => {
+    const own = summary.find((group) => group.route === route && group.build === 'skeld' && group.server === 'skeld');
+    const other = summary.find((group) => group.route === route && group.build === 'external');
+    if (own === undefined || other === undefined) {
+      return [];
+    }
+    const ownCpu = own.serverCpuMicrosecondsPerRequest;
+    const otherCpu = other.serverCpuMicrosecondsPerRequest;
+    return [
+      {
+        route,
+        serverCpuMicrosecondsPerRequest: ownCpu === null || otherCpu === null ? null : ownCpu.median / otherCpu.median,
+        requestsPerSecond: own.requestsPerSecond.median / other.requestsPerSecond.median,
+      },
+    ];
+  });
 }

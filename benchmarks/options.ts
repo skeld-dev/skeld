@@ -1,8 +1,9 @@
 // Does:  Parses and checks the benchmark's command-line options.
 // Holds: A value outside its range is a usage error with exit 2; nothing starts on a bad option.
 
+import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { BenchError } from './bench-error.ts';
+import { BenchError, errorCode } from './bench-error.ts';
 import type { LoggingSession, RouteId, RunOptions, ServerId } from './types.ts';
 import {
   defaultCpuN,
@@ -52,6 +53,11 @@ Options:
                      from that folder (needs --logging)
   --control-only     logging session: before-a and before-b on echo only
                      (needs --logging)
+  --against <file>   also measure one external server, started as
+                     node <file> --port 0 from the file's folder and named
+                     by its ready line; reports skeld's ratios to it as
+                     measurements; with --check, checks both servers; not
+                     with --diag or --logging
   --help             show this help
 
 HTTP runs report measurements without a comparison verdict. Default settings
@@ -73,6 +79,7 @@ const valueOptions = [
   '--step-n',
   '--cpu-n',
   '--baseline',
+  '--against',
 ] as const;
 type ValueOption = (typeof valueOptions)[number];
 const flagOptions = ['--check', '--diag', '--logging', '--control-only', '--help'] as const;
@@ -187,6 +194,31 @@ const parseLogging = (
   return { baseline: resolve(baseline), controlOnly };
 };
 
+const parseAgainst = (text: string | undefined, flags: ReadonlySet<FlagOption>): string | null => {
+  if (text === undefined) {
+    return null;
+  }
+  const session = (['--diag', '--logging'] as const).find((name) => flags.has(name));
+  if (session !== undefined) {
+    throw usage(`--against compares plain HTTP runs; it cannot be combined with ${session}.`);
+  }
+  const file = resolve(text);
+  let isFile: boolean;
+  try {
+    isFile = statSync(file).isFile();
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === null) {
+      throw error;
+    }
+    throw usage(`--against ${text}: cannot read ${file} (${code}).`);
+  }
+  if (!isFile) {
+    throw usage(`--against ${text}: ${file} is not a file.`);
+  }
+  return file;
+};
+
 const parseRounds = (text: string | undefined, logging: LoggingSession | null): number => {
   if (text !== undefined) {
     return parseInteger('--rounds', text, roundsRange);
@@ -215,6 +247,7 @@ export function parseOptions(argv: readonly string[]): RunOptions {
   const { values, flags } = readValues(argv);
   const diag = flags.has('--diag');
   const logging = parseLogging(values, flags);
+  const against = parseAgainst(values.get('--against'), flags);
   const pipelining = values.get('--pipelining');
   const warmUp = values.get('--warm-up');
   const duration = values.get('--duration');
@@ -232,6 +265,7 @@ export function parseOptions(argv: readonly string[]): RunOptions {
     check: flags.has('--check'),
     diag,
     logging,
+    against,
     stepN: parseSampling('--step-n', values.get('--step-n'), diag, defaultStepN),
     cpuN: parseSampling('--cpu-n', values.get('--cpu-n'), diag, defaultCpuN),
   };

@@ -2,7 +2,16 @@
 // Holds: It only formats; no figure is computed or decided here.
 
 import { relative } from 'node:path';
-import type { BenchSample, BenchSummary, BuildId, CheckRow, RouteId, RunOptions, ServerId } from './types.ts';
+import type {
+  BenchComparison,
+  BenchExternal,
+  BenchSample,
+  BenchSummary,
+  BuildId,
+  CheckRow,
+  RouteId,
+  RunOptions,
+} from './types.ts';
 import {
   connections,
   expectedBody,
@@ -37,6 +46,7 @@ export const formatRate = (value: number): string => value.toFixed(1);
 export const formatMs = (value: number): string => value.toFixed(2);
 export const formatCpu = (value: number | null): string => (value === null ? '-' : `${Math.round(value)} %`);
 export const formatMicroseconds = (value: number | null): string => (value === null ? '-' : value.toFixed(1));
+export const formatRatio = (value: number | null): string => (value === null ? '-' : value.toFixed(2));
 
 function renderTable(columns: readonly Column[], rows: readonly (readonly string[])[]): readonly string[] {
   const widths = columns.map((column, index) =>
@@ -62,14 +72,22 @@ export function coresText(unpinnedReason: string | null): string {
   return unpinnedReason ?? `each server on core ${serverCores}, the runner on cores ${runnerCores}`;
 }
 
+function externalText(external: BenchExternal): string {
+  const version = external.version === null ? '' : ` ${external.version}`;
+  return `${external.server}${version}, started as node ${external.file} --port 0 from its own folder`;
+}
+
 export function startLines(
   options: RunOptions,
+  external: BenchExternal | null,
   runDirectory: string,
   minutes: number,
   unpinnedReason: string | null,
 ): readonly string[] {
+  const servers = options.servers.length + (external === null ? 0 : 1);
   return [
-    `skeld benchmark: ${plural(options.servers.length, 'server', 'servers')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
+    `skeld benchmark: ${plural(servers, 'server', 'servers')}, ${plural(options.routes.length, 'route', 'routes')}, ${plural(options.rounds, 'round', 'rounds')}, autocannon ${autocannonFlags(options)} after a ${options.warmUpSeconds} s warm-up, about ${minutes} min`,
+    ...(external === null ? [] : [`External entrant: ${externalText(external)}`]),
     `Cores: ${coresText(unpinnedReason)}`,
     `Results: ${displayPath(runDirectory)}/`,
   ];
@@ -108,8 +126,8 @@ export function loggingStartLines(
 
 const progressLabelWidth = 14;
 
-export function entrantLabel(entrant: { readonly server: ServerId; readonly build: BuildId }): string {
-  return entrant.build === 'skeld' ? entrant.server : entrant.build;
+export function entrantLabel(entrant: { readonly server: string; readonly build: BuildId }): string {
+  return entrant.build === 'skeld' || entrant.build === 'external' ? entrant.server : entrant.build;
 }
 
 const progress = (round: number, rounds: number, label: string, text: string): string =>
@@ -193,7 +211,39 @@ const summaryColumns: readonly Column[] = [
   { header: 'Median p99 ms', align: 'right' },
 ];
 
-export function summaryLines(summary: readonly BenchSummary[], reportPath: string): readonly string[] {
+export function ratioHeaders(external: string): readonly [string, string] {
+  return [`CPU µs/req skeld/${external}`, `req/s skeld/${external}`];
+}
+
+const comparisonLines = (comparison: BenchComparison | null): readonly string[] => {
+  if (comparison === null) {
+    return [];
+  }
+  const [cpu, rate] = ratioHeaders(comparison.external.server);
+  return [
+    `External entrant: ${externalText(comparison.external)}`,
+    `Ratios of skeld's medians to ${comparison.external.server}'s, measured only; no verdict:`,
+    ...renderTable(
+      [
+        { header: 'Route', align: 'left' },
+        { header: cpu, align: 'right' },
+        { header: rate, align: 'right' },
+      ],
+      comparison.ratios.map((ratio) => [
+        ratio.route,
+        formatRatio(ratio.serverCpuMicrosecondsPerRequest),
+        formatRatio(ratio.requestsPerSecond),
+      ]),
+    ),
+    '',
+  ];
+};
+
+export function summaryLines(
+  summary: readonly BenchSummary[],
+  comparison: BenchComparison | null,
+  reportPath: string,
+): readonly string[] {
   const table =
     summary.length === 0
       ? []
@@ -213,7 +263,7 @@ export function summaryLines(summary: readonly BenchSummary[], reportPath: strin
           ),
           '',
         ];
-  return [...table, `Report: ${displayPath(reportPath)}`];
+  return [...table, ...comparisonLines(comparison), `Report: ${displayPath(reportPath)}`];
 }
 
 const diagSummaryColumns: readonly Column[] = [
