@@ -12,9 +12,11 @@ import {
   formatMicroseconds,
   formatMs,
   formatRate,
+  formatRatio,
   plural,
+  ratioHeaders,
 } from './terminal.ts';
-import type { BenchOptions, BenchRun, BenchSample, BenchSummary, RouteId } from './types.ts';
+import type { BenchComparison, BenchOptions, BenchRun, BenchSample, BenchSummary, RouteId } from './types.ts';
 import {
   connections,
   generatorCeilingPercent,
@@ -77,6 +79,29 @@ const resultsSection = (run: BenchRun): readonly string[] =>
     ];
   });
 
+const comparisonSection = (comparison: BenchComparison | undefined): readonly string[] => {
+  if (comparison === undefined) {
+    return [];
+  }
+  const { external, ratios } = comparison;
+  const version = external.version === null ? '' : ` (${external.server} ${external.version} in its node_modules)`;
+  return [
+    `### skeld relative to ${external.server}`,
+    '',
+    `${external.server} is the external entrant, run from ${external.file}${version}. Each figure is skeld's median divided by ${external.server}'s on the same route: a CPU ratio below 1 means skeld used less CPU per request, a req/s ratio above 1 means skeld served more requests per second. These are measurements, not a verdict.`,
+    '',
+    ...markdownTable(
+      ['Route', ...ratioHeaders(external.server)],
+      ratios.map((ratio) => [
+        ratio.route,
+        formatRatio(ratio.serverCpuMicrosecondsPerRequest),
+        formatRatio(ratio.requestsPerSecond),
+      ]),
+    ),
+    '',
+  ];
+};
+
 const roundRow = (sample: BenchSample): readonly string[] => [
   String(sample.round),
   String(sample.position),
@@ -123,7 +148,18 @@ export const keyValueTable = (rows: readonly (readonly [string, string])[]): rea
   ...rows.map(([key, value]) => `| ${key} | ${value} |`),
 ];
 
-const methodLines = (options: BenchOptions, unpinnedReason: string | null): readonly string[] => {
+const externalMethodLines = (comparison: BenchComparison | undefined): readonly string[] =>
+  comparison === undefined
+    ? []
+    : [
+        `- External entrant: ${comparison.external.server}, started with plain node from its file's own folder, without --conditions, with NODE_ENV=production and the runner's environment minus SKELD_DIAG_ variables, pinned the same way as skeld. It passes the same start check, and its position rotates with skeld's each round. Its routes and options are whatever its file sets.`,
+      ];
+
+const methodLines = (
+  options: BenchOptions,
+  unpinnedReason: string | null,
+  comparison: BenchComparison | undefined,
+): readonly string[] => {
   const flags = autocannonFlags(options);
   const perWorker = Math.floor(connections / workers);
   return [
@@ -137,8 +173,22 @@ const methodLines = (options: BenchOptions, unpinnedReason: string | null): read
     '- Loggers off except for logging session variants. No TLS. No compression.',
     '- Routes: hello returns { hello: "world" } through a response schema; echo validates a JSON body against { hello: string } (maximum length 64), closed to other keys, and returns it through the response schema.',
     '- Server options: skeld, engine defaults. Diagnostic and logging sessions configure their own instrumentation.',
+    ...externalMethodLines(comparison),
   ];
 };
+
+const externalRows = (comparison: BenchComparison | undefined): readonly (readonly [string, string])[] =>
+  comparison === undefined
+    ? []
+    : [
+        [
+          'External server command line',
+          `${comparison.external.commandLine.join(' ')}, from ${comparison.external.file}'s folder, NODE_ENV=production`,
+        ],
+        ...(comparison.external.version === null
+          ? []
+          : [[comparison.external.server, comparison.external.version] as const]),
+      ];
 
 const diagCommandRow = (commandLine: readonly string[] | null): readonly (readonly [string, string])[] =>
   commandLine === null
@@ -161,6 +211,7 @@ function renderReport(run: BenchRun): string {
     '## Results',
     '',
     ...resultsSection(run),
+    ...comparisonSection(run.comparison),
     '## Rounds',
     '',
     ...markdownTable(
@@ -213,11 +264,12 @@ function renderReport(run: BenchRun): string {
       ['NODE_OPTIONS', software.nodeOptions === null ? 'unset' : JSON.stringify(software.nodeOptions)],
       ['skeld', `@skeld/core ${software.skeld}, ${revisionText(run)}, from ${software.skeldResolvedFrom}`],
       ['autocannon', software.autocannon],
+      ...externalRows(run.comparison),
     ]),
     '',
     '## Method',
     '',
-    ...methodLines(run.options, machine.unpinnedReason),
+    ...methodLines(run.options, machine.unpinnedReason, run.comparison),
     '',
     '## Warnings',
     '',

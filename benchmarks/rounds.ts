@@ -24,6 +24,7 @@ import type { BenchSample, RouteId, RunOptions, Visit } from './types.ts';
 
 interface ScheduleContext {
   readonly options: RunOptions;
+  readonly external: string | null;
   readonly autocannon: Autocannon;
   readonly serverCommand: Command;
   readonly target: (visit: Visit) => Target;
@@ -228,7 +229,7 @@ const runVisit = async (context: ScheduleContext, visit: Visit): Promise<boolean
 };
 
 export async function runSchedule(context: ScheduleContext): Promise<'complete' | 'interrupted'> {
-  for (const visit of scheduleVisits(context.options)) {
+  for (const visit of scheduleVisits(context.options, context.external)) {
     // biome-ignore lint/performance/noAwaitInLoops: one server runs at a time; the schedule is sequential by design.
     if (context.interrupted() || !(await runVisit(context, visit))) {
       return 'interrupted';

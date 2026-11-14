@@ -1,10 +1,10 @@
-// Does:  Declares the benchmark's shapes: options, samples, summaries and the run.
-// Holds: HTTP samples measure skeld; optional sessions distinguish its builds.
+// Does:  Declares the benchmark's shapes: options, samples, summaries, the comparison and the run.
+// Holds: HTTP samples measure skeld, and at most one external entrant whose build is always external.
 
 export type ServerId = 'skeld';
 export type RouteId = 'hello' | 'echo';
 export type LoggingBuildId = 'before-a' | 'before-b' | 'off' | 'default' | 'access';
-export type BuildId = 'skeld' | 'skeld-diag' | LoggingBuildId;
+export type BuildId = 'skeld' | 'skeld-diag' | 'external' | LoggingBuildId;
 type RunStatus = 'complete' | 'invalid' | 'interrupted';
 export type Bound = 'server' | 'generator' | 'neither' | 'unknown';
 
@@ -24,6 +24,7 @@ export interface RunOptions {
   readonly check: boolean;
   readonly diag: boolean;
   readonly logging: LoggingSession | null;
+  readonly against: string | null;
   readonly stepN: number;
   readonly cpuN: number;
 }
@@ -35,7 +36,7 @@ export interface BenchOptions {
   readonly warmUpSeconds: number;
   readonly durationSeconds: number;
   readonly rounds: number;
-  readonly servers: readonly ServerId[];
+  readonly servers: readonly string[];
   readonly routes: readonly RouteId[];
   readonly diag: boolean;
   readonly logging: LoggingSession | null;
@@ -71,7 +72,7 @@ export interface BenchSoftware {
 export interface BenchSample {
   readonly round: number;
   readonly position: number;
-  readonly server: ServerId;
+  readonly server: string;
   readonly build: BuildId;
   readonly route: RouteId;
   readonly kind: 'warm-up' | 'measured';
@@ -99,13 +100,31 @@ export interface BenchSpread {
 }
 
 export interface BenchSummary {
-  readonly server: ServerId;
+  readonly server: string;
   readonly build: BuildId;
   readonly route: RouteId;
   readonly rounds: number;
   readonly serverCpuMicrosecondsPerRequest: BenchSpread | null;
   readonly requestsPerSecond: BenchSpread;
   readonly latencyP99Ms: BenchSpread;
+}
+
+export interface BenchExternal {
+  readonly server: string;
+  readonly file: string;
+  readonly version: string | null;
+  readonly commandLine: readonly string[];
+}
+
+export interface BenchRatio {
+  readonly route: RouteId;
+  readonly serverCpuMicrosecondsPerRequest: number | null;
+  readonly requestsPerSecond: number;
+}
+
+export interface BenchComparison {
+  readonly external: BenchExternal;
+  readonly ratios: readonly BenchRatio[];
 }
 
 export interface BenchRun {
@@ -122,12 +141,13 @@ export interface BenchRun {
   readonly summary: readonly BenchSummary[];
   readonly statusReason: string | null;
   readonly warnings: readonly string[];
+  readonly comparison?: BenchComparison;
 }
 
 export interface Visit {
   readonly round: number;
   readonly position: number;
-  readonly server: ServerId;
+  readonly server: string;
   readonly build: BuildId;
 }
 

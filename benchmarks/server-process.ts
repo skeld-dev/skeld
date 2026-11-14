@@ -16,7 +16,8 @@ export interface ExitStatus {
 
 export interface Launch {
   readonly name: string;
-  readonly readyLabel: string;
+  // Why: An external entrant is named by its own ready line, so its first start accepts any name.
+  readonly readyLabel: string | null;
   readonly args: readonly string[];
   readonly env: NodeJS.ProcessEnv;
   readonly cwd?: string;
@@ -24,6 +25,7 @@ export interface Launch {
 
 export interface ServerProcess {
   readonly name: string;
+  readonly readyLabel: string;
   readonly pid: number;
   readonly port: number;
   readonly startMs: number;
@@ -35,7 +37,7 @@ export interface ServerProcess {
   kill(): void;
 }
 
-const readyLinePattern = /^\{"server":"([a-z-]+)","port":(\d+)\}$/;
+const readyLinePattern = /^\{"server":"([a-z-]*)","port":(\d+)\}$/;
 const readyLinePreview = 80;
 const maxPort = 65_535;
 
@@ -50,18 +52,25 @@ export function indentTail(tail: readonly string[]): readonly string[] {
 }
 
 type ReadyOutcome =
-  | { readonly kind: 'ready'; readonly port: number }
+  | { readonly kind: 'ready'; readonly label: string; readonly port: number }
   | { readonly kind: 'wrong'; readonly line: string }
   | { readonly kind: 'exited'; readonly status: ExitStatus }
   | { readonly kind: 'timeout' };
 
-const parseReady = (label: string, line: string): ReadyOutcome => {
+const parseReady = (expected: string | null, line: string): ReadyOutcome => {
   const match = readyLinePattern.exec(line);
+  const label = match?.[1];
   const port = Number(match?.[2]);
-  if (match?.[1] !== label || !Number.isSafeInteger(port) || port < 1 || port > maxPort) {
+  if (
+    label === undefined ||
+    (expected !== null && label !== expected) ||
+    !Number.isSafeInteger(port) ||
+    port < 1 ||
+    port > maxPort
+  ) {
     return { kind: 'wrong', line };
   }
-  return { kind: 'ready', port };
+  return { kind: 'ready', label, port };
 };
 
 export async function startServer(launch: Launch, command: Command): Promise<ServerProcess> {
@@ -149,7 +158,7 @@ export async function startServer(launch: Launch, command: Command): Promise<Ser
     }
     throw new BenchError(
       3,
-      `${server} printed ${JSON.stringify(outcome.line.slice(0, readyLinePreview))} instead of its ready line {"server":"${readyLabel}","port":<n>}.`,
+      `${server} printed ${JSON.stringify(outcome.line.slice(0, readyLinePreview))} instead of its ready line {"server":"${readyLabel ?? '<name>'}","port":<n>}.`,
     );
   }
 
@@ -166,6 +175,7 @@ export async function startServer(launch: Launch, command: Command): Promise<Ser
 
   return {
     name: server,
+    readyLabel: outcome.label,
     pid,
     port: outcome.port,
     startMs: readyMs,
