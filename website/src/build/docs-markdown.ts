@@ -49,7 +49,7 @@ export function documentationIndex(pages: DocPage[]): string {
     '',
     '> A TypeScript backend framework for sensitive data, built around shared contracts.',
     '',
-    'These are the public documentation pages in Markdown. Start with the overview and first-request guide; use the Core API pages for signatures and constraints.',
+    'These are the public documentation pages in Markdown. Start with the overview and the install guide; use the Core API pages for signatures and constraints.',
     '',
     `Website: ${publicUrl('/')}`,
     `Complete documentation in one file: ${publicUrl('/llms-full.txt')}`,

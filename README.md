@@ -1,64 +1,85 @@
 # skeld
 
-skeld is a TypeScript framework for services on Node 26: one contract declares each route's schemas, the engine on `node:http` validates and serializes from it, and a typed client calls it.
+skeld is a TypeScript framework for HTTP services on Node.js 26. You declare each route's inputs and responses once, in a contract. The server validates requests and serializes responses from that contract, and a typed client calls it.
 
-Start with the [documentation](docs/README.md): run your first request, design a contract, and understand the framework's security boundaries. The [package README](packages/core/README.md) contains installation instructions and links.
+```ts
+import { defineContract } from '@skeld/core/contract';
+import * as t from '@skeld/core/schema';
 
-## Logging
+export const contract = defineContract({
+  greet: {
+    method: 'GET',
+    path: '/hello/:name',
+    params: t.object({ name: t.string({ maxLength: 64 }) }),
+    responses: { 200: t.object({ message: t.string({ maxLength: 72 }) }) },
+  },
+});
+```
 
-A server writes structured JSON lines to stdout. The options, the record format, the events and Collector ingestion are documented in [`docs/logging/`](docs/logging/logging.md).
+## Install
+
+```sh
+npm install @skeld/core
+```
+
+Requires Node.js 26.12 or later and an ES module project (`"type": "module"` in `package.json`). The package has no runtime dependencies.
+
+[Install skeld](docs/guides/install.md) continues from here: it adds a server and a client for the contract above, runs both, and shows the response to a request the contract refuses.
+
+## Documentation
+
+The documentation is published at [skeld.dev/docs](https://skeld.dev/docs/) and lives in this repository under [`docs/`](docs/README.md).
+
+- [Guides](docs/README.md#learn-the-model): design a contract, handle errors in the client, classify sensitive data, connect a browser, run a service.
+- [Security boundaries](docs/concepts/security-boundaries.md) and the [threat model](docs/concepts/threat-model.md): what skeld enforces and what your application must supply.
+- [API reference](docs/api/README.md) and [logging reference](docs/logging/logging.md).
+- [Examples](examples/README.md): hello, classified logging, and a service with plugins.
 
 ## Repository
 
-A pnpm workspaces monorepo. Source runs unbuilt with `node --conditions=skeld-source`, which resolves `@skeld/core` to `packages/core/src`.
+A pnpm workspace. The published package is `packages/core`.
 
-| Workspace       | What                                                                 |
+| Path            | What                                                                 |
 | --------------- | -------------------------------------------------------------------- |
 | `packages/core` | `@skeld/core`, the published package                                 |
 | `docs/`         | [guides, concepts, API and logging references](docs/README.md)       |
 | `examples/`     | runnable [hello, logging and service examples](examples/README.md)   |
-| `benchmarks`    | [performance workloads and type-cost fixtures](benchmarks/README.md) |
-| `tests`         | [correctness checks organized by behavior](tests/README.md)          |
-| `website`       | [Marketing and documentation website](website/)                      |
-| `tools`         | repository tools, such as the README example check                   |
+| `tests/`        | [correctness checks organized by behavior](tests/README.md)          |
+| `benchmarks/`   | [performance workloads and type-cost fixtures](benchmarks/README.md) |
+| `website/`      | the source of skeld.dev                                              |
+| `tools/`        | repository checks, such as the documentation example checks          |
 
 ## Development
 
-Requires Node 26.13.0 (`.nvmrc`) and pnpm 12.19.0 (pinned in `package.json`). Install that pnpm version with `npm install --global pnpm@12.19.0 --allow-scripts=pnpm` if needed.
+You need Node.js 26.13.0 (the version in `.nvmrc`) and pnpm 12.19.0 (pinned in `package.json`). If you do not have that pnpm version, install it with `npm install --global pnpm@12.19.0 --allow-scripts=pnpm`.
+
+From the repository root:
 
 ```sh
 pnpm install
+pnpm run check
+pnpm test
 ```
 
-Run every command from the repository root. `pnpm-workspace.yaml` defines the workspaces; `pnpm-lock.yaml` is the only dependency lockfile. Use `pnpm install --frozen-lockfile` for CI and reproducible installs. Internal packages use `workspace:*` to require the local checkout.
+`pnpm run check` type-checks and builds every workspace. `pnpm test` builds and runs the correctness checks; `pnpm test security` runs one category.
 
-| Command                                                                                                  | Does                                                                                                     |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `pnpm exec tsc -b --force`                                                                               | type-checks and builds every project                                                                     |
-| `pnpm test`                                                                                              | builds and runs all ordinary correctness checks; `pnpm test security` selects a category                 |
-| `pnpm exec biome check .`                                                                                | formats and lints                                                                                        |
-| `pnpm exec knip`                                                                                         | finds unused files, exports and dependencies                                                             |
-| `semgrep scan --config p/typescript --config p/nodejs --config .semgrep --metrics=off --error --quiet .` | static analysis                                                                                          |
-| `pnpm audit --prod`                                                                                      | audits production dependencies across the workspace                                                      |
-| `node tools/check-reference-example.ts`                                                                  | checks that the core reference example matches `examples/hello` byte for byte                            |
-| `pnpm run examples-check`                                                                                | builds and runs all examples, checking clients, refusals, logging and graceful shutdown                  |
-| `pnpm --filter @skeld/core publish --dry-run`                                                            | lists what the package would publish, without publishing                                                 |
-| `pnpm run bench`                                                                                         | builds `packages/core` and runs the benchmark, about 11 minutes; run it with nothing else on the machine |
-
-Run the hello example from source, with the client in a second shell:
+Source runs without a build step: `node --conditions=skeld-source` resolves `@skeld/core` to `packages/core/src`. To run the hello example that way, start the server in one terminal and the client in a second:
 
 ```sh
 pnpm --filter @skeld/example-hello run start
 pnpm --filter @skeld/example-hello run call
 ```
 
-Continue with the [logging example](examples/logging/README.md) for classified fields and request IDs, or the
-[service example](examples/service/README.md) for plugins, scoped hooks, declared errors and bounded state.
+Before you open a pull request, also run:
 
-## Contributing
+| Command                   | Does                                                |
+| ------------------------- | --------------------------------------------------- |
+| `pnpm run lint`           | checks formatting and lint rules with Biome         |
+| `pnpm run knip`           | finds unused files, exports and dependencies        |
+| `pnpm run examples-check` | builds and runs every example against a real server |
 
-See [Contributing to skeld](CONTRIBUTING.md) for setup, focused checks, and pull requests. Documentation contributors can follow the [writing guide](docs/maintainers/writing-docs.md).
+[Contributing to skeld](CONTRIBUTING.md) covers focused checks, documentation changes and pull requests. Benchmarks need a quiet machine and have their own [guide](benchmarks/README.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)

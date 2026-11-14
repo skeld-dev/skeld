@@ -16,7 +16,7 @@ export function siteFooter() {
             <div>
               <h2 id="footer-documentation">Documentation</h2>
               <ul aria-labelledby="footer-documentation" role="list">
-                <li><a href="/docs/guides/first-request/">Get started</a></li>
+                <li><a href="/docs/guides/install/">Get started</a></li>
                 <li><a href="/docs/">Overview</a></li>
                 <li><a href="/docs/api/">Core API</a></li>
               </ul>

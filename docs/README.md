@@ -2,7 +2,7 @@
 
 Build a service around one contract. Use it to validate incoming data, constrain outgoing data, and type the client that calls it.
 
-If you are new to skeld, start with [your first request](guides/first-request.md). You will run a server and client, send an invalid request, and see exactly where the contract takes effect. The examples work from this checkout without an npm publication or an external service.
+If you are new to skeld, start with [Install skeld](guides/install.md): it takes you from `npm install @skeld/core` to a running server and a typed client call. Then follow [your first request](guides/first-request.md) in a checkout of the repository. You will run a larger example, send an invalid request, and see exactly where the contract takes effect. Neither needs an external service.
 
 ## Learn the model
 
@@ -20,6 +20,7 @@ Read these in order, or jump to the task you are working on:
 
 | Guide                                                           | What you will be able to do                                                            |
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [Install skeld](guides/install.md)                              | Add the package to a new project, run one route, and call it through its contract      |
 | [Your first request](guides/first-request.md)                   | Run the hello service and distinguish validation from application behavior             |
 | [Design a contract](guides/contracts.md)                        | Choose bounds, response fields, and explicit application outcomes                      |
 | [Call a service and handle errors](guides/client-and-errors.md) | Narrow responses by status and separate HTTP outcomes from failed calls                |
@@ -36,6 +37,6 @@ These explanations connect the guides: [the request lifecycle](concepts/request-
 - [API reference](api/README.md): signatures and rules generated from the public source documentation.
 - [Logging](logging/logging.md): options, delivery behavior, and limits; [record format](logging/record-format.md), [events](logging/events.md), [error disclosure](logging/errors.md), and [Collector ingestion](logging/collector.md).
 - [Runnable examples](../examples/README.md): hello, classified logging, and a scoped task service.
-- [Package README](../packages/core/README.md): installation, runtime requirements, and a compact feature reference.
+- [Core behavior reference](reference/core.md): runtime requirements for each entry point and a compact feature reference.
 
 To improve skeld or its documentation, see the repository's [contribution guide](../CONTRIBUTING.md).

@@ -33,7 +33,7 @@ const pages = [
 
 export const pageInputs = Object.fromEntries(pages.map((page) => [page.name, page.template]));
 const redirects = [
-  ...['/start', '/start/', '/start/index.html'].map((path) => ({ path, destination: '/docs/guides/first-request/' })),
+  ...['/start', '/start/', '/start/index.html'].map((path) => ({ path, destination: '/docs/guides/install/' })),
   ...['/scenarios', '/scenarios/', '/scenarios/index.html'].map((path) => ({ path, destination: '/explore/' })),
 ];
 const license = () => readFileSync(new URL('../../../LICENSE', import.meta.url), 'utf8');

@@ -69,7 +69,6 @@ export function docsPage(page: DocPage, definitions: DocDefinition[]) {
         </div>
         <p class="docs-markdown-status" data-markdown-status role="status" aria-live="polite"></p>
         <details class="docs-markdown-fallback" data-markdown-fallback hidden><summary>Select Markdown to copy</summary><textarea readonly aria-label="Page Markdown" spellcheck="false"></textarea></details>
-        ${page.url === '/docs/guides/first-request/' ? html`<aside class="docs-checkout"><strong>Run from a source checkout.</strong> Public release downloads and npm installation are not available yet.</aside>` : ''}
         <details class="docs-mobile-contents"><summary>On this page</summary><nav aria-label="On this page">${contents(page.headings)}</nav></details>
         <article class="docs-prose" aria-labelledby=${page.titleId}>${unsafeHTML(page.html)}</article>
         <nav class="docs-pagination" aria-label="Continue reading">
