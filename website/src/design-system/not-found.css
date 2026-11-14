@@ -1,0 +1,64 @@
+/* Does: Gives missing-page recovery the same Polar type, spacing and controls as the site. */
+/* Holds: Text stays clear of the decorative ice; actions wrap on narrow screens. */
+
+.not-found-page {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: 740px;
+  padding-block: 180px 100px;
+  overflow: hidden;
+}
+.not-found-content {
+  max-width: 640px;
+}
+.not-found-content h1 {
+  margin-block: 30px;
+  font-size: clamp(52px, 7vw, 96px);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 1.08;
+}
+.not-found-content h1 span {
+  color: var(--color-ice);
+}
+.not-found-content > p:last-of-type {
+  max-width: 440px;
+  color: var(--color-soft);
+  font-size: 17px;
+  line-height: 1.8;
+}
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 36px;
+}
+.not-found-art {
+  position: absolute;
+  z-index: -1;
+  right: -5%;
+  top: 130px;
+  width: 55%;
+  max-width: 700px;
+  opacity: 0.75;
+}
+@media (max-width: 760px) {
+  .not-found-page {
+    min-height: 660px;
+    padding-block: 140px 72px;
+  }
+  .not-found-content h1 {
+    font-size: clamp(48px, 10vw, 72px);
+  }
+  .not-found-content > p:last-of-type {
+    font-size: 15px;
+  }
+  .not-found-art {
+    width: 70%;
+    top: 80px;
+    right: -38%;
+    opacity: 0.2;
+  }
+}

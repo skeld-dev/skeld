@@ -3,11 +3,12 @@
 
 import { defineConfig } from 'vite';
 import { docsPlugin } from './src/build/docs-plugin.ts';
+import { deliveryPlugin } from './src/build/delivery-plugin.ts';
 import { pageInputs, pagesPlugin } from './src/build/pages-plugin.ts';
 
 export default defineConfig({
   appType: 'mpa',
-  plugins: [pagesPlugin(), docsPlugin()],
+  plugins: [pagesPlugin(), docsPlugin(), deliveryPlugin()],
   build: {
     target: 'esnext',
     rolldownOptions: { input: pageInputs },
