@@ -10,6 +10,7 @@ import type { RequestLog } from '../log/shapes.ts';
 import type { Logger } from '../log/types.ts';
 import type { RouteParams } from '../router/types.ts';
 import type { RawCookies } from '../server/types.ts';
+import type { DeadlineQueue } from './deadline.ts';
 import type { EngineRuntime, RouteRuntime } from './types.ts';
 
 // Does:  A request's failure as the engine classified it when it happened, with the value its record may read.
@@ -40,7 +41,9 @@ export interface Exchange {
   closeConnection: boolean;
   lateSendError: Error | null;
   failure: Failure | null;
-  waiting: Set<Exchange> | null;
+  waiting: DeadlineQueue | null;
+  waitingBefore: Exchange | null;
+  waitingAfter: Exchange | null;
   cancelRead: (() => void) | null;
   deadline: number;
   abort: AbortController | null;

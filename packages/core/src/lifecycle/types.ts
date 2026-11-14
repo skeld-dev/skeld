@@ -18,8 +18,7 @@ import type {
   OutgoingHeaders,
   PreHandlerHook,
 } from '../server/types.ts';
-import type { Deadlines } from './deadline.ts';
-import type { Exchange } from './exchange.ts';
+import type { DeadlineQueue, Deadlines } from './deadline.ts';
 
 export interface RuntimeRequest {
   readonly route: RouteInfo;
@@ -63,7 +62,7 @@ export interface RouteRuntime {
   readonly redirectOrigins: readonly string[];
   readonly cors: CorsRoute | null;
   readonly csrf: CsrfRoute | null;
-  readonly waiting: Set<Exchange>;
+  readonly waiting: DeadlineQueue;
   readonly hooks: HookChains;
   readonly errorHandlers: readonly ErrorHandler[];
   readonly scopeName: string;

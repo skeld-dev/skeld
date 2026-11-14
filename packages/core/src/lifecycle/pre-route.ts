@@ -94,6 +94,8 @@ export function preRoute(
         lateSendError: null,
         failure: null,
         waiting: null,
+        waitingBefore: null,
+        waitingAfter: null,
         cancelRead: null,
         deadline: 0,
         abort: null,
