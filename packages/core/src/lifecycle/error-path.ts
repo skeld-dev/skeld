@@ -129,6 +129,7 @@ function answer(exchange: Exchange, outcome: unknown, returned: boolean): void {
   const matched = writeErrorBody(
     exchange.runtime,
     exchange.res,
+    exchange.log.id,
     exchange.method,
     body,
     exchange.closeConnection,
@@ -279,7 +280,16 @@ export function expire(exchange: Exchange): void {
       stageBodyRefusal(req);
     }
     exchange.closeConnection = true;
-    const matched = writeErrorBody(exchange.runtime, res, exchange.method, TIMEOUT_BODY, true, null, exchange.cors);
+    const matched = writeErrorBody(
+      exchange.runtime,
+      res,
+      exchange.log.id,
+      exchange.method,
+      TIMEOUT_BODY,
+      true,
+      null,
+      exchange.cors,
+    );
     const written = matched ? TIMEOUT_BODY : INTERNAL_BODY;
     pointErrorWritten(exchange, failure, written.status, written.code);
   }
@@ -304,5 +314,5 @@ export function refuseCrossSite(exchange: Exchange, reason: CsrfReason): void {
     stageBodyRefusal(req);
   }
   exchange.closeConnection = true;
-  writeErrorBody(runtime, res, exchange.method, CROSS_ORIGIN_BODY, true, null, exchange.cors);
+  writeErrorBody(runtime, res, exchange.log.id, exchange.method, CROSS_ORIGIN_BODY, true, null, exchange.cors);
 }

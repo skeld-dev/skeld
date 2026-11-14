@@ -1,4 +1,4 @@
-// Does:  Completes every response head the engine writes: redirect check, Set-Cookie lines, CORS, security headers.
+// Does:  Completes every response head the engine writes: request id, redirect check, Set-Cookie, CORS, security.
 // Holds: A refused Location throws with nothing added to the head and no Location left on the response.
 
 import type { OutgoingHttpHeaders, ServerResponse } from 'node:http';
@@ -37,6 +37,7 @@ function checkLocation(res: ServerResponse, route: RouteRuntime): void {
 // Does:  Adds to the head about to be written what the response still needs; route is null for an engine-written error.
 export function finishHead(
   res: ServerResponse,
+  requestId: string,
   status: number,
   head: OutgoingHttpHeaders,
   securityHeaders: boolean,
@@ -47,6 +48,8 @@ export function finishHead(
   if (route !== null && status >= FIRST_REDIRECT && status <= LAST_REDIRECT) {
     checkLocation(res, route);
   }
+  // Why: Set here, never with setHeader at request start, which would put every writeHead on Node's slow header path.
+  head['x-request-id'] = requestId;
   // Why: One field line per cookie; a comma-joined Set-Cookie cannot be split back apart (RFC 9110 section 5.3).
   if (cookies !== null && cookies.size > 0) {
     head['set-cookie'] = [...cookies.values()];

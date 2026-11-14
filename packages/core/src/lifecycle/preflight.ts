@@ -42,7 +42,7 @@ export function answerPreflight(
       CROSS_ORIGIN_BODY.code,
       null,
     );
-    writeErrorBody(runtime, res, 'OPTIONS', CROSS_ORIGIN_BODY, false, null, grant);
+    writeErrorBody(runtime, res, request.id, 'OPTIONS', CROSS_ORIGIN_BODY, false, null, grant);
     return true;
   }
   count('cors.preflight', info.name);
@@ -56,7 +56,7 @@ export function answerPreflight(
   if (runtime.isClosing()) {
     head.connection = 'close';
   }
-  finishHead(res, NO_CONTENT, head, runtime.securityHeaders, null, null, grant);
+  finishHead(res, request.id, NO_CONTENT, head, runtime.securityHeaders, null, null, grant);
   res.writeHead(NO_CONTENT, head);
   res.end();
   wrote(NO_CONTENT, head, null);

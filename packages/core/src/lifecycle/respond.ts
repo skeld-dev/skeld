@@ -35,6 +35,7 @@ function writePayload(exchange: Exchange, status: number, serialized: string): v
     const { runtime } = exchange;
     writeJson(
       exchange.res,
+      exchange.log.id,
       exchange.method,
       status,
       serialized,
@@ -69,6 +70,7 @@ function writeEmpty(exchange: Exchange, status: number): void {
   try {
     finishHead(
       res,
+      exchange.log.id,
       status,
       head,
       exchange.runtime.securityHeaders,
@@ -83,7 +85,7 @@ function writeEmpty(exchange: Exchange, status: number): void {
   res.writeHead(status, head);
   res.end();
   end(exchange.stage);
-  wrote(status, null, null);
+  wrote(status, head, null);
   settle(exchange, 'written');
 }
 

@@ -32,7 +32,7 @@ function refuse(
   close: boolean,
 ): null {
   pointRefused(runtime.log, request, refusal, body.status, body.code, reason);
-  writeErrorBody(runtime, res, method, body, close, null, null);
+  writeErrorBody(runtime, res, request.id, method, body, close, null, null);
   return null;
 }
 
