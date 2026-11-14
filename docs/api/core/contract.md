@@ -22,7 +22,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:137`
+Source: `packages/core/src/contract/types.ts:138`
 
 ## EngineErrorCode
 
@@ -41,7 +41,8 @@ export type EngineErrorCode =
   | 'INTERNAL'
   | 'NETWORK'
   | 'INVALID_RESPONSE'
-  | 'RESPONSE_TOO_LARGE';
+  | 'RESPONSE_TOO_LARGE'
+  | 'REDIRECT_NOT_SUPPORTED';
 ```
 
 Source: `packages/core/src/contract/types.ts:122`
