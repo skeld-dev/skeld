@@ -14,9 +14,29 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Benchmark versions are controlled comparison baselines, updated deliberately.
+    exclude-paths:
+      - benchmarks/**
+    # Also suppress security updates originating from the shared lockfile.
+    ignore:
+      - dependency-name: "@hono/node-server"
+      - dependency-name: "@types/express"
+      - dependency-name: "autocannon"
+      - dependency-name: "express"
+      - dependency-name: "fastify"
+      - dependency-name: "hono"
     versioning-strategy: increase
     open-pull-requests-limit: 10
     groups:
       development-patch-minor:
         dependency-type: development
         update-types: [ minor, patch ]
+  # Manifest-based security updates use the manifest directory, not the root entry.
+  - package-ecosystem: npm
+    directory: /benchmarks
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"

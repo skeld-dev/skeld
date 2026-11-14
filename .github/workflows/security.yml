@@ -60,7 +60,7 @@ jobs:
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           run_install: false
-      # GitHub's dependency graph currently misses pnpm 12's multi-document lockfile.
-      # Audit the complete lockfile independently; registry errors also fail this job.
+      # Independent full-lockfile coverage includes benchmark dependencies excluded from update PRs.
+      # Registry errors also fail this job.
       - name: Audit registry dependencies
         run: pnpm audit --audit-level=high
