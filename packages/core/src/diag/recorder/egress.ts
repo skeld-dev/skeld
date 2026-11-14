@@ -20,11 +20,6 @@ const STACK_FRAME = /\bat (?:async )?(?:[^\s()"]+ \()?(?:file:\/\/|node:|\/|[A-Z
 const ERROR_PREFIX = /"(?:[A-Z][A-Za-z]*)?Error: /;
 const LINE_BREAK = /[\r\n]/;
 const SUSPICIOUS_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
-const STDERR_PREFIXES: readonly (readonly [string, string])[] = [
-  ['Response already sent', 'already_sent'],
-  ['onResponse hook threw: ', 'on_response'],
-  ['onError hook threw: ', 'on_error'],
-];
 
 const cwd = process.cwd();
 const fileMarkers: readonly string[] = [
@@ -209,9 +204,8 @@ export function checkKey(key: string): void {
   }
 }
 
-export function checkStderr(line: string): void {
-  const found = STDERR_PREFIXES.find(([marker]) => line.includes(marker));
-  keyedCounter('err.stderr', found === undefined ? 'thrown' : found[1]).total += 1;
+export function checkLogLine(line: string, event: string): void {
+  keyedCounter('log.line', event).total += 1;
   if (config.canary !== null && line.includes(config.canary)) {
     canaryStderr.total += 1;
   }

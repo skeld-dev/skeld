@@ -24,7 +24,7 @@ import type {
   Resume,
   Routed,
   Start,
-  Stderr,
+  LogLine,
   Track,
   Wrote,
 } from '../empty.ts';
@@ -32,7 +32,7 @@ import { nowNs, toMillis } from './clock.ts';
 import { config, readSettings } from './config.ts';
 import { checkContain, watchServer } from './contain.ts';
 import { keyedCounter } from './counts.ts';
-import { checkHeader, checkKey, checkPayload, checkStderr, declareRoute } from './egress.ts';
+import { checkHeader, checkKey, checkLogLine, checkPayload, declareRoute } from './egress.ts';
 import { raise } from './events.ts';
 import { claimFolder, writeRunFile } from './files.ts';
 import { finishDestroyed, finishWrote } from './finish.ts';
@@ -125,7 +125,7 @@ export const header: Header = checkHeader;
 export const contain: Contain = checkContain;
 export const payload: Payload = checkPayload;
 export const key: Key = checkKey;
-export const stderr: Stderr = checkStderr;
+export const logLine: LogLine = checkLogLine;
 
 export const open: Open = (options) => {
   const settings = readSettings();

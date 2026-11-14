@@ -81,6 +81,9 @@ const plantContract = defineContract({
   plant_send: { method: 'GET', path: '/plant/send', responses: { 200: Hello } },
   plant_header: { method: 'GET', path: '/plant/header', responses: { 200: Hello } },
   plant_raw: { method: 'GET', path: '/plant/raw', responses: { 200: Hello } },
+  plant_cookie_204: { method: 'GET', path: '/plant/cookie-204', responses: { 204: null } },
+  plant_cookie_304: { method: 'GET', path: '/plant/cookie-304', responses: { 304: null } },
+  plant_cookie_hook: { method: 'GET', path: '/plant/cookie-hook', responses: { 200: Hello } },
 });
 
 const world = { hello: 'world' } as const;
@@ -94,16 +97,23 @@ function spin(ms: number): void {
 }
 
 function plantPlugin(scope: Scope): void {
+  const cookie = { name: 'scenario', value: token };
   scope.routes(plantContract, {
     plant_send: () => ({ status: 200, body: world }),
     plant_header: () => ({ status: 200, body: world }),
     plant_raw: () => ({ status: 200, body: world }),
+    plant_cookie_204: () => ({ status: 204, cookies: [cookie] }),
+    plant_cookie_304: () => ({ status: 304, cookies: [cookie] }),
+    plant_cookie_hook: () => ({ status: 200, body: world }),
   });
   scope.addHook('onRequest', (context) => {
     if (context.route.name === 'plant_header') {
       context.send({ status: 200, headers: { 'x-scenario-note': `ok\r\nx-scenario-canary: ${token}` } });
     } else if (context.route.name === 'plant_raw') {
       context.send({ status: 200, payload: JSON.stringify({ ...world, note: token }) });
+    } else if (context.route.name === 'plant_cookie_hook') {
+      context.setCookie(cookie);
+      context.send({ status: 204 });
     }
   });
   const replacing = (context: ResponseContext): string | undefined =>

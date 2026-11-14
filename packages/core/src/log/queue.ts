@@ -27,7 +27,7 @@ export interface Queue {
 }
 
 const WARN = SEVERITY_NUMBER.warn;
-// Why: Batches a burst into one fs.write; the 2026-11-12 spike could not rank delays: provisional until the perf pass.
+// Why: A timer batches the lines of one burst into one fs.write.
 const FLUSH_MS = 5;
 
 // Does:  Builds a server's queue; flush runs from the trigger's own task, onRecovered at a success after drops.
