@@ -13,6 +13,7 @@ The [task client](../../examples/service/client.ts) demonstrates status-based ha
 | Declared status with a schema | The body passed that response schema                    |
 | Declared empty response       | The declared result type has no JSON body               |
 | Undeclared status             | The body is `unknown`; narrow or validate it before use |
+| Redirect status               | Never returned; the call rejects                        |
 | Rejected call                 | No usable result was returned; inspect the thrown error |
 
 Do not cast an undeclared body to the success type. A reverse proxy can return an HTML error page, and an older server can have a different contract. The unknown branch is part of using HTTP reliably.
@@ -21,11 +22,14 @@ Do not cast an undeclared body to the success type. A reverse proxy can return a
 
 Client failures use `HttpError` from `@skeld/core/http-error` with `status: null`:
 
-| Code                 | Meaning                                                                                | Useful next step                                                                   |
-| -------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `NETWORK`            | Sending or receiving failed                                                            | Check connectivity and cancellation; decide whether retrying the operation is safe |
-| `INVALID_RESPONSE`   | A declared response failed validation, JSON was invalid, or nesting exceeded the limit | Compare deployed contracts and inspect the server or proxy                         |
-| `RESPONSE_TOO_LARGE` | The response exceeded the byte limit                                                   | Check whether the schema and operation are appropriately bounded                   |
+| Code                     | Meaning                                                                                | Useful next step                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `NETWORK`                | Sending or receiving failed                                                            | Check connectivity and cancellation; decide whether retrying the operation is safe |
+| `INVALID_RESPONSE`       | A declared response failed validation, JSON was invalid, or nesting exceeded the limit | Compare deployed contracts and inspect the server or proxy                         |
+| `RESPONSE_TOO_LARGE`     | The response exceeded the byte limit                                                   | Check whether the schema and operation are appropriately bounded                   |
+| `REDIRECT_NOT_SUPPORTED` | The server answered with a redirect                                                    | Point `baseUrl` at the service itself, or answer without a redirect                |
+
+The client never follows a redirect. A 301, 302, 303, 307 or 308 answer rejects with `REDIRECT_NOT_SUPPORTED`, on Node and in a browser, whether or not the route declares that status. A route that declares one of those statuses therefore cannot be received through the typed client. The client cancels the redirect's body unread, and the error message names the method, origin and declared route path but never the `Location` value, which can carry a token. A 304 is unaffected, as is every other 3xx status: each is handled like any other response.
 
 Response limits apply while reading decoded bytes, not only after buffering a whole body. By default, a bounded declared schema supplies its limit; an open or unbounded schema, or an undeclared status, uses 1 MiB. `maxResponseBytes` replaces every response limit for that client. Raising it is a deliberate resource decision, not a fix for a wrong response shape.
 

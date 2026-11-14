@@ -131,7 +131,8 @@ export type EngineErrorCode =
   | 'INTERNAL'
   | 'NETWORK'
   | 'INVALID_RESPONSE'
-  | 'RESPONSE_TOO_LARGE';
+  | 'RESPONSE_TOO_LARGE'
+  | 'REDIRECT_NOT_SUPPORTED';
 
 /** The type of a request part the route does not declare: an object with no keys. */
 export interface Empty {

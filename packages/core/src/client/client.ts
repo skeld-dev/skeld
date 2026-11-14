@@ -45,6 +45,9 @@ interface ResponseLimits {
 // Why: The server's default bodyLimit; a response no schema bounds is held to what a request may carry.
 const FALLBACK_RESPONSE_BYTES = 1_048_576;
 
+// Why: The Fetch standard's redirect statuses (https://fetch.spec.whatwg.org/#redirect-status); 304 is not one.
+const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
+
 interface RuntimeClient {
   readonly [name: string]: (input?: CallParts) => Promise<ReceivedResult>;
 }
@@ -175,6 +178,21 @@ function validateResponse(validator: ResponseValidator, target: string, status: 
   }
 }
 
+// Does:  Cancels a redirect's body and builds the rejection; the message never holds the Location or concrete URL.
+async function redirectError(target: string, response: Response): Promise<HttpError> {
+  // Why: A browser's manual mode hides a redirect's status as an opaqueredirect response with status 0.
+  const answered = response.type === 'opaqueredirect' ? 'answered' : `answered ${response.status}`;
+  const message = `${target} ${answered} with a redirect, which the client does not follow`;
+  event('client.error', 'REDIRECT_NOT_SUPPORTED');
+  try {
+    await response.body?.cancel();
+  } catch (cause) {
+    // Why: The redirect is what the caller must act on; a failed cancel is kept as its cause, not made a NETWORK error.
+    return new HttpError(null, 'REDIRECT_NOT_SUPPORTED', message, { cause });
+  }
+  return new HttpError(null, 'REDIRECT_NOT_SUPPORTED', message);
+}
+
 function createCall(
   name: string,
   route: RouteDefinition,
@@ -193,10 +211,11 @@ function createCall(
       // Why: Concrete parameters and queries may hold secrets; diagnostics use only the declared route.
       const target = `${route.method} ${url.origin}${route.path}`;
       const headers = buildHeaders(route, input?.headers);
+      // Why: A followed redirect would be read against this route's responses and re-send a 307 or 308 body elsewhere.
       const init: RequestInit =
         route.body === undefined
-          ? { method: route.method, headers }
-          : { method: route.method, headers, body: JSON.stringify(input?.body) };
+          ? { method: route.method, headers, redirect: 'manual' }
+          : { method: route.method, headers, redirect: 'manual', body: JSON.stringify(input?.body) };
       let response: Response;
       const wait = track('client.fetch');
       try {
@@ -207,6 +226,9 @@ function createCall(
         throw new HttpError(null, 'NETWORK', `${target} failed: ${failureText(cause)}`, { cause });
       }
       end(wait);
+      if (response.type === 'opaqueredirect' || REDIRECT_STATUSES.has(response.status)) {
+        throw await redirectError(target, response);
+      }
       const limit = limits.byStatus.get(response.status) ?? limits.fallback;
       const read = await readResponseBody(response, limit);
       switch (read.kind) {
@@ -254,7 +276,7 @@ function createCall(
 
 /**
  * Creates a typed client with one call per route of a contract.
- * A call rejects with HttpError `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`; throws `TypeError` for a bad option or a schema nested past 64.
+ * A call never follows a redirect and rejects with HttpError `NETWORK`, `INVALID_RESPONSE`, `RESPONSE_TOO_LARGE` or `REDIRECT_NOT_SUPPORTED`; throws `TypeError` for a bad option or a schema nested past 64.
  * @example createClient(defineContract({ health: { method: 'GET', path: '/health', responses: { 204: null } } }), { baseUrl: 'http://127.0.0.1:3000' })
  */
 export function createClient<const C extends ContractRoutes>(contract: C, options: ClientOptions): Client<C>;

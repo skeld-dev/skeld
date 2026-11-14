@@ -10,7 +10,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:137`
+Source: `packages/core/src/contract/types.ts:138`
 
 ## OutgoingCookie
 
@@ -64,7 +64,7 @@ export interface RouteInfo {
 | `method` | The route's HTTP method.          |
 | `path`   | The route's path pattern.         |
 
-Source: `packages/core/src/contract/types.ts:142`
+Source: `packages/core/src/contract/types.ts:143`
 
 ## RequestPart
 

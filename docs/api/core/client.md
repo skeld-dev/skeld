@@ -507,7 +507,7 @@ Source: `packages/core/src/client/types.ts:459`
 
 Creates a typed client with one call per route of a contract.
 
-A call rejects with HttpError `INVALID_RESPONSE` or `RESPONSE_TOO_LARGE`; throws `TypeError` for a bad option or a schema nested past 64.
+A call never follows a redirect and rejects with HttpError `NETWORK`, `INVALID_RESPONSE`, `RESPONSE_TOO_LARGE` or `REDIRECT_NOT_SUPPORTED`; throws `TypeError` for a bad option or a schema nested past 64.
 
 ```ts
 export function createClient<const C extends ContractRoutes>(contract: C, options: ClientOptions): Client<C>;
@@ -519,4 +519,4 @@ createClient(defineContract({ health: { method: 'GET', path: '/health', response
 });
 ```
 
-Source: `packages/core/src/client/client.ts:260`
+Source: `packages/core/src/client/client.ts:282`
