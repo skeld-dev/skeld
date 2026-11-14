@@ -55,8 +55,13 @@ export function securityPage() {
     <div id="security-site-header">${unsafeHTML(header)}</div>
     <main class="security-page" id="main" tabindex="-1">
       <header class="security-heading section-shell">
-        <p class="section-label"><img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />Security</p>
-        <h1>Know where the<br /><span>boundaries are.</span></h1>
+        <div class="security-hero-panel">
+          <img class="security-hero-image" src="/assets/glacial-arch.png" alt="" width="1672" height="941" fetchpriority="high" />
+          <div class="security-hero-copy">
+            <p class="section-label"><img src="/assets/skeld-icon.png" alt="" width="1254" height="1254" />Security</p>
+            <h1>Know where the<br /><span>boundaries are.</span></h1>
+          </div>
+        </div>
         <div class="security-intro"><p>skeld checks incoming data, constrains declared responses and masks classified log fields. Our threat model follows those boundaries through the code, including the places where your application takes over.</p><a class="button button-large primary" href=${model}>Read the threat model<svg aria-hidden="true"><use href="#arrow"></use></svg></a></div>
       </header>
       <section class="security-boundaries section-shell" aria-labelledby="boundary-heading">
@@ -70,7 +75,7 @@ export function securityPage() {
         <p class="security-flow-caption">These are policy boundaries within one process. Application code and plugins share its privileges.</p>
       </section>
       <section class="security-controls section-shell" aria-labelledby="controls-heading">
-        <div class="security-section-heading"><h2 id="controls-heading">Controls with<br />a defined scope.</h2><p>Follow each protection to its configuration, behavior and limits.</p></div>
+        <div class="security-section-heading"><h2 id="controls-heading">Controls with<br />a defined scope.</h2></div>
         <div class="security-control-list">
           <article><h3>Declare what can leave.</h3><p>Ordinary object responses include declared fields. A secret response field needs explicit exposure. A personal field still needs an application decision about who may receive it.</p><a class="text-link" href="/docs/guides/classification/">Data classification <svg aria-hidden="true"><use href="#arrow"></use></svg></a></article>
           <article><h3>Carry classification into logs.</h3><p>Classified logger fields mask secret and personal values and omit undeclared object fields. Raw messages and scalar fields are not automatically classified. The standalone redactor has different behavior.</p><a class="text-link" href="/docs/logging/logging/">Logging and disclosure <svg aria-hidden="true"><use href="#arrow"></use></svg></a></article>

@@ -2,10 +2,48 @@
 /* Holds: Meaning is available as text, narrow layouts preserve reading order and motion is limited to shared links. */
 
 .security-heading {
-  padding-block: 156px 60px;
+  padding-block: 136px 48px;
+}
+.security-hero-panel {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  min-height: clamp(320px, 35vw, 500px);
+  padding: 48px 24px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  background: var(--color-depth);
+}
+.security-hero-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 45%;
+  z-index: -2;
+}
+.security-hero-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--color-depth) 75%, transparent),
+    transparent 75%
+  );
+}
+.security-hero-copy {
+  text-align: center;
+}
+.security-hero-copy .section-label {
+  justify-content: center;
+  margin-bottom: 20px;
 }
 .security-heading h1 {
-  font-size: clamp(44px, 6.2vw, 88px);
+  font-size: clamp(34px, 5vw, 72px);
   font-weight: 500;
   letter-spacing: -0.065em;
   line-height: 1.08;
@@ -16,13 +54,14 @@
 }
 .security-intro {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 36px;
-  margin-top: 32px;
+  gap: 24px;
+  margin-top: 28px;
+  text-align: center;
 }
 .security-intro > p {
-  max-width: 660px;
+  max-width: 740px;
   color: var(--color-soft);
   font-size: 16px;
 }
@@ -182,7 +221,6 @@
   flex-shrink: 0;
 }
 @media (max-width: 1000px) {
-  .security-intro,
   .security-evidence {
     flex-direction: column;
     align-items: flex-start;
@@ -198,7 +236,11 @@
 }
 @media (max-width: 760px) {
   .security-heading {
-    padding-block: 128px 40px;
+    padding-block: 104px 40px;
+  }
+  .security-hero-panel {
+    min-height: 280px;
+    padding: 40px 16px;
   }
   .security-section-heading,
   .security-control-list,
