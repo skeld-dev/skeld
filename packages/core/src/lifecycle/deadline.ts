@@ -8,11 +8,56 @@ const CHECKS_PER_LIMIT = 10;
 // Why: A short route limit must not wake the whole server every millisecond while any request waits.
 const MIN_PERIOD_MS = 10;
 
+// Does:  Holds the requests waiting under one time limit as a list threaded through them, oldest deadline first.
+// Holds: Joining and leaving allocate nothing, a request is in at most one queue, and size counts those in it.
+export class DeadlineQueue {
+  first: Exchange | null = null;
+  last: Exchange | null = null;
+  size = 0;
+
+  // Does:  Yields the waiting requests, oldest deadline first.
+  *values(): Generator<Exchange> {
+    for (let exchange = this.first; exchange !== null; exchange = exchange.waitingAfter) {
+      yield exchange;
+    }
+  }
+}
+
+function append(queue: DeadlineQueue, exchange: Exchange): void {
+  const { last } = queue;
+  exchange.waiting = queue;
+  exchange.waitingBefore = last;
+  if (last === null) {
+    queue.first = exchange;
+  } else {
+    last.waitingAfter = exchange;
+  }
+  queue.last = exchange;
+  queue.size += 1;
+}
+
+function unlink(queue: DeadlineQueue, exchange: Exchange): void {
+  const { waitingBefore: before, waitingAfter: after } = exchange;
+  if (before === null) {
+    queue.first = after;
+  } else {
+    before.waitingAfter = after;
+  }
+  if (after === null) {
+    queue.last = before;
+  } else {
+    after.waitingBefore = before;
+  }
+  exchange.waiting = null;
+  exchange.waitingBefore = null;
+  exchange.waitingAfter = null;
+  queue.size -= 1;
+}
+
 function release(exchange: Exchange): void {
   const { waiting } = exchange;
   if (waiting !== null) {
-    waiting.delete(exchange);
-    exchange.waiting = null;
+    unlink(waiting, exchange);
   }
 }
 
@@ -44,7 +89,7 @@ export function timeoutReason(): DOMException {
 
 export interface Deadlines {
   // Does:  Returns the queue of one time limit, at boot; the check period follows the shortest limit.
-  queue(limitMs: number): Set<Exchange>;
+  queue(limitMs: number): DeadlineQueue;
   // Does:  Starts the deadline of a request that now waits on a promise or on its body; a no-op once started.
   wait(exchange: Exchange): void;
   // Does:  Stops the check for good and forgets every waiting request; called once every connection has closed.
@@ -54,7 +99,7 @@ export interface Deadlines {
 // Does:  Builds one queue per distinct time limit and one shared check that expires the overdue requests.
 // Holds: Each queue is in deadline order, so a check stops at its first request not yet due.
 export function createDeadlines(expire: (exchange: Exchange) => void): Deadlines {
-  const queues = new Map<number, Set<Exchange>>();
+  const queues = new Map<number, DeadlineQueue>();
   let periodMs = Number.POSITIVE_INFINITY;
   let timer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
@@ -68,20 +113,16 @@ export function createDeadlines(expire: (exchange: Exchange) => void): Deadlines
 
   function check(): void {
     const now = performance.now();
-    let left = 0;
+    let waiting = false;
     for (const queue of queues.values()) {
-      for (const exchange of queue) {
-        if (exchange.deadline > now) {
-          break;
-        }
-        queue.delete(exchange);
-        exchange.waiting = null;
+      for (let exchange = queue.first; exchange !== null && exchange.deadline <= now; exchange = queue.first) {
+        unlink(queue, exchange);
         expire(exchange);
       }
-      left += queue.size;
+      waiting ||= queue.size > 0;
     }
     // Why: An idle server keeps no timer; the next request that waits starts it again.
-    if (left === 0) {
+    if (!waiting) {
       pause();
     }
   }
@@ -92,7 +133,7 @@ export function createDeadlines(expire: (exchange: Exchange) => void): Deadlines
       if (found !== undefined) {
         return found;
       }
-      const created = new Set<Exchange>();
+      const created = new DeadlineQueue();
       queues.set(limitMs, created);
       periodMs = Math.min(periodMs, Math.max(MIN_PERIOD_MS, Math.floor(limitMs / CHECKS_PER_LIMIT)));
       return created;
@@ -106,8 +147,7 @@ export function createDeadlines(expire: (exchange: Exchange) => void): Deadlines
       // Why: Reading the peer address now caches it on the socket, so it is still known after the socket closes.
       void socket.remoteAddress;
       exchange.deadline = performance.now() + timeoutMs;
-      exchange.waiting = waiting;
-      waiting.add(exchange);
+      append(waiting, exchange);
       // Why: A client that left has no one to answer; its request must not stay reachable until its deadline.
       exchange.res.on('close', () => release(exchange));
       if (timer === null) {
@@ -119,10 +159,9 @@ export function createDeadlines(expire: (exchange: Exchange) => void): Deadlines
       stopped = true;
       pause();
       for (const queue of queues.values()) {
-        for (const exchange of queue) {
-          exchange.waiting = null;
+        while (queue.first !== null) {
+          unlink(queue, queue.first);
         }
-        queue.clear();
       }
     },
   };
