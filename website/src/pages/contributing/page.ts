@@ -51,7 +51,7 @@ export function contributingPage() {
             <p>You don't need to know the whole codebase to help. Find a part that interests you and start small. We'd love to build something great with you.</p>
             <p class="contributing-guide-note">Our contribution guide on GitHub covers setup and pull requests.</p>
           </div>
-          <a class="button button-large primary" href="https://github.com/skeld-dev">Find skeld on GitHub<svg aria-hidden="true"><use href="#arrow"></use></svg></a>
+          <a class="button button-large primary" href="https://github.com/skeld-dev/skeld">Find skeld on GitHub<svg aria-hidden="true"><use href="#arrow"></use></svg></a>
         </div>
       </section>
     </main>${siteFooter()}

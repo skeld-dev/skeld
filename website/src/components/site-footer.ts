@@ -32,7 +32,7 @@ export function siteFooter() {
             <div>
               <h2 id="footer-project">Project</h2>
               <ul aria-labelledby="footer-project" role="list">
-                <li><a href="https://github.com/skeld-dev">GitHub <span class="footer-external" aria-hidden="true">↗</span></a></li>
+                <li><a href="https://github.com/skeld-dev/skeld">GitHub <span class="footer-external" aria-hidden="true">↗</span></a></li>
                 <li><a href="/contributing/">Contributing</a></li>
                 <li><a href="/license.txt">MIT license</a></li>
               </ul>
