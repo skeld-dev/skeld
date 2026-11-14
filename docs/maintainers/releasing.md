@@ -42,15 +42,18 @@ plus a full-lockfile npm advisory audit. It runs on pull requests, `main`, daily
 High and critical dependency advisories fail the audit; registry failures are not ignored.
 
 Dependabot checks npm/pnpm dependencies and SHA-pinned GitHub Actions weekly. The benchmark workspace
-is excluded from update scans because comparator versions are deliberate measurement baselines; update
-them manually when refreshing those baselines. The full-lockfile dependency audit still covers benchmarks.
+is excluded from version-update scans because comparator versions are deliberate measurement baselines.
+Explicit ignore rules also prevent security-update PRs for benchmark dependencies from either the shared
+lockfile or the benchmark manifest. Update these dependencies manually when refreshing the baselines.
+Vulnerability alerts remain enabled, and the full-lockfile dependency audit still covers benchmarks.
 There is no automatic merge.
 Git dependencies remain subject to source review and their immutable pins; registry auditing does not
 establish that a Git dependency or vendored archive is safe.
 
-GitHub currently does not detect the dependencies in pnpm 12's two-document lockfile in its dependency
-graph. Dependabot version updates work, but alerts and security-update PRs cannot be assumed complete.
-The scheduled `pnpm audit` job supplies independent advisory coverage without changing the lockfile format.
+GitHub documents limitations for pnpm 12's two-document lockfile. The first hosted run nevertheless
+reported advisories from both manifests and the shared lockfile, including benchmark dependencies.
+Do not assume that detection is complete. The scheduled `pnpm audit` job supplies independent full-lockfile
+advisory coverage, including dependencies excluded from automatic update PRs.
 
 ## npm setup and first package
 
