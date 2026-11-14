@@ -34,6 +34,7 @@ interface Seen {
   abortAt?: number;
   flagAtEvent?: boolean;
   returnedAt?: number;
+  startedAt?: number;
 }
 const seen = new Map<string, Seen>();
 
@@ -88,8 +89,11 @@ function handlers() {
       await delay(250);
       return ok();
     },
-    long: async () => {
+    long: async (request: Req) => {
+      const entry = watch(caseOf(request.headers), request.signal);
+      entry.startedAt = performance.now();
       await delay(550);
+      entry.returnedAt = performance.now();
       return ok();
     },
     fast: async () => {
@@ -257,10 +261,21 @@ try {
     long.response.status === 200 && long.response.body === '{"ok":true}',
     `long route: ${long.response.status} ${long.response.body}`,
   );
+  const longEntry = seen.get('long');
+  const handlerStartedAt = longEntry?.startedAt;
+  const handlerReturnedAt = longEntry?.returnedAt;
+  // Why: Prove the longer route limit admits actual work past the server limit, without assuming an exact timer delay.
   check(
     problems,
-    (long.firstByteMs ?? 0) >= 550,
-    `long route: answered at ${long.firstByteMs?.toFixed(0)} ms, before its handler's 550 ms`,
+    handlerStartedAt !== undefined &&
+      handlerReturnedAt !== undefined &&
+      handlerReturnedAt - handlerStartedAt > serverLimit,
+    'long route: the handler did not run past the server limit, so its override was not exercised',
+  );
+  check(
+    problems,
+    handlerReturnedAt !== undefined && long.firstByteMs !== null && long.t0 + long.firstByteMs >= handlerReturnedAt,
+    'long route: the response arrived before the handler completed',
   );
   log.push(
     `long route limit 900: ${long.response.status} at ${long.firstByteMs?.toFixed(0)} ms (server limit ${serverLimit})`,
