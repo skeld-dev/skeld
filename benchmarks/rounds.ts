@@ -3,7 +3,7 @@
 
 import { BenchError } from './bench-error.ts';
 import { preflightRoutes } from './check.ts';
-import { classifyBound, startCpuSample } from './cpu.ts';
+import { classifyBound, splitPerRequest, startCpuSample } from './cpu.ts';
 import { startTarget, type Target } from './diag/builds.ts';
 import { type Autocannon, type AutocannonResult, startLoad } from './load.ts';
 import { allowedCores, type Command } from './pinning.ts';
@@ -123,6 +123,7 @@ const measureRoute = async (
   }
   const { result } = outcome;
   const serverCpuMicroseconds = reading?.serverCpuMicroseconds ?? null;
+  const serverCpuSplit = reading?.serverCpuSplitMicroseconds ?? null;
   const sample: BenchSample = {
     round: visit.round,
     position: visit.position,
@@ -145,6 +146,10 @@ const measureRoute = async (
       serverCpuMicroseconds === null || result.requests.total === 0
         ? null
         : serverCpuMicroseconds / result.requests.total,
+    serverCpuSplitMicrosecondsPerRequest:
+      serverCpuSplit === null || result.requests.total === 0
+        ? null
+        : splitPerRequest(serverCpuSplit, result.requests.total),
     serverCores,
     bound: reading === null ? null : classifyBound(reading),
     autocannon: result,

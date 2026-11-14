@@ -215,6 +215,29 @@ export function ratioHeaders(external: string): readonly [string, string] {
   return [`CPU µs/req skeld/${external}`, `req/s skeld/${external}`];
 }
 
+export const splitHeaders: readonly string[] = ['Route', 'Server', 'User', 'System', 'Main thread', 'Other threads'];
+
+export const splitRow = (group: BenchSummary): readonly string[] => {
+  const split = group.serverCpuSplitMicrosecondsPerRequest;
+  return [
+    group.route,
+    entrantLabel(group),
+    formatMicroseconds(split?.user ?? null),
+    formatMicroseconds(split?.system ?? null),
+    formatMicroseconds(split?.mainThread ?? null),
+    formatMicroseconds(split?.otherThreads ?? null),
+  ];
+};
+
+const splitLines = (summary: readonly BenchSummary[]): readonly string[] => [
+  'Server CPU µs/req by mode and by thread, medians:',
+  ...renderTable(
+    splitHeaders.map((header, index) => ({ header, align: index < 2 ? 'left' : 'right' })),
+    summary.map(splitRow),
+  ),
+  '',
+];
+
 const comparisonLines = (comparison: BenchComparison | null): readonly string[] => {
   if (comparison === null) {
     return [];
@@ -262,6 +285,7 @@ export function summaryLines(
             ]),
           ),
           '',
+          ...splitLines(summary),
         ];
   return [...table, ...comparisonLines(comparison), `Report: ${displayPath(reportPath)}`];
 }
