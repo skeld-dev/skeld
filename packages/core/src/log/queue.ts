@@ -2,14 +2,13 @@
 // Holds: Every record is in exactly one of queued, in flight, written or dropped, so created is always their sum.
 
 import { count } from '#diag';
-import { SEVERITY_NUMBER } from './events.ts';
 import { BATCH_BYTES, QUEUE_BYTES, RESERVE_BYTES } from './limits.ts';
 import type { QueueCounts } from './shapes.ts';
 import type { DropReason } from './types.ts';
 
 export interface Queue {
   // Does:  Counts the record as created, then queues it or drops it under one reason; false when dropped.
-  enqueue(line: string, severityNumber: number): boolean;
+  enqueue(line: string, reserve: boolean): boolean;
   // Does:  Moves the oldest whole lines, at most BATCH_BYTES with their newlines, to in flight; null when none waits.
   // Holds: Called only when nothing is in flight, so in flight is always one batch.
   take(): string[] | null;
@@ -26,7 +25,6 @@ export interface Queue {
   counts(pendingMs: number): QueueCounts;
 }
 
-const WARN = SEVERITY_NUMBER.warn;
 // Why: A timer batches the lines of one burst into one fs.write.
 const FLUSH_MS = 5;
 
@@ -73,14 +71,14 @@ export function createQueue(flush: () => void, onRecovered: () => void): Queue {
   }
 
   return {
-    enqueue(line, severityNumber) {
+    enqueue(line, reserve) {
       created += 1;
       if (closed) {
         drop('shutdown', 1);
         return false;
       }
       const held = queuedBytes + inFlightBytes;
-      if (severityNumber < WARN && held >= RESERVE_BYTES) {
+      if (!reserve && held >= RESERVE_BYTES) {
         drop('reserve', 1);
         return false;
       }

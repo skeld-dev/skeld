@@ -119,10 +119,11 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
   const outlet = { threshold: resolved.thresholds.app, errorOptions: () => errorOptions, offer };
 
   // Does:  Hands one finished record to the destination; every line the logger makes leaves through here.
-  function offer(parts: RecordParts): void {
+  // Holds: Only a record at warn or above uses the queue's reserve, unless its caller grants it explicitly.
+  function offer(parts: RecordParts, reserve = SEVERITY_NUMBER[parts.severity] >= SEVERITY_NUMBER.warn): void {
     const line = encodeRecord(parts);
     logLine(line, parts.event);
-    destination.enqueue(line, SEVERITY_NUMBER[parts.severity]);
+    destination.enqueue(line, reserve);
   }
 
   // Does:  The event's category and severity when it passes its category's threshold, else null.
@@ -176,15 +177,19 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
       offer({ ...engineRecord(event, spec, request, status, null), errorType, reason });
     },
     // Holds: The value is read only after threshold and suppression passed, and only when read is true.
-    failed(event, request, status, errorType, reason, read, value, location) {
+    failed(event, request, status, errorType, reason, read, value, detail) {
       const spec = admitted(event);
       if (spec === null || !suppression.admit(event, request === null ? null : request.route)) {
         return;
       }
       const span = start('log.record');
       const error = read ? readError(value, errorOptions) : null;
-      const extra: RecordParts['extra'] = location === null ? null : [['skeld.schema_location', location]];
-      offer({ ...engineRecord(event, spec, request, status, extra), errorType, reason, error });
+      offer({
+        ...engineRecord(event, spec, request, status, detail === null ? null : [detail]),
+        errorType,
+        reason,
+        error,
+      });
       end(span);
     },
     ended(request, outcome, status, durationMs) {
@@ -209,7 +214,8 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
       }
       const spec = admitted('skeld.server.closed');
       if (spec !== null) {
-        offer(engineRecord('skeld.server.closed', spec, null, null, totals(stats())));
+        // Why: The closed record carries the drop totals, which matter most after an overload filled the queue.
+        offer(engineRecord('skeld.server.closed', spec, null, null, totals(stats())), true);
       }
       suppression.flush();
       closing = destination.close(resolved.flushTimeoutMs);

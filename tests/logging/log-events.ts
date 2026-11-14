@@ -24,7 +24,25 @@ interface Row {
 }
 
 const eventsPath = fileURLToPath(new URL('../../docs/logging/events.md', import.meta.url));
-const optionalKeys = new Set(['skeld.schema_location', 'http.route']);
+const optionalKeys = new Set(['http.route']);
+const detailOwners = new Map([
+  ['skeld.schema_location', 'response_mismatch'],
+  ['skeld.returned_status', 'undeclared_status'],
+  ['skeld.redirect_refusal', 'redirect_refused'],
+  ['skeld.reserved_header', 'reserved_header'],
+]);
+const detailAlways = new Set(['skeld.redirect_refusal', 'skeld.reserved_header']);
+const redirectRefusals = [
+  'not a string',
+  'surrounding whitespace',
+  'control character',
+  'backslash',
+  'not a local path',
+  'not a URL',
+  'scheme not http or https',
+  'userinfo',
+  'origin not allowed',
+];
 
 function cellsOf(line: string): string[] {
   return line
@@ -91,8 +109,13 @@ const contract = defineContract({
   httpError: { method: 'GET', path: '/http-error', responses: { 200: ok } },
   slow: { method: 'GET', path: '/slow', responses: { 200: ok } },
   undeclared: { method: 'GET', path: '/undeclared', responses: { 200: ok } },
+  undeclaredText: { method: 'GET', path: '/undeclared-text', responses: { 200: ok } },
+  undeclaredHigh: { method: 'GET', path: '/undeclared-high', responses: { 200: ok } },
+  undeclaredFraction: { method: 'GET', path: '/undeclared-fraction', responses: { 200: ok } },
   mismatch: { method: 'GET', path: '/mismatch', responses: { 200: ok } },
   reserved: { method: 'GET', path: '/reserved', responses: { 200: ok } },
+  reservedCookie: { method: 'GET', path: '/reserved-cookie', responses: { 200: ok } },
+  reservedOdd: { method: 'GET', path: '/reserved-odd', responses: { 200: ok } },
   cookie: { method: 'GET', path: '/cookie', responses: { 200: ok } },
   redirect: { method: 'GET', path: '/redirect', responses: { 302: null } },
   sendStatus: { method: 'GET', path: '/send-status', responses: { 200: ok } },
@@ -176,8 +199,13 @@ function serve(): void {
       },
       slow: () => new Promise<never>(() => undefined),
       undeclared: () => pastTypes({ status: 201, body: { ok: true } }),
+      undeclaredText: () => pastTypes({ status: '200', body: { ok: true } }),
+      undeclaredHigh: () => pastTypes({ status: 1000, body: { ok: true } }),
+      undeclaredFraction: () => pastTypes({ status: 201.5, body: { ok: true } }),
       mismatch: () => pastTypes({ status: 200, body: { ok: 'not a boolean' } }),
       reserved: () => pastTypes({ ...goodReply, headers: { 'x-request-id': 'forged' } }),
+      reservedCookie: () => pastTypes({ ...goodReply, headers: { 'Set-Cookie': 'a=b' } }),
+      reservedOdd: () => pastTypes({ ...goodReply, headers: { 'SeT-CoOkIe': 'a=b' } }),
       cookie: () => pastTypes({ ...goodReply, cookies: [{ name: 'bad name', value: 'x' }] }),
       redirect: () => pastTypes({ status: 302, headers: { location: '//evil.example/path' } }),
       sendStatus: () => goodReply,
@@ -214,8 +242,13 @@ function serve(): void {
     httpError: () => goodReply,
     slow: () => goodReply,
     undeclared: () => goodReply,
+    undeclaredText: () => goodReply,
+    undeclaredHigh: () => goodReply,
+    undeclaredFraction: () => goodReply,
     mismatch: () => goodReply,
     reserved: () => goodReply,
+    reservedCookie: () => goodReply,
+    reservedOdd: () => goodReply,
     cookie: () => goodReply,
     redirect: () => pastTypes({ status: 302 }),
     sendStatus: () => goodReply,
@@ -270,6 +303,11 @@ const triggers = new Map<string, Spec>([
   ['skeld.request.error|http_error', { server: 'first', method: 'GET', path: '/http-error' }],
   ['skeld.request.error|timeout', { server: 'first', method: 'GET', path: '/slow' }],
   ['skeld.request.error|undeclared_status', { server: 'first', method: 'GET', path: '/undeclared' }],
+  ['detail|undeclared_status|text', { server: 'first', method: 'GET', path: '/undeclared-text' }],
+  ['detail|undeclared_status|high', { server: 'first', method: 'GET', path: '/undeclared-high' }],
+  ['detail|undeclared_status|fraction', { server: 'first', method: 'GET', path: '/undeclared-fraction' }],
+  ['detail|reserved_header|cookie', { server: 'first', method: 'GET', path: '/reserved-cookie' }],
+  ['detail|reserved_header|odd', { server: 'first', method: 'GET', path: '/reserved-odd' }],
   ['skeld.request.error|response_mismatch', { server: 'first', method: 'GET', path: '/mismatch' }],
   ['skeld.request.error|reserved_header', { server: 'first', method: 'GET', path: '/reserved' }],
   ['skeld.request.error|invalid_cookie', { server: 'first', method: 'GET', path: '/cookie' }],
@@ -477,7 +515,15 @@ function envelopeProblems(row: Row, rows: readonly Row[], rec: LogObject): strin
     'severity number does not match its text',
   );
   for (const key of resolvedKeys(row, rows)) {
-    if (!optionalKeys.has(key)) {
+    const owner = detailOwners.get(key);
+    if (owner !== undefined) {
+      const mine = rec['skeld.reason'] === owner;
+      check(
+        problems,
+        detailAlways.has(key) ? key in rec === mine : mine || !(key in rec),
+        `${key} is ${key in rec ? 'present' : 'absent'} on a record with reason ${String(rec['skeld.reason'])}, owned by ${owner}`,
+      );
+    } else if (!optionalKeys.has(key)) {
       check(problems, key in rec, `own key ${key} is missing`);
     }
   }
@@ -510,6 +556,27 @@ function reasonProblems(row: Row, reason: string, rec: LogObject): string[] {
   }
   if (reason === 'response_mismatch') {
     check(problems, typeof rec['skeld.schema_location'] === 'string', 'no skeld.schema_location for a body mismatch');
+  }
+  if (reason === 'undeclared_status') {
+    check(
+      problems,
+      rec['skeld.returned_status'] === 201,
+      `skeld.returned_status is ${String(rec['skeld.returned_status'])}, the handler returned 201`,
+    );
+  }
+  if (reason === 'redirect_refused') {
+    check(
+      problems,
+      redirectRefusals.includes(String(rec['skeld.redirect_refusal'])),
+      `skeld.redirect_refusal is ${String(rec['skeld.redirect_refusal'])}, not one of the documented causes`,
+    );
+  }
+  if (reason === 'reserved_header') {
+    check(
+      problems,
+      rec['skeld.reserved_header'] === 'x-request-id',
+      `skeld.reserved_header is ${String(rec['skeld.reserved_header'])}, the handler named x-request-id`,
+    );
   }
   return problems;
 }
@@ -607,6 +674,54 @@ function reasonCase(
   );
 }
 
+function detailCases(run: Run, report: ReturnType<typeof createReport>): void {
+  const expectations: [string, string, string, unknown][] = [
+    ['detail|undeclared_status|text', 'undeclared_status', 'skeld.returned_status', undefined],
+    ['detail|undeclared_status|high', 'undeclared_status', 'skeld.returned_status', undefined],
+    ['detail|undeclared_status|fraction', 'undeclared_status', 'skeld.returned_status', undefined],
+    ['detail|reserved_header|cookie', 'reserved_header', 'skeld.reserved_header', 'set-cookie'],
+    ['detail|reserved_header|odd', 'reserved_header', 'skeld.reserved_header', 'set-cookie'],
+  ];
+  for (const [trigger, reason, key, expected] of expectations) {
+    const problems: string[] = [];
+    const sent = run.sent.get(trigger);
+    const mine = run.records.filter(
+      (rec) => rec.event_name === 'skeld.request.error' && rec['skeld.request_id'] === sent?.requestId,
+    );
+    check(problems, sent?.requestId != null && mine.length === 1, `${mine.length} error records for the request`);
+    const [only] = mine;
+    check(
+      problems,
+      only?.['skeld.reason'] === reason,
+      `skeld.reason is ${String(only?.['skeld.reason'])}, not ${reason}`,
+    );
+    check(
+      problems,
+      only !== undefined && (expected === undefined ? !(key in only) : only[key] === expected),
+      `${key} is ${only !== undefined && key in only ? JSON.stringify(only[key]) : 'absent'}, expected ${expected === undefined ? 'absent' : JSON.stringify(expected)}`,
+    );
+    report.result(
+      `AC-11 ${trigger.replace('detail|', '')} writes ${expected === undefined ? `no ${key}` : `${key} ${String(expected)}`}`,
+      problems,
+      `the request answered ${sent?.status} gave one skeld.request.error record`,
+    );
+  }
+  const text = run.records.map((rec) => JSON.stringify(rec)).join('\n');
+  const spellings = ['Set-Cookie', 'SeT-CoOkIe'].filter((spelling) => text.includes(spelling));
+  const own = run.records.filter((rec) => rec.event_name === 'skeld.request.error');
+  const stray = own.flatMap((rec) =>
+    [...detailOwners].filter(([key, owner]) => key in rec && rec['skeld.reason'] !== owner).map(([key]) => key),
+  );
+  report.result(
+    'AC-11 no record carries the application spelling of a header, and a detail key never sits on another reason',
+    [
+      ...spellings.map((spelling) => `a record contains ${spelling}`),
+      ...stray.map((key) => `${key} sits on a record of another reason`),
+    ],
+    `${run.records.length} records searched`,
+  );
+}
+
 function variantCase(
   name: string,
   base: Run,
@@ -647,6 +762,7 @@ async function main(): Promise<void> {
       reasonCase(row, reason, rows, base, report);
     }
   }
+  detailCases(base, report);
   const origin = base.records.filter((rec) => rec.event_name === 'skeld.config.public_origin');
   const originProblems: string[] = [];
   check(

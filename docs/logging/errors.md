@@ -27,6 +27,10 @@ When the kind is `non_error`, nothing else is read: an engine record writes the 
 
 A record reads at most 2 errors: the value the engine caught, or the first 2 error fields of an author's call in key order. A later error field is written `[unread]`.
 
+## Engine faults
+
+On `skeld.request.error` the reader runs only for `thrown` and `http_error`. A failure skeld makes itself (`undeclared_status`, `response_mismatch`, `reserved_header`, `invalid_cookie`, `redirect_refused`, `send_status`) writes no exception keys; its record carries `skeld.reason` and at most one detail key, whose value is bounded and never comes from the error's message, since skeld's message can hold application text. Three of the four keys hold only values skeld owns; `skeld.schema_location` holds property names from the contract's declaration, never a value. The keys and their value sets are in [record-format.md](record-format.md#keys).
+
 ## The two lists
 
 Taken from the platform once, when the module loads. The values below were measured on Linux with Node 26.13.0.

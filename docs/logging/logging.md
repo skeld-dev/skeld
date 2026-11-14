@@ -179,7 +179,7 @@ Two exceptions:
 
 ## Queue, flush and shutdown
 
-- Each server has a queue of at most 1 MiB, counting both waiting bytes and bytes handed to a write or sink call. A record that would pass the cap is dropped as `queue_full`. Once 768 KiB are held, a record below `warn` is dropped as `reserve`.
+- Each server has a queue of at most 1 MiB, counting both waiting bytes and bytes handed to a write or sink call. A record that would pass the cap is dropped as `queue_full`. Once 768 KiB are held, a record below `warn` is dropped as `reserve`. The one exception is `skeld.server.closed`, written at `info`, which may use the reserve so its drop totals survive an overload; the 1 MiB cap still applies to it, and when the queue is full or the write or sink fails it is lost like any other record.
 - Queued records are written in batches of whole lines, at most 64 KiB. A queued record never waits for a later request: a timer starts the next batch, 5 ms after a record is queued in this release; that delay is an implementation value, not a guarantee.
 - One write to fd 1 is active per process, not per server. Servers in one process take turns, one batch each. A write that fails with any error but `EAGAIN` loses its batch, counted as `write_failed`; the next batch is tried. On `EAGAIN` the same batch is tried again after 10 ms, without limit.
 - `close()` closes connections, runs disposers, writes `skeld.server.closed` and pending suppression summaries, then waits for the queue to empty, for at most `flushTimeoutMs`. At the deadline, records still queued are dropped as `shutdown` and `close()` resolves. A batch already handed over stays in flight: the deadline cancels nothing and bounds what `close()` waits for, not the write or the process's exit. `close()` never rejects for a log reason.
@@ -214,22 +214,22 @@ process.stderr.write(`dropped at shutdown: ${stats.dropped.shutdown}, in flight:
 
 ## Limits
 
-| Limit                                                    | Value                              |
-| -------------------------------------------------------- | ---------------------------------- |
-| one record                                               | 8,192 bytes of UTF-8               |
-| message, a string field, an error's message or cause     | 1,024 UTF-16 units                 |
-| a field name                                             | 64 units                           |
-| fields per call                                          | 32                                 |
-| nodes of one `Classified` value                          | 256                                |
-| errors read per record                                   | 2                                  |
-| stack frames per error, and units per frame              | 10, 256                            |
-| an unlisted class name or code                           | 128 units                          |
-| prototypes walked per error                              | 16                                 |
-| queue per server; the part reserved for `warn` and above | 1 MiB; the last 256 KiB            |
-| one batch                                                | 64 KiB                             |
-| records per event and route in one suppression window    | 20 per 10 s                        |
-| retry after `EAGAIN`                                     | 10 ms                              |
-| `close()` flush deadline                                 | `flushTimeoutMs`, default 1,000 ms |
+| Limit                                                                              | Value                              |
+| ---------------------------------------------------------------------------------- | ---------------------------------- |
+| one record                                                                         | 8,192 bytes of UTF-8               |
+| message, a string field, an error's message or cause                               | 1,024 UTF-16 units                 |
+| a field name                                                                       | 64 units                           |
+| fields per call                                                                    | 32                                 |
+| nodes of one `Classified` value                                                    | 256                                |
+| errors read per record                                                             | 2                                  |
+| stack frames per error, and units per frame                                        | 10, 256                            |
+| an unlisted class name or code                                                     | 128 units                          |
+| prototypes walked per error                                                        | 16                                 |
+| queue per server; the part reserved for `warn` and above and `skeld.server.closed` | 1 MiB; the last 256 KiB            |
+| one batch                                                                          | 64 KiB                             |
+| records per event and route in one suppression window                              | 20 per 10 s                        |
+| retry after `EAGAIN`                                                               | 10 ms                              |
+| `close()` flush deadline                                                           | `flushTimeoutMs`, default 1,000 ms |
 
 ## Accepted risks
 
