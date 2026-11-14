@@ -37,7 +37,7 @@ export interface ServerProcess {
   kill(): void;
 }
 
-const readyLinePattern = /^\{"server":"([a-z-]*)","port":(\d+)\}$/;
+const readyLinePattern = /^\{"server":"([a-z0-9.-]*)","port":(\d+)\}$/;
 const readyLinePreview = 80;
 const maxPort = 65_535;
 

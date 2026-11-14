@@ -44,7 +44,7 @@ The external file must:
 
 - accept `--port <n>` and listen on `127.0.0.1` at that port, where 0 means any free port;
 - print one line `{"server":"<name>","port":<n>}` on stdout once it is listening, where the name is lowercase
-  letters and hyphens, is not empty and is not `skeld`; the run labels the server by this name;
+  letters, digits, dots and hyphens, is not empty and is not `skeld`; the run labels the server by this name;
 - answer `GET /` with status 200, media type `application/json` and the body `{"hello":"world"}`;
 - answer `POST /` with a JSON body `{"hello":"world"}` by returning that body the same way;
 - exit on SIGTERM.
