@@ -1,7 +1,7 @@
 // Does:  Builds one server's logger: the engine's records, the author's loggers, the summaries, the stats and close.
 // Holds: A record is tested against its threshold, then suppression, before anything of a thrown value is read.
 
-import { end, start, stderr } from '#diag';
+import { end, logLine, start } from '#diag';
 import { createLogger } from './author-logger.ts';
 import { createDestination } from './destination.ts';
 import { readError } from './error-reader.ts';
@@ -22,7 +22,7 @@ const none = (): void => undefined;
 
 const SILENT: Logger = Object.freeze({ debug: none, info: none, warn: none, error: none, fatal: none });
 
-// Why: Under `log: false` nothing is created, so every count is zero (D-1 section 2).
+// Why: Under `log: false` nothing is created, so every count is zero.
 const DISABLED: ServerLog = Object.freeze({
   access: false,
   correlation: false,
@@ -121,7 +121,7 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
   // Does:  Hands one finished record to the destination; every line the logger makes leaves through here.
   function offer(parts: RecordParts): void {
     const line = encodeRecord(parts);
-    stderr(line);
+    logLine(line, parts.event);
     destination.enqueue(line, SEVERITY_NUMBER[parts.severity]);
   }
 
@@ -132,7 +132,7 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
     if (category === null || severity === null) {
       return null;
     }
-    // Why: The access record has no threshold: the access option alone turns it on (D-1 section 2).
+    // Why: The access record has no threshold: the access option alone turns it on.
     if (category !== 'access' && SEVERITY_NUMBER[severity] < resolved.thresholds[category]) {
       return null;
     }
@@ -181,7 +181,7 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
       if (spec === null || !suppression.admit(event, request === null ? null : request.route)) {
         return;
       }
-      const span = start('err.stderr_write');
+      const span = start('log.record');
       const error = read ? readError(value, errorOptions) : null;
       const extra: RecordParts['extra'] = location === null ? null : [['skeld.schema_location', location]];
       offer({ ...engineRecord(event, spec, request, status, extra), errorType, reason, error });
@@ -193,7 +193,7 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
         offer(
           engineRecord('skeld.request.closed', spec, request, status, [
             ['skeld.outcome', outcome],
-            // Why: The duration is written in milliseconds with three decimals (D-1 section 4).
+            // Why: The duration is written in milliseconds with three decimals.
             ['skeld.duration_ms', Math.round(durationMs * 1000) / 1000],
           ]),
         );

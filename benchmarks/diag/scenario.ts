@@ -577,6 +577,15 @@ const plantedLeaks: readonly PlantedLeak[] = [
         window.routes.some((route) => route.id === line.route && route.name === 'plant_raw'),
     ),
   },
+  ...['plant_cookie_204', 'plant_cookie_304', 'plant_cookie_hook'].map((name) => ({
+    kind: `leak.canary{${name}}`,
+    figure: journaled(
+      `leak.canary{${name}}`,
+      1,
+      (line, window) =>
+        line.hook === 'leak.canary' && window.routes.some((route) => route.id === line.route && route.name === name),
+    ),
+  })),
 ];
 
 const plantedSteps: readonly Step[] = [
@@ -586,6 +595,9 @@ const plantedSteps: readonly Step[] = [
       get('/plant/send', 'plant_send', 200, servedAsDeclared),
       get('/plant/header', 'plant_header', 500),
       { ...get('/plant/raw', 'plant_raw', 200, noContentType), carriesToken: true },
+      { ...get('/plant/cookie-204', 'plant_cookie_204', 204), carriesToken: true },
+      { ...get('/plant/cookie-304', 'plant_cookie_304', 304), carriesToken: true },
+      { ...get('/plant/cookie-hook', 'plant_cookie_hook', 204), carriesToken: true },
     ],
     plantedLeaks.map((leak) => leak.figure),
   ),

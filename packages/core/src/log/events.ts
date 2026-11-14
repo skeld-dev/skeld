@@ -68,7 +68,7 @@ export const EVENTS: { readonly [E in EventName]: EventSpec } = Object.freeze({
   'skeld.server.closed': spec('boot', 'info'),
   'skeld.config.public_origin': spec('boot', 'warn'),
   'skeld.log.dropped': spec('boot', 'warn'),
-  // Why: A summary takes the category and severity of the event it counts (D-1 section 5).
+  // Why: A summary takes the category and severity of the event it counts.
   'skeld.log.suppressed': spec(null, null),
   'skeld.request.error': spec('app', 'error'),
   'skeld.hook.error': spec('app', 'error'),

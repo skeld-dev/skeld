@@ -33,7 +33,7 @@ export type StepName =
   | 'req.validate.errors'
   | 'req.handler.arg'
   | 'req.respond.serialize';
-export type ErrorSpanName = 'err.path' | 'err.hook.on_error' | 'err.handler' | 'err.write' | 'err.stderr_write';
+export type ErrorSpanName = 'err.path' | 'err.hook.on_error' | 'err.handler' | 'err.write' | 'log.record';
 export type BootSpanName =
   | 'boot.options'
   | 'boot.contract_check'
@@ -125,7 +125,7 @@ export type Header = (name: string, value: HeaderValue) => void;
 export type Contain = (kind: ContextKind, value: object) => void;
 export type Payload = (status: number, serialized: string) => void;
 export type Key = (key: string) => void;
-export type Stderr = (line: string) => void;
+export type LogLine = (line: string, event: string) => void;
 export type Open = (options: ResolvedServerOptions) => void;
 export type Declare = (route: RouteInfo, definition: RouteDefinition) => void;
 export type Listening = (server: Server) => void;
@@ -153,7 +153,7 @@ export const header: Header = none;
 export const contain: Contain = none;
 export const payload: Payload = none;
 export const key: Key = none;
-export const stderr: Stderr = none;
+export const logLine: LogLine = none;
 export const open: Open = none;
 export const declare: Declare = none;
 export const listening: Listening = none;
