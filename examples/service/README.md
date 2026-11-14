@@ -45,7 +45,7 @@ The title is application data returned by this API; the example does not log it.
 
 `server.register(tasks)` creates a child scope. Its `onRequest` hook sets `x-example-module: tasks` for its routes; it is an application header, not an access control. Child hooks do not become global hooks for sibling plugins. Engine error responses may clear author headers, so do not rely on this header being present on refusals.
 
-`scope.onClose` is registered next to the store's creation. Ctrl-C drains HTTP work, clears the store and writes `task store cleared`, then finishes the server's close and log flush. A real plugin would register its connection or resource disposer at acquisition in the same way; callbacks can also run during failed-startup rollback. See [plugin cleanup](../../packages/core/README.md#plugin-resource-ownership) for deadlines and cooperative cancellation.
+`scope.onClose` is registered next to the store's creation. Ctrl-C drains HTTP work, clears the store and writes `task store cleared`, then finishes the server's close and log flush. A real plugin would register its connection or resource disposer at acquisition in the same way; callbacks can also run during failed-startup rollback. See [plugin cleanup](../../docs/reference/core.md#plugin-resource-ownership) for deadlines and cooperative cancellation.
 
 ## Try a refused request
 

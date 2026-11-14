@@ -4,7 +4,7 @@
 // biome-ignore-all lint/security/noSecrets: planted markers and fixture names, not credentials
 // biome-ignore-all lint/performance/noAwaitInLoops: each fixture is requested alone so its counts and records stay its own
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
@@ -772,7 +772,7 @@ add(
     const hit = count('formatter');
     formatter(deferring(hit));
     const error = new Error('m');
-    error.stack = frameText(plant).replace('Error: m', 'Error: m');
+    error.stack = frameText(plant);
     return error;
   },
   (set) => ({ kind: 'error', ...(set === 'none' ? { type: 'Error' } : {}), frames: null }),
@@ -1340,7 +1340,7 @@ for (const name of plantNames) {
 }
 const bigMarker = markers.mark;
 assert(bigMarker !== undefined);
-const numberDigits = String(100_000_000_000 + (randomBytes(5).readUIntBE(0, 5) % 899_999_999_999));
+const numberDigits = String(randomInt(100_000_000_000, 999_999_999_999));
 const numberMarker: Marker = {
   whole: numberDigits,
   windows: Array.from({ length: numberDigits.length - 7 }, (_, at) => numberDigits.slice(at, at + 8)),

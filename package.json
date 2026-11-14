@@ -11,7 +11,7 @@
     "lint": "biome check .",
     "knip": "knip",
     "bench": "tsc -b packages/core && node benchmarks/run.ts",
-    "readme-check": "node tools/check-readme-example.ts",
+    "reference-check": "node tools/check-reference-example.ts",
     "examples-check": "tsc -b && node tools/check-examples.ts",
     "pack-check": "node tools/check-pack-markers.ts --pack",
     "api-check": "node tools/api-reference/check.ts",

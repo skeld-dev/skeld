@@ -16,7 +16,7 @@ Choose limits from the operation's needs. A task title is 1–120 UTF-16 code un
 
 Each also accepts `unbounded: '<reason>'` instead of an upper bound. The reason makes an exception explicit; it does not impose a replacement limit. A request body still has a byte cap, but that cap does not bound retained application state or the cost of your database query.
 
-skeld derives a body byte limit from bounded schemas and applies the smaller of that limit and the configured `bodyLimit`. An `open` or `unbounded` node removes the derived limit for that body; the configured cap remains. This is why a small route can return 413 before it reaches the server's default 1 MiB cap. See the [exact sizing rules](../../packages/core/README.md#bounds-and-their-opt-outs).
+skeld derives a body byte limit from bounded schemas and applies the smaller of that limit and the configured `bodyLimit`. An `open` or `unbounded` node removes the derived limit for that body; the configured cap remains. This is why a small route can return 413 before it reaches the server's default 1 MiB cap. See the [exact sizing rules](../../docs/reference/core.md#bounds-and-their-opt-outs).
 
 ## Decide what extra fields mean
 
@@ -46,7 +46,7 @@ export const UpdateAccount = t.partial(t.pick(Account, ['displayName']), { minPr
 
 For an ordinary object response, the serializer writes declared fields and omits undeclared ones. A declared field with an invalid value becomes a fixed 500 response, rather than being sent unchecked.
 
-**Union responses need a deliberate projection.** A union must match a member before serialization. Its closed object members reject extra fields, so returning a database row with undeclared properties can produce a response mismatch instead of dropping those properties. Return the fields of the intended member explicitly. See [union responses](../../packages/core/README.md#union-responses).
+**Union responses need a deliberate projection.** A union must match a member before serialization. Its closed object members reject extra fields, so returning a database row with undeclared properties can produce a response mismatch instead of dropping those properties. Return the fields of the intended member explicitly. See [union responses](../../docs/reference/core.md#union-responses).
 
 ## Declare expected outcomes
 

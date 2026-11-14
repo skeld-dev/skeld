@@ -29,7 +29,7 @@ Run from the repository root:
 ```sh
 pnpm run api-docs --check
 pnpm run api-check
-pnpm run readme-check
+pnpm run reference-check
 pnpm run examples-check
 pnpm run consumer-check
 pnpm run consumer-check --page docs/guides/contracts.md

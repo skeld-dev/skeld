@@ -1,8 +1,10 @@
-name: Stage npm release
+name: Publish npm release
 
-# Run this workflow manually against a version tag, for example v0.1.0.
-# npm approval with 2FA is a separate, intentional release action.
+# A reviewed core version bump merged to main starts publication.
 on:
+  push:
+    branches: [ main ]
+    paths: [ packages/core/package.json ]
   workflow_dispatch:
 
 permissions:
@@ -14,11 +16,12 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate release tag
+    name: Validate release version
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       node: ${{ steps.version.outputs.node }}
+      publish: ${{ steps.version.outputs.publish }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,18 +44,34 @@ jobs:
           assert.equal(process.env.RELEASE_REPOSITORY, 'skeld-dev/skeld');
           assert.equal(pkg.name, '@skeld/core');
           assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
-          assert.equal(process.env.RELEASE_REF, `refs/tags/v${pkg.version}`);
+          assert.equal(process.env.RELEASE_REF, 'refs/heads/main');
           assert.equal(pkg.repository.url, 'git+https://github.com/skeld-dev/skeld.git');
           assert.equal(pkg.publishConfig.access, 'public');
           const node = readFileSync('.nvmrc', 'utf8').trim();
           assert.match(node, /^\d+\.\d+\.\d+$/);
           appendFileSync(process.env.GITHUB_OUTPUT, `node=${node}\n`);
+          const response = await fetch('https://registry.npmjs.org/@skeld%2fcore', { signal: AbortSignal.timeout(30_000) });
+          assert.equal(response.status, 200, 'registry metadata must be available');
+          const metadata = await response.json();
+          assert(metadata.versions && metadata['dist-tags']?.latest, 'incomplete registry metadata');
+          const published = Object.hasOwn(metadata.versions, pkg.version);
+          if (!published) {
+            const current = metadata['dist-tags'].latest;
+            assert.match(current, /^\d+\.\d+\.\d+$/);
+            const left = pkg.version.split('.').map(Number);
+            const right = current.split('.').map(Number);
+            const difference = left.map((part, index) => part - right[index]).find((part) => part !== 0);
+            assert(difference > 0, 'new release must be newer than latest');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `publish=${!published}\n`);
+          console.log(published ? `${pkg.version} is already published; skipping` : `Will publish ${pkg.version}`);
           NODE
           git merge-base --is-ancestor HEAD origin/main
 
   checks:
     name: Release checks
     needs: validate
+    if: needs.validate.outputs.publish == 'true'
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
@@ -60,6 +79,7 @@ jobs:
   security:
     name: Release security
     needs: validate
+    if: needs.validate.outputs.publish == 'true'
     uses: ./.github/workflows/security.yml
     permissions:
       contents: read
@@ -68,6 +88,9 @@ jobs:
   package:
     name: Build verified package
     needs: [ checks, security ]
+    permissions:
+      contents: read
+      security-events: read
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
@@ -81,6 +104,19 @@ jobs:
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           run_install: false
+      - name: Refuse unresolved CodeQL alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          gh api --paginate --method GET "repos/$RELEASE_REPOSITORY/code-scanning/alerts" \
+            -f state=open -f ref="$RELEASE_REF" -f per_page=100 --jq '.[].html_url' > open-alerts.txt
+          if [ -s open-alerts.txt ]; then
+            cat open-alerts.txt
+            echo 'Resolve or explicitly triage every open CodeQL alert before publication.' >&2
+            exit 1
+          fi
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc -b packages/core
       - name: Pack and verify the exact release artifact
@@ -97,8 +133,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  stage:
-    name: Stage on npm
+  publish:
+    name: Publish on npm
     needs: [ validate, package ]
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -115,7 +151,7 @@ jobs:
         with:
           name: npm-${{ github.sha }}
           path: release
-      - name: Check npm supports staged publishing
+      - name: Check npm supports trusted publishing
         run: |
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
@@ -123,8 +159,8 @@ jobs:
           const [major, minor] = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number);
           assert(major > 11 || (major === 11 && minor >= 15), 'npm >=11.15.0 is required');
           NODE
-      - name: Stage verified tarball with trusted publishing
+      - name: Publish verified tarball with trusted publishing
         working-directory: release
         run: |
           sha256sum --check SHA256SUMS
-          npm stage publish ./skeld-core-*.tgz --access public --tag latest --provenance --ignore-scripts --registry https://registry.npmjs.org
+          npm publish ./skeld-core-*.tgz --access public --tag latest --provenance --ignore-scripts --registry https://registry.npmjs.org

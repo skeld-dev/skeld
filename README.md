@@ -2,7 +2,7 @@
 
 skeld is a TypeScript framework for services on Node 26: one contract declares each route's schemas, the engine on `node:http` validates and serializes from it, and a typed client calls it.
 
-Start with the [documentation](docs/README.md): run your first request, design a contract, and understand the framework's security boundaries. The [package README](packages/core/README.md) contains installation instructions and a compact feature reference.
+Start with the [documentation](docs/README.md): run your first request, design a contract, and understand the framework's security boundaries. The [package README](packages/core/README.md) contains installation instructions and links.
 
 ## Logging
 
@@ -40,7 +40,7 @@ Run every command from the repository root. `pnpm-workspace.yaml` defines the wo
 | `pnpm exec knip`                                                                                         | finds unused files, exports and dependencies                                                             |
 | `semgrep scan --config p/typescript --config p/nodejs --config .semgrep --metrics=off --error --quiet .` | static analysis                                                                                          |
 | `pnpm audit --prod`                                                                                      | audits production dependencies across the workspace                                                      |
-| `node tools/check-readme-example.ts`                                                                     | checks that the package README's example matches `examples/hello` byte for byte                          |
+| `node tools/check-reference-example.ts`                                                                  | checks that the core reference example matches `examples/hello` byte for byte                            |
 | `pnpm run examples-check`                                                                                | builds and runs all examples, checking clients, refusals, logging and graceful shutdown                  |
 | `pnpm --filter @skeld/core publish --dry-run`                                                            | lists what the package would publish, without publishing                                                 |
 | `pnpm run bench`                                                                                         | builds `packages/core` and runs the benchmark, about 11 minutes; run it with nothing else on the machine |

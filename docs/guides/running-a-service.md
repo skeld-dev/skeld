@@ -17,7 +17,7 @@ Behind a reverse proxy, these settings answer different questions:
 | `trustProxy`             | Which peer addresses may supply a forwarded client-address chain?  |
 | `cors` and `csrf`        | Which browser origins receive grants or pass the cross-site check? |
 
-Without `trustProxy`, `request.clientAddress` is the socket peer. With trusted peers, skeld walks `X-Forwarded-For` from right to left and stops at the first untrusted address. Trust only your actual proxy addresses or ranges and control direct access to the origin. A forwarded address is still not user identity. See [the exact walk and refusal rules](../../packages/core/README.md#timeouts-client-address-and-headers).
+Without `trustProxy`, `request.clientAddress` is the socket peer. With trusted peers, skeld walks `X-Forwarded-For` from right to left and stops at the first untrusted address. Trust only your actual proxy addresses or ranges and control direct access to the origin. A forwarded address is still not user identity. See [the exact walk and refusal rules](../../docs/reference/core.md#timeouts-client-address-and-headers).
 
 ## Budget time at each layer
 

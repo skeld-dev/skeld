@@ -1,6 +1,6 @@
 {
   "name": "@skeld/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -92,5 +92,7 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "description": "A TypeScript HTTP framework with typed contracts, schema validation, and a typed client.",
+  "homepage": "https://skeld.dev"
 }
