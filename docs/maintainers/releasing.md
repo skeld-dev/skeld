@@ -11,13 +11,14 @@ Do not put personal GitHub tokens in workflows. GitHub supplies the workflow's `
 
 After the first push, configure the repository:
 
-- Enable the dependency graph, Dependabot alerts and security updates, secret scanning and push protection.
+- Enable the dependency graph, Dependabot alerts, secret scanning and push protection.
+- Keep automatic Dependabot security-update PRs disabled. Review security alerts and make deliberate fixes;
+  weekly version-update PRs remain enabled. Changing Dependabot configuration can cause an immediate update check.
 - Use the committed advanced CodeQL workflow, not a second default-setup scan.
-- Protect `main`: require pull requests, resolved conversations and passing `Checks`,
-  `Dependency audit`, `CodeQL (javascript-typescript)` and `CodeQL (actions)` checks.
-  Verify the exact check names from the first run before making them required.
-- Require CodeQL code-scanning results for high/critical security findings. A successful analysis
-  job means the scan ran; by itself it does not mean there are no findings.
+- Protect `main`: require pull requests, resolved conversations, an up-to-date branch and passing `Checks`.
+- CodeQL runs weekly and during releases, not on every PR. Do not require its status or a CodeQL scanning
+  rule on PRs. Review open findings before a release: a successful scan means analysis completed, not that
+  there are no findings.
 - Restrict creation, updates and deletion of `v*` tags to maintainers. Disable force pushes to `main`.
 - Require review of workflow and package changes using `.github/CODEOWNERS` when another maintainer
   is available. Do not require a solo author to approve their own pull request.
@@ -33,20 +34,25 @@ Dependabot can propose updates. Node and pnpm follow `.nvmrc` and `packageManage
 
 ## Checks and security coverage
 
-`ci.yml` checks types, strict Biome lint, unused dependencies, ordinary and diagnostic correctness,
-API documentation, runnable examples, package contents, consumer declarations, and the website build.
-Benchmarks need a quiet dedicated machine and are not CI timing gates.
+`ci.yml` runs one job on pull requests, on manual request, and when called by the release workflow.
+It checks types, strict Biome lint, unused dependencies, ordinary and diagnostic correctness, API documentation,
+runnable examples, package contents, consumer declarations, the website build and the complete lockfile's
+security advisories. It does not repeat after a PR merges to `main`. Benchmarks are not CI timing gates.
+The initial hosted full check took about four minutes, with about three and a half spent in correctness tests.
+The job has a ten-minute timeout; no correctness coverage was removed to shorten the workflow.
 
-`security.yml` runs CodeQL's extended security queries for JavaScript/TypeScript and GitHub Actions,
-plus a full-lockfile npm advisory audit. It runs on pull requests, `main`, daily, and during a release.
-High and critical dependency advisories fail the audit; registry failures are not ignored.
+`security.yml` runs one job combining CodeQL's extended security queries for JavaScript/TypeScript and
+GitHub Actions with a full-lockfile advisory audit. It runs weekly on Monday, on manual request and during
+a release. It does not run on every PR or push. Both workflows fail on high/critical dependency advisories;
+registry errors also fail. Existing CodeQL findings remain visible for review.
 
-Dependabot checks npm/pnpm dependencies and SHA-pinned GitHub Actions weekly. The benchmark workspace
-is excluded from version-update scans because comparator versions are deliberate measurement baselines.
-Explicit ignore rules also prevent security-update PRs for benchmark dependencies from either the shared
-lockfile or the benchmark manifest. Update these dependencies manually when refreshing the baselines.
-Vulnerability alerts remain enabled, and the full-lockfile dependency audit still covers benchmarks.
-There is no automatic merge.
+Dependabot checks npm/pnpm dependencies and SHA-pinned GitHub Actions weekly. Minor/patch npm upgrades are
+grouped together; major upgrades remain separate. Actions are grouped, with at most two open action PRs and
+three npm PRs. Automatic security-fix PRs are disabled in repository settings; alerts stay enabled.
+The benchmark workspace is excluded from version scans because its versions are deliberate measurement baselines.
+Explicit ignores also cover benchmark dependencies in the shared lockfile and benchmark manifest, should
+security-update PRs ever be re-enabled. Update comparator versions manually. The full-lockfile audit still
+covers these dependencies. There is no automatic merge.
 Git dependencies remain subject to source review and their immutable pins; registry auditing does not
 establish that a Git dependency or vendored archive is safe.
 
