@@ -18,9 +18,8 @@ After the first push, configure the repository:
 - Use the committed advanced CodeQL workflow, not a second default-setup scan.
 - Protect `main` with a ruleset ("Protect main"): require pull requests, resolved conversations, an up-to-date
   branch and passing `Checks`, with no bypass actors. The release workflow does not rerun the tests and relies on it.
-- CodeQL runs weekly and during releases, not on every PR. Do not require its status or a CodeQL scanning
-  rule on PRs. Review open findings before a release: a successful scan means analysis completed, not that
-  there are no findings.
+- CodeQL runs on pull requests as part of `Checks` and weekly on `main`. `Checks` is the only status to
+  require; a separate CodeQL scanning rule is not needed.
 - Restrict creation, updates and deletion of `v*` tags to maintainers. Disable force pushes to `main`.
 - Require review of workflow and package changes using `.github/CODEOWNERS` when another maintainer
   is available. Do not require a solo author to approve their own pull request.
@@ -36,29 +35,43 @@ Dependabot can propose updates. Node and pnpm follow `.nvmrc` and `packageManage
 
 ## Checks and security coverage
 
-`ci.yml` runs on pull requests and on manual request. It is the only place the tests run: nothing repeats
-them after a pull request merges, and the release workflow does not run them again. Its first job,
-`Select checks`, chooses the other jobs with `tools/ci-select.ts`. On a pull request it reads the changed
-paths; a path no rule claims, such as the lockfile, a workflow or a file under `tools/`, selects every job.
-A manual run selects every job.
+The pull request is the one gate. `ci.yml` runs on pull requests and on manual request, and it is the only
+place tests and scans run: nothing repeats them after a pull request merges, and the release workflow does not
+run them again. Its first job, `Select checks`, chooses the other jobs with `tools/ci-select.ts`. On a pull
+request it reads the changed paths; a path no rule claims, such as the lockfile, a workflow or a file under
+`tools/`, selects every job. Documentation (`docs/`, any Markdown file) selects only the documentation checks and,
+for files the site renders or links, the website build. An empty diff selects nothing. A manual run selects every job.
 
-- The static job checks types, strict Biome lint, unused dependencies and exports, and the complete lockfile's
-  security advisories, and scans `packages/core/src` and `packages/auth/src` with every rule in `.semgrep`,
-  failing on any finding. It runs on every pull request that changes a file.
-- The test groups (runtime, database with PostgreSQL 18, protocol, extended, tooling) and the diagnostic tests
-  each run as their own job, in parallel, when the changed paths select them. The API documentation, examples,
+Each tool has one job:
+
+| Tool         | Job                                                      | CI job                             |
+| ------------ | -------------------------------------------------------- | ---------------------------------- |
+| TypeScript   | Types                                                    | Typecheck, lint, audit and Semgrep |
+| Biome        | Formatting and per-file lint                             | Typecheck, lint, audit and Semgrep |
+| Knip         | Unused files, exports and dependencies                   | Typecheck, lint, audit and Semgrep |
+| `pnpm audit` | Dependencies with known vulnerabilities, full lockfile   | Typecheck, lint, audit and Semgrep |
+| Semgrep      | Skeld's own boundaries and conventions (`.semgrep`)      | Typecheck, lint, audit and Semgrep |
+| CodeQL       | Vulnerabilities found by dataflow, and workflow security | CodeQL                             |
+
+- CodeQL analyses JavaScript/TypeScript and GitHub Actions with the `security-extended` queries, configured once
+  in `.github/codeql/codeql-config.yml`. It scans `packages`, `examples`, `tools` and `.github`; tests, benchmarks
+  and the website are left out. The job saves the SARIF results and fails on any result not suppressed in source.
+  It uploads results to code scanning except for pull requests from forks, whose token is read-only.
+- The test groups (runtime with the diagnostic tests, database with PostgreSQL 18, protocol, extended, tooling)
+  run as their own jobs, in parallel, when the changed paths select them. The API documentation, examples,
   consumer declaration and website jobs run when their paths change.
 - A final `Checks` job fails when any selected job failed or was cancelled. It is the status branch protection requires.
 
-A pull request is meant to finish within 10 minutes: every test job has a 10-minute timeout. Benchmarks are
-not CI timing gates.
+`pnpm run sast` runs the same Semgrep command and the same CodeQL analysis locally (see `CONTRIBUTING.md`).
 
-`security.yml` runs one job combining CodeQL's extended security queries for JavaScript/TypeScript and
-GitHub Actions with a full-lockfile advisory audit. It runs weekly on Monday, on manual request and during
-a release. It does not run on every PR or push. Both workflows fail on any dependency advisory;
-registry errors also fail. Release packaging also refuses every open CodeQL alert on `main`, after
-waiting for the release scan to finish processing. Resolve defects or explicitly dismiss verified false
-positives with evidence in GitHub; a successful analysis alone is not permission to publish.
+A pull request's checks cannot run longer than 10 minutes: `Select checks` has 2 minutes, every selected job 7
+and `Checks` 1.
+Benchmarks are not CI timing gates.
+
+`security.yml` runs CodeQL with the same configuration and a full-lockfile advisory audit weekly on Monday and on
+manual request. Release packaging refuses every open CodeQL alert on `main`. Resolve defects; mark a verified
+false positive with a `// codeql[<rule-id>]` comment on the line above it, or dismiss it in GitHub with evidence.
+A dismissal in GitHub does not reach the pull request check, which reads only the analysis results.
 
 Dependabot checks npm/pnpm dependencies and SHA-pinned GitHub Actions weekly. Minor/patch npm upgrades are
 grouped together; major upgrades remain separate. Actions are grouped, with at most two open action PRs and
@@ -72,8 +85,8 @@ establish that a Git dependency or vendored archive is safe.
 
 GitHub documents limitations for pnpm 12's two-document lockfile. The first hosted run nevertheless
 reported advisories from both manifests and the shared lockfile, including benchmark dependencies.
-Do not assume that detection is complete. The scheduled `pnpm audit` job supplies independent full-lockfile
-advisory coverage, including dependencies excluded from automatic update PRs.
+Do not assume that detection is complete. The `pnpm audit` step on pull requests and weekly supplies independent
+full-lockfile advisory coverage, including dependencies excluded from automatic update PRs.
 
 ## npm trusted publisher
 
@@ -112,9 +125,8 @@ configuration's first successful publish within 2 days, or the configuration exp
    the registry; `@skeld/core` may not.
 3. The tests do not run again. The "Protect main" ruleset requires a pull request, a passing `Checks` status
    and a branch up to date with `main`, with no bypass actors, so the merged commit is the tree that passed.
-   When at least one package will be published, CodeQL and the advisory audit run for that commit. Packaging
-   requires an advisory-free lockfile and no open CodeQL alerts on `main`. Documented false positives remain
-   visible in GitHub as dismissed alerts.
+   Packaging requires no open CodeQL alerts on `main`, from the weekly scan. Documented false positives remain
+   visible in GitHub as dismissed or suppressed alerts.
 4. A clean build job builds both packages, packs each one that will be published, checks recorder exclusion
    and exports on those exact tarballs, and uploads them as one artifact with one SHA-256 checksum file.
 5. A separate publishing job verifies the checksums and publishes core first, then auth, with npm provenance

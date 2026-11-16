@@ -20,15 +20,16 @@ jobs:
   select:
     name: Select checks
     runs-on: ubuntu-26.04
-    timeout-minutes: 3
+    # Why: Select (2) + the longest selected job (7) + Checks (1) keeps the whole chain within 10 minutes.
+    timeout-minutes: 2
     outputs:
       static: ${{ steps.select.outputs.static }}
+      codeql: ${{ steps.select.outputs.codeql }}
       quick: ${{ steps.select.outputs.quick }}
       database: ${{ steps.select.outputs.database }}
       protocol: ${{ steps.select.outputs.protocol }}
       extended: ${{ steps.select.outputs.extended }}
       tooling: ${{ steps.select.outputs.tooling }}
-      diag: ${{ steps.select.outputs.diag }}
       docs: ${{ steps.select.outputs.docs }}
       examples: ${{ steps.select.outputs.examples }}
       consumer: ${{ steps.select.outputs.consumer }}
@@ -56,11 +57,11 @@ jobs:
           fi
 
   static:
-    name: Typecheck, lint, audit and scan
+    name: Typecheck, lint, audit and Semgrep
     needs: select
     if: needs.select.outputs.static == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 8
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,14 +90,48 @@ jobs:
           "$HOME/.local/bin/semgrep" --version
       - name: Semgrep rules on core and auth sources
         run: |
-          "$HOME/.local/bin/semgrep" scan --metrics=off --config .semgrep --error packages/core/src packages/auth/src
+          "$HOME/.local/bin/semgrep" scan --metrics=off --project-root . --config .semgrep --error packages/core/src packages/auth/src
+
+  codeql:
+    name: CodeQL
+    needs: select
+    if: needs.select.outputs.codeql == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 7
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: javascript-typescript, actions
+          config-file: ./.github/codeql/codeql-config.yml
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          # Why: One category with the weekly scan, so a pull request's alerts are compared with main's.
+          category: .github/workflows/security.yml:codeql
+          output: ${{ runner.temp }}/codeql-sarif
+          # Why: A pull request from a fork gets a read-only token, which cannot upload results.
+          upload: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'always' || 'never' }}
+          wait-for-processing: false
+      - name: Fail on any result not suppressed in source
+        env:
+          SARIF: ${{ runner.temp }}/codeql-sarif
+        run: node tools/sast.ts --sarif "$SARIF"
 
   quick:
     name: Runtime tests
     needs: select
     if: needs.select.outputs.quick == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -112,13 +147,15 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Runtime tests
         run: pnpm test quick
+      - name: Diagnostic correctness tests
+        run: pnpm test diag
 
   database:
     name: Database tests
     needs: select
     if: needs.select.outputs.database == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -152,7 +189,7 @@ jobs:
     needs: select
     if: needs.select.outputs.protocol == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -174,7 +211,7 @@ jobs:
     needs: select
     if: needs.select.outputs.extended == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -196,7 +233,7 @@ jobs:
     needs: select
     if: needs.select.outputs.tooling == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -213,34 +250,12 @@ jobs:
       - name: Tooling tests
         run: pnpm test tooling
 
-  diag:
-    name: Diagnostic tests
-    needs: select
-    if: needs.select.outputs.diag == 'true'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        with:
-          run_install: false
-      - name: Install locked dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Diagnostic correctness tests
-        run: pnpm test diag
-
   docs:
     name: Public API and examples
     needs: select
     if: needs.select.outputs.docs == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -273,7 +288,7 @@ jobs:
     needs: select
     if: needs.select.outputs.website == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 6
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -292,10 +307,10 @@ jobs:
 
   checks:
     name: Checks
-    needs: [ select, static, quick, database, protocol, extended, tooling, diag, docs, website ]
+    needs: [ select, static, codeql, quick, database, protocol, extended, tooling, docs, website ]
     if: always()
     runs-on: ubuntu-26.04
-    timeout-minutes: 2
+    timeout-minutes: 1
     steps:
       - name: Require every selected job to pass
         env:

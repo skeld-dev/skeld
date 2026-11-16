@@ -18,7 +18,8 @@ function isMakeWrite(value: unknown): value is MakeWrite {
 }
 
 function compile<F>(source: string, isMade: (made: unknown) => made is F): F {
-  // biome-ignore lint/nursery/noImpliedEval: ADR-019, the one site that compiles source emitted from the declaration
+  // Why: Declared numbers pass Number.isFinite and strings and keys pass JSON.stringify before they enter the source.
+  // biome-ignore lint/nursery/noImpliedEval: ADR-019 declared-source compile site; codeql[js/unsafe-code-construction]
   const made: unknown = new Function(`return ${source}`)();
   if (!isMade(made)) {
     throw new TypeError('the emitted source is not a function expression');

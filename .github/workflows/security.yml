@@ -4,7 +4,6 @@ on:
   schedule:
     - cron: "23 6 * * 1"
   workflow_dispatch:
-  workflow_call:
 
 permissions:
   contents: read
@@ -35,10 +34,11 @@ jobs:
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: javascript-typescript, actions
-          build-mode: none
-          queries: security-extended
+          config-file: ./.github/codeql/codeql-config.yml
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
+          # Why: The pull request scan in ci.yml names the same category, so its alerts are compared with these.
+          category: .github/workflows/security.yml:codeql
           wait-for-processing: true
       # Includes benchmark dependencies; alerts remain visible even when update PRs are disabled.
       - name: Dependency audit

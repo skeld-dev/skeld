@@ -1,0 +1,22 @@
+name: Skeld CodeQL
+
+queries:
+  - uses: security-extended
+
+# Why: Without this query a `// codeql[<rule-id>]` comment above a reviewed line is not recorded as a suppression.
+packs:
+  javascript:
+    - codeql/javascript-queries:AlertSuppression.ql
+
+# Why: Published packages, examples users copy, repository tools and workflows are code that ships or runs with credentials.
+paths:
+  - packages
+  - examples
+  - tools
+  - .github
+
+# Why: Built output repeats the scanned source; tests, benchmarks and the static website are outside the list above.
+paths-ignore:
+  - "**/dist"
+  - "**/.tsout"
+  - "**/node_modules"

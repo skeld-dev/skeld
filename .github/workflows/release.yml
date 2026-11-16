@@ -84,18 +84,10 @@ jobs:
           NODE
           git merge-base --is-ancestor HEAD origin/main
 
-  security:
-    name: Release security
-    needs: validate
-    if: needs.validate.outputs.publish == 'true'
-    uses: ./.github/workflows/security.yml
-    permissions:
-      contents: read
-      security-events: write
-
   package:
     name: Build verified packages
-    needs: [ validate, security ]
+    needs: validate
+    if: needs.validate.outputs.publish == 'true'
     permissions:
       contents: read
       security-events: read

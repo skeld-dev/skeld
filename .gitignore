@@ -5,3 +5,4 @@ dist/
 .tsbuildinfo
 benchmarks/results/
 website/.wrangler/
+.sast/

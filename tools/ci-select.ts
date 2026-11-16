@@ -5,12 +5,12 @@ import { appendFileSync, readFileSync } from 'node:fs';
 
 const jobs = [
   'static',
+  'codeql',
   'quick',
   'database',
   'protocol',
   'extended',
   'tooling',
-  'diag',
   'docs',
   'examples',
   'consumer',
@@ -20,21 +20,34 @@ type Job = (typeof jobs)[number];
 type TestJob = 'quick' | 'database' | 'protocol' | 'extended' | 'tooling';
 
 const everything: readonly Job[] = [
+  'static',
+  'codeql',
   'quick',
   'database',
   'protocol',
   'extended',
   'tooling',
-  'diag',
   'docs',
   'examples',
   'website',
 ];
 // Why: The database and protocol rigs (tests/auth/rig/v1-app.ts, oidc-app.ts) import nearly every auth subpath.
-const auth: readonly Job[] = ['quick', 'database', 'protocol', 'extended', 'tooling', 'docs', 'examples'];
-const core: readonly Job[] = [...auth, 'diag'];
+const auth: readonly Job[] = [
+  'static',
+  'codeql',
+  'quick',
+  'database',
+  'protocol',
+  'extended',
+  'tooling',
+  'docs',
+  'examples',
+];
 // Why: tests/support/support-log.ts and tests/logging/log-destination.ts run scripts from benchmarks/logging.
-const benchmarks: readonly Job[] = ['quick', 'extended'];
+const benchmarks: readonly Job[] = ['static', 'quick', 'extended'];
+// Why: The site build resolves links to these files (website/src/build/docs-links.ts) and reads LICENSE.
+const siteLinked =
+  /^(?:examples\/.*|(?:tests|benchmarks)\/README\.md|packages\/core\/README\.md|CONTRIBUTING\.md|LICENSE)$/;
 const groupJobs: Readonly<Record<string, TestJob>> = {
   runtime: 'quick',
   database: 'database',
@@ -65,65 +78,59 @@ function scriptJobs(module: unknown): ReadonlyMap<string, TestJob> {
   return map;
 }
 
-function withDiag(owners: readonly Job[]): readonly Job[] {
-  return owners.includes('quick') ? [...owners, 'diag'] : owners;
-}
-
 // Does:  Names the jobs one test path needs: its catalog group, or every group of its folder for a fixture or rig.
 function testJobs(script: string, scripts: ReadonlyMap<string, TestJob>): readonly Job[] {
-  if (script === 'README.md') {
-    return ['website'];
-  }
   const owner = scripts.get(script);
   if (owner !== undefined) {
-    return withDiag([owner]);
+    return ['static', owner];
   }
   const slash = script.indexOf('/');
   const folder = script.slice(0, slash + 1);
   const owners = [...scripts].filter(([path]) => slash > 0 && path.startsWith(folder)).map(([, job]) => job);
-  return owners.length === 0 ? everything : withDiag([...new Set(owners)]);
+  return owners.length === 0 ? everything : ['static', ...new Set(owners)];
 }
 
+// Does:  Names the jobs one changed path needs; documentation selects only the documentation checks and the site.
 function pathJobs(path: string, scripts: ReadonlyMap<string, TestJob>): readonly Job[] {
+  const site: readonly Job[] = siteLinked.test(path) ? ['website'] : [];
+  if (path.startsWith('docs/')) {
+    return path.endsWith('.md') ? ['docs', 'consumer', 'website'] : ['docs', 'website'];
+  }
+  if (path.endsWith('.md')) {
+    return ['docs', ...site];
+  }
   const [top, next] = path.split('/');
   switch (top) {
-    case 'docs':
-      return path.endsWith('.md') ? ['docs', 'consumer', 'website'] : ['docs', 'website'];
+    case 'LICENSE':
+      return site;
     case 'website':
-      return ['website'];
+      return ['static', 'website'];
     case 'examples':
-      return ['docs', 'examples', 'website'];
+      return ['static', 'codeql', 'docs', 'examples', 'website'];
     case 'benchmarks':
-      return path === 'benchmarks/README.md' ? [...benchmarks, 'website'] : benchmarks;
+      return benchmarks;
     case 'tests':
       return testJobs(path.slice('tests/'.length), scripts);
     case 'packages':
-      if (next === 'core') {
-        return path === 'packages/core/README.md' ? [...core, 'website'] : core;
-      }
-      return next === 'auth' ? auth : everything;
-    case 'CONTRIBUTING.md':
-      return ['website'];
+      return next === 'core' || next === 'auth' ? auth : everything;
     case '.semgrep':
-    case 'README.md':
-    case 'LICENSE':
-      return [];
+      return ['static', 'codeql'];
     default:
       return everything;
   }
 }
 
-// Does:  Turns changed paths into the job set; the static job runs whenever any file changed.
+// Does:  Turns changed paths into the job set; an empty diff selects nothing.
 function select(changed: readonly string[], catalog: ReadonlyMap<string, TestJob>, all: boolean): Record<Job, boolean> {
   const wanted = new Set<Job>(all ? everything : changed.flatMap((path) => pathJobs(path, catalog)));
   return {
-    static: all || changed.length > 0,
+    static: wanted.has('static'),
+    codeql: wanted.has('codeql'),
     quick: wanted.has('quick'),
     database: wanted.has('database'),
     protocol: wanted.has('protocol'),
     extended: wanted.has('extended'),
     tooling: wanted.has('tooling'),
-    diag: wanted.has('diag'),
     docs: wanted.has('docs'),
     examples: wanted.has('examples'),
     // Why: The tooling group already runs the consumer declaration check on its own packed artifacts.
@@ -145,7 +152,7 @@ const changedPaths = allJobs
       .filter((path) => path !== '');
 const scriptMap = scriptJobs(await import(new URL('../tests/support/suites.ts', import.meta.url).href));
 for (const path of changedPaths) {
-  process.stdout.write(`${path}: ${pathJobs(path, scriptMap).join(' ') || 'static only'}\n`);
+  process.stdout.write(`${path}: ${pathJobs(path, scriptMap).join(' ') || 'nothing'}\n`);
 }
 const selected = select(changedPaths, scriptMap, allJobs);
 process.stdout.write(`selected: ${jobs.filter((job) => selected[job]).join(' ') || 'nothing'}\n`);
