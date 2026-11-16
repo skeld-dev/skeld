@@ -424,13 +424,21 @@ async function revocationCases({ rig, spare, app, label }: Setup): Promise<void>
       }
     }
   };
+  const firstRound = Promise.withResolvers<void>();
+  let roundsAfter = 0;
   const flood = (async () => {
-    for (let round = 0; round < 12; round++) {
+    // Why: The cap ends a flood whose revocation never confirms, so the check fails instead of hanging.
+    for (let round = 0; round < 500 && roundsAfter < 6; round++) {
+      const startedAfter = confirmed;
       // biome-ignore lint/performance/noAwaitInLoops: rounds keep the flood running across the revocation
       await Promise.all(Array.from({ length: 6 }, fire));
+      firstRound.resolve();
+      if (startedAfter) {
+        roundsAfter++;
+      }
     }
   })();
-  await sleepMs(60);
+  await Promise.race([firstRound.promise, flood]);
   const raced = await app.subjects.revokeSessions('rev-race');
   confirmed = raced.kind === 'done';
   await flood;
