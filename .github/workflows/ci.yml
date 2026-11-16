@@ -12,11 +12,57 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    # Why: Only an explicit bash shell runs with pipefail, so a failed git diff cannot feed the selector an empty list.
+    shell: bash
+
 jobs:
-  checks:
-    name: Checks
+  select:
+    name: Select checks
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 5
+    outputs:
+      static: ${{ steps.select.outputs.static }}
+      quick: ${{ steps.select.outputs.quick }}
+      database: ${{ steps.select.outputs.database }}
+      protocol: ${{ steps.select.outputs.protocol }}
+      extended: ${{ steps.select.outputs.extended }}
+      tooling: ${{ steps.select.outputs.tooling }}
+      diag: ${{ steps.select.outputs.diag }}
+      full: ${{ steps.select.outputs.full }}
+      docs: ${{ steps.select.outputs.docs }}
+      examples: ${{ steps.select.outputs.examples }}
+      consumer: ${{ steps.select.outputs.consumer }}
+      website: ${{ steps.select.outputs.website }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Select jobs from changed paths
+        id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            git diff --name-only --no-renames -z "$BASE...$HEAD" | node tools/ci-select.ts
+          else
+            node tools/ci-select.ts --full
+          fi
+
+  static:
+    name: Typecheck, lint and audit
+    needs: select
+    if: needs.select.outputs.static == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,16 +84,258 @@ jobs:
         run: pnpm exec biome check . --error-on-warnings
       - name: Unused dependencies and exports
         run: pnpm run knip
-      - name: Correctness tests
-        run: pnpm test
+
+  quick:
+    name: Runtime tests
+    needs: select
+    if: needs.select.outputs.quick == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Runtime tests
+        run: pnpm test quick
+
+  database:
+    name: Database tests
+    needs: select
+    if: needs.select.outputs.database == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Start PostgreSQL 18
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          POSTGRES_PASSWORD="$password" docker run -d --name skeld-pg -e POSTGRES_PASSWORD \
+            -p 127.0.0.1:54329:5432 --tmpfs /var/lib/postgresql postgres:18-alpine > /dev/null
+          for _ in $(seq 60); do
+            docker exec skeld-pg pg_isready -q -h 127.0.0.1 -U postgres && break
+            sleep 1
+          done
+          docker exec skeld-pg pg_isready -h 127.0.0.1 -U postgres
+          echo "SKELD_TEST_PG_URL=postgres://postgres:$password@127.0.0.1:54329/postgres" >> "$GITHUB_ENV"
+      - name: Database tests
+        run: pnpm test database
+
+  protocol:
+    name: Protocol tests
+    needs: select
+    if: needs.select.outputs.protocol == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      # Why: tests/auth/rig/cdp.ts runs /usr/bin/chromium, which the runner image links to its Chromium build.
+      - name: Protocol tests
+        run: pnpm test protocol
+
+  extended:
+    name: Extended tests
+    needs: select
+    if: needs.select.outputs.extended == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Extended tests
+        run: pnpm test extended
+
+  tooling:
+    name: Tooling tests
+    needs: select
+    if: needs.select.outputs.tooling == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      # Why: tests/auth/static-invariants.ts runs ~/.local/bin/semgrep; the runner's own PIPX_BIN_DIR points elsewhere.
+      - name: Install Semgrep
+        run: |
+          PIPX_HOME="$HOME/.local/share/pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install semgrep==1.182.1
+          "$HOME/.local/bin/semgrep" --version
+      - name: Tooling tests
+        run: pnpm test tooling
+
+  full:
+    name: Full correctness tests
+    needs: select
+    if: needs.select.outputs.full == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Semgrep
+        run: |
+          PIPX_HOME="$HOME/.local/share/pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install semgrep==1.182.1
+          "$HOME/.local/bin/semgrep" --version
+      - name: Start PostgreSQL 18
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          POSTGRES_PASSWORD="$password" docker run -d --name skeld-pg -e POSTGRES_PASSWORD \
+            -p 127.0.0.1:54329:5432 --tmpfs /var/lib/postgresql postgres:18-alpine > /dev/null
+          for _ in $(seq 60); do
+            docker exec skeld-pg pg_isready -q -h 127.0.0.1 -U postgres && break
+            sleep 1
+          done
+          docker exec skeld-pg pg_isready -h 127.0.0.1 -U postgres
+          echo "SKELD_TEST_PG_URL=postgres://postgres:$password@127.0.0.1:54329/postgres" >> "$GITHUB_ENV"
+      - name: Full correctness tests
+        run: pnpm test full
+
+  diag:
+    name: Diagnostic tests
+    needs: select
+    if: needs.select.outputs.diag == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
       - name: Diagnostic correctness tests
         run: pnpm test diag
-      - name: Public API and examples
+
+  docs:
+    name: Public API and examples
+    needs: select
+    if: needs.select.outputs.docs == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm run check
+      - name: Public API reference and reference example
         run: |
           pnpm run api-docs --check
           pnpm run api-check
           pnpm run reference-check
-          pnpm run examples-check
-      # Full correctness includes auth/pack-contents.ts: pack once, then check both artifacts.
+      - name: Examples
+        if: needs.select.outputs.examples == 'true'
+        run: pnpm run examples-check
+      - name: Documentation code blocks against packed declarations
+        if: needs.select.outputs.consumer == 'true'
+        run: pnpm run consumer-check
+
+  website:
+    name: Website build
+    needs: select
+    if: needs.select.outputs.website == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
       - name: Website build
         run: pnpm --filter @skeld/website run build
+
+  checks:
+    name: Checks
+    needs: [ select, static, quick, database, protocol, extended, tooling, full, diag, docs, website ]
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every selected job to pass
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: test "$FAILED" = false
