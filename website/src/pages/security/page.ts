@@ -68,7 +68,7 @@ export function securityPage() {
         <div class="security-section-heading"><h2 id="boundary-heading">A request crosses more<br />than one boundary.</h2><p>Validation, authorization and disclosure answer different questions. Each needs an explicit decision.</p></div>
         <ol class="security-flow">
           <li><p class="security-owner">Core · Input</p><h3>Is this data allowed in?</h3><p>Declared schemas check shape and bounds before the normal handler runs.</p><span class="security-flow-note">Early hooks see unvalidated input.</span></li>
-          <li><p class="security-owner">Application · Authority</p><h3>May this caller do this?</h3><p>Your code checks identity, resource access and tenant ownership before acting.</p><span class="security-flow-note">A schema cannot grant permission.</span></li>
+          <li><p class="security-owner">Application · Authority</p><h3>May this caller do this?</h3><p>Your code checks identity, resource access and tenant ownership before acting. The optional <a href="/docs/guides/auth/">@skeld/auth</a> package supplies sessions, API keys and policies for those checks.</p><span class="security-flow-note">A schema cannot grant permission.</span></li>
           <li><p class="security-owner">Core · Output</p><h3>What may leave?</h3><p>Declared responses project fields. Classified log fields follow their own disclosure rules.</p><span class="security-flow-note">Raw replies bypass response projection.</span></li>
         </ol>
         <p><a class="text-link" href="/explore/">See which requests reach the handler →</a></p>
