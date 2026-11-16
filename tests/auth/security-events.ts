@@ -1,5 +1,5 @@
-// Does:  Proves each of the ten security events is written exactly when its row says, by its writer, with its fields only.
-// Holds: One trigger writes one record per row; a record has the fields its row names, no others, and no other auth event exists.
+// Does:  Proves each of the ten security events is written when its row says, by its writer, with its fields only.
+// Holds: One trigger writes one record per row; a record has exactly its row's fields, and no other auth event exists.
 // biome-ignore-all lint/performance/noAwaitInLoops: each scenario must finish and settle before the next is judged
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the run is a straight line of independent scenarios
 // biome-ignore-all lint/nursery/noUnsafeTypeAssertion: hostile callbacks and a failing store answer shapes the types forbid
@@ -26,8 +26,6 @@ import { settleLog, sleep } from './rig/util.ts';
 
 const pki = await childPki(import.meta.url);
 const report = createReport(
-  'v06',
-  'security-events',
   'each of the ten security events is written exactly when its row says, by the writer its row names, with the fields it names and no others; no other auth event exists',
 );
 const ORIGIN = 'http://localhost:3999';

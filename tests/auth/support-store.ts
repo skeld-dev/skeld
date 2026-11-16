@@ -1,7 +1,6 @@
-// Does:  Gives the store proof scripts their rigs, direct database reads, lock holders and evidence report.
+// Does:  Gives the store proof scripts their rigs, direct database reads and lock holders.
 // Holds: Every database a rig makes is its own and is removed by dispose; the connection string is never printed.
 
-import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,7 +8,6 @@ import { join } from 'node:path';
 // biome-ignore lint/correctness/noUnresolvedImports: Biome's Node module list lacks node:sqlite, which Node 26 ships
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
 import { createPostgresStore } from '@skeld/auth/postgres';
 import { createSqliteStore } from '@skeld/auth/sqlite';
 import { type AuthStore, type StoreEvent, StoreFailure } from '@skeld/auth/store';
@@ -20,7 +18,6 @@ export type Kind = 'sqlite' | 'postgres';
 export type Table = 'subjects' | 'sessions' | 'api_keys' | 'limit_windows' | 'oidc_attempts';
 export type Key = string | Uint8Array;
 
-const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
 const keyColumns: Record<Table, string> = {
   subjects: 'user_id',
   sessions: 'digest',
@@ -90,57 +87,6 @@ export function isFailure(
 
 export function failureCode(outcome: Settled<unknown>): string | null | undefined {
   return !outcome.ok && outcome.error instanceof StoreFailure ? outcome.error.code : undefined;
-}
-
-export interface Report {
-  note: (line: string) => void;
-  check: (name: string, ok: boolean, detail?: string) => boolean;
-  run: (name: string, body: () => Promise<void>) => Promise<void>;
-  finish: () => void;
-}
-
-// Does:  Reports each case on stdout; the exit code is non-zero when a case failed.
-export function createReport(_task: 's05' | 's06', script: string, statement: string): Report {
-  let cases = 0;
-  let failed = 0;
-  const emit = (line: string): void => {
-    process.stdout.write(`${line}\n`);
-  };
-  let commit = 'unknown';
-  try {
-    commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: sourceRoot, encoding: 'utf8' }).trim();
-  } catch {
-    commit = 'no git';
-  }
-  emit(`${script}: ${statement}`);
-  emit(`candidate: working tree on ${commit}; Node ${process.version}; ${new Date().toISOString()}`);
-  const check = (name: string, ok: boolean, detail = ''): boolean => {
-    cases++;
-    if (!ok) {
-      failed++;
-    }
-    emit(`${ok ? 'pass' : 'fail'} ${name}${detail === '' ? '' : `: ${detail}`}`);
-    return ok;
-  };
-  return {
-    note: emit,
-    check,
-    run: async (name, body) => {
-      try {
-        await body();
-      } catch (error) {
-        check(
-          name,
-          false,
-          `threw ${error instanceof Error ? `${error.name}: ${error.message.slice(0, 200)}` : typeof error}`,
-        );
-      }
-    },
-    finish: () => {
-      emit(`${cases - failed} of ${cases} cases passed`);
-      process.exitCode = failed === 0 ? 0 : 1;
-    },
-  };
 }
 
 // Does:  Reads the PostgreSQL fixture's connection string; the run fails clearly when it is not set.
@@ -229,7 +175,8 @@ export interface Rig {
   readonly path: string;
   readonly database: PgDatabase | null;
   readonly appPool: Pool | null;
-  hold: (table: Table, key: Key, ms: number) => Promise<void>;
+  // Does:  Locks a row until the returned release is called or ms pass, whichever comes first.
+  hold: (table: Table, key: Key, ms: number) => Promise<() => Promise<void>>;
   query: (sql: string, params?: readonly unknown[]) => Promise<Record<string, unknown>[]>;
   count: (table: Table, column?: string, value?: Key | number) => Promise<number>;
   exists: (table: Table, key: Key) => Promise<boolean>;
@@ -285,9 +232,10 @@ export async function makeRig(kind: Kind, options: RigOptions = {}): Promise<Rig
       hold: (_table, _key, ms) => {
         const holder = new DatabaseSync(path, { timeout: 0 });
         holder.exec('BEGIN IMMEDIATE');
+        let release = (): void => undefined;
         const released = new Promise<void>((resolve) => {
           let done = false;
-          const release = (): void => {
+          release = (): void => {
             if (done) {
               return;
             }
@@ -305,7 +253,10 @@ export async function makeRig(kind: Kind, options: RigOptions = {}): Promise<Rig
           releasers.add(release);
         });
         pending.add(released);
-        return Promise.resolve();
+        return Promise.resolve(() => {
+          release();
+          return released;
+        });
       },
       query: (sql, params = []) => {
         const rows = reader()
@@ -372,9 +323,10 @@ export async function makeRig(kind: Kind, options: RigOptions = {}): Promise<Rig
           client.release(true);
           throw error;
         }
+        let release = (): void => undefined;
         const released = new Promise<void>((resolve) => {
           let done = false;
-          const release = (): void => {
+          release = (): void => {
             if (done) {
               return;
             }
@@ -396,6 +348,10 @@ export async function makeRig(kind: Kind, options: RigOptions = {}): Promise<Rig
           releasers.add(release);
         });
         pending.add(released);
+        return () => {
+          release();
+          return released;
+        };
       },
       query: async (sql, params = []) => {
         const result = await sidePool.query(pgSql(sql), [...params]);
@@ -450,3 +406,17 @@ export async function makeRig(kind: Kind, options: RigOptions = {}): Promise<Rig
 }
 
 export const rigKinds = storeKinds;
+
+// Does:  Waits until a backend of the named application waits on a lock in the rig's database; false after 5 s.
+export async function lockWaiting(rig: Rig, application: string): Promise<boolean> {
+  const sql = `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND application_name = '${application}' AND wait_event_type = 'Lock'`;
+  for (let polls = 0; polls < 500; polls++) {
+    // biome-ignore lint/performance/noAwaitInLoops: each poll reads the server's state after the last one
+    const rows = await rig.query(sql);
+    if (toNumber(rows[0]?.n) > 0) {
+      return true;
+    }
+    await sleep(10);
+  }
+  return false;
+}

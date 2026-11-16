@@ -8,12 +8,12 @@ import { defineContract } from '@skeld/core/contract';
 import { object, string } from '@skeld/core/schema';
 import { createServer } from '@skeld/core/server';
 import { cookieHeader, createLogs, establishFor, get, ORIGIN, series, sleepMs } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 import { cleanAll, makeRig, rigKinds, type Kind } from './support-store.ts';
 
 const statement =
   'a literal, a clone and a clone naming another resource are GRANT_UNKNOWN; another policy is GRANT_POLICY and another action GRANT_ACTION, each before the body; a live grant used from a second request while the first still runs succeeds; every use in every request after the first has ended is GRANT_RELEASED; isGrant is true before the release and false after';
-const report = createReport('v02', statement);
+const report = createReport(statement);
 
 interface Note {
   readonly id: string;

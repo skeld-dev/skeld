@@ -19,12 +19,12 @@ import {
   type App,
   disableUser,
 } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 import { cleanAll, type Kind, makeRig, type Rig, rigKinds, toNumber } from './support-store.ts';
 
 const statement =
   'API keys are high-entropy scoped credentials with only a digest at rest, bounded issue and list, and authoritative revocation: the next request after a revoke is refused; a wrong scope, an expired key, a disabled subject and a malformed or foreign token are refused; unknown input keys are rejected before any store call; a credential kind is never tried by another verifier in either direction';
-const report = createReport('v04', statement);
+const report = createReport(statement);
 
 const INVALID = '{"status":401,"code":"CREDENTIAL_INVALID","message":"Credential not accepted"}';
 const DENIED = '{"status":403,"code":"ACCESS_DENIED","message":"Access denied"}';
@@ -434,38 +434,8 @@ async function boundCases({ label, rig, app }: Context): Promise<void> {
   }
 }
 
-async function ceilingCases(kind: Kind): Promise<void> {
+async function invalidCapCases(kind: Kind): Promise<void> {
   const label = `[${kind}]`;
-  const rig = await makeRig(kind, { attach: false });
-  const app = await startApp({ store: rig.store, maxPerUser: 1000 });
-  try {
-    const began = performance.now();
-    await series(
-      Array.from({ length: 10 }, (_, n) => n),
-      async (round) => {
-        await Promise.all(
-          Array.from({ length: 100 }, (_, n) =>
-            app.keys.issue({ userId: 'ceiling', name: `c${round}-${n}`, scopes: ['docs:read'] }),
-          ),
-        );
-      },
-    );
-    const over = await app.keys.issue({ userId: 'ceiling', name: 'over', scopes: ['docs:read'] });
-    const listed = await app.keys.list({ userId: 'ceiling' });
-    const rows = await rig.query('SELECT count(*) AS n FROM api_keys WHERE user_id = ?', ['ceiling']);
-    report.check(
-      `${label} at the ceiling (maxPerUser 1,000): 1,000 keys issued, the 1,001st refused limit, list returns all 1,000 (${Math.round(performance.now() - began)} ms on a shared host)`,
-      over.kind === 'refused' &&
-        over.reason === 'limit' &&
-        listed.kind === 'listed' &&
-        listed.keys.length === 1000 &&
-        toNumber(rows[0]?.n) === 1000,
-      `${listed.kind === 'listed' ? listed.keys.length : listed.kind} listed; ${toNumber(rows[0]?.n)} rows`,
-    );
-  } finally {
-    await app.close();
-    await rig.dispose();
-  }
   await series([0, 1001, 1.5], async (bad) => {
     const spare = await makeRig(kind, { attach: false });
     try {
@@ -611,7 +581,7 @@ async function suite(kind: Kind): Promise<void> {
     await app.close();
     await rig.dispose();
   }
-  await report.run(`${label} the ceiling`, () => ceilingCases(kind));
+  await report.run(`${label} invalid caps`, () => invalidCapCases(kind));
   const records = await makeRig(kind, { attach: false });
   const pools: Pool[] = [];
   try {

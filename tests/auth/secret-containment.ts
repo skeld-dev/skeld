@@ -1,5 +1,5 @@
 // Does:  Plants canaries in every secret auth handles, runs the retained methods, and searches every surface for them.
-// Holds: A secret appears only where the contract returns it once to its owner; no response, record or diag key repeats it.
+// Holds: A secret appears only where the contract returns it once to its owner; no response, record or diag key has it.
 // biome-ignore-all lint/performance/noAwaitInLoops: each step is a request that must finish before the next
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the battery is a straight line of independent steps
 // biome-ignore-all lint/nursery/noUnsafeTypeAssertion: hostile callbacks deliberately answer shapes the type forbids
@@ -416,8 +416,6 @@ if (process.env.SKELD_SC_CHILD !== undefined) {
 // Does:  The parent: runs the child per store under the diag build, then searches every surface for every secret.
 async function parent(): Promise<void> {
   const report = createReport(
-    'v06',
-    'secret-containment',
     'no secret auth handles, and no text a callback or a provider throws, appears in any response, log record, diag key or error across the retained methods, except where the contract returns a value once to its owner',
   );
   for (const kind of kinds) {

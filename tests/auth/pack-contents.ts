@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -68,7 +68,6 @@ function exportsOf(manifest: Record<string, unknown>): Map<string, Record<string
 }
 
 const report = createReport(
-  'v09',
   'the packed @skeld/auth ships exactly the twelve contracted subpaths with a default and a types target each, no recorder; @skeld/core ships ./gate with no runtime dependency; a consumer outside the workspace installs both and imports every subpath at run time',
 );
 const scratch = mkdtempSync(join(tmpdir(), 'skeld-v09-pack-'));

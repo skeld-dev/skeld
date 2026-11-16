@@ -13,14 +13,14 @@ repeated runs and machine-speed timing windows do not belong here.
 | `browser/`   | Cookies, CORS, CSRF and redirects, including their hostile cases                               |
 | `lifecycle/` | Hooks, deadlines, disconnects, shutdown, resource ownership and races                          |
 | `contracts/` | Route and client contracts, response projection and derived classes                            |
-| `schema/`    | Validation and serialization agreement; shared schema corpora live beside these proofs         |
+| `schema/`    | Validation and serialization agreement; shared schema corpora live beside these checks         |
 | `logging/`   | Redaction, injection, correlation, suppression, sinks and log shutdown                         |
-| `auth/`      | Gate, sessions, grants, credentials, JWT/OIDC, stores, races, bounds and package proofs        |
-| `support/`   | Shared compiler, wire, child-process and evidence helpers; no standalone tests                 |
+| `auth/`      | Gate, sessions, grants, credentials, JWT/OIDC, stores, races, bounds and package contents      |
+| `support/`   | Shared compiler, wire, child-process and reporting helpers; no standalone tests                |
 
 File a test under the behavior it protects. A CSRF attack belongs in `browser/`; a secret leaking through a
 logger belongs in `logging/`. Do not copy it into `security/` as well. Keep meaningful related cases in one script
-rather than creating a file per assertion. Historical `audit-` filenames remain searchable.
+rather than creating a file per assertion.
 
 Performance workloads live in [`../benchmarks/`](../benchmarks/README.md).
 
@@ -32,46 +32,38 @@ From the repository root, after `pnpm install`:
 pnpm test quick                # routine checks; SQLite only, no PostgreSQL or browser
 pnpm test database             # store integrations on both adapters; requires SKELD_TEST_PG_URL
 pnpm test protocol             # JWT/OIDC/TLS, including Chromium; SQLite only
-pnpm test extended             # real deadlines, fault injection and password load; SQLite only
-pnpm test tooling              # package artifacts and static invariants
+pnpm test extended             # real deadlines, fault injection, failing log destinations; SQLite only
+pnpm test tooling              # package artifacts
 pnpm test full                 # all scripts, full schema corpora and both-store integrations
-pnpm test exhaustive           # full plus repeated races and both-store behavioral matrices
-pnpm test                      # remains an alias for full; it does NOT silently skip PostgreSQL
+pnpm test                      # an alias for full; it does NOT silently skip PostgreSQL
 pnpm test diag                 # five core checks under diagnostic instrumentation
 node tests/run.ts quick --list # inspect selection without building or running tests
 ```
 
 The five groups are defined in [`support/suites.ts`](support/suites.ts). `runtime` is an alias for `quick`.
 Each script belongs to exactly one group. Discovery only checks that the catalog matches the filesystem;
-adding an unregistered script fails the runner. Every script runs in a separate process. The runner prints
-per-script elapsed time, total time and the ten slowest scripts. Missing scripts, timeouts and nonzero exits fail.
+adding an unregistered script fails the runner.
 
-Quick mode runs the two generated-schema proofs with their existing `--schemas 200` option. Full, exhaustive
-and the standalone `schema` category keep 4,000 generated schemas. Password queue/load proofs live separately in
-`auth/password-load.ts`, in the extended group; functional password checks remain quick. These selections do not
-change product configuration or shorten product deadlines.
+Every script runs alone in its own process group. A script that runs longer than 90 seconds is stopped and fails:
+the runner kills its whole process group, so servers and readers it started die with it, and prints the
+script's output. The slowest script takes 15 to 20 seconds on the development host. Processes a script leaves
+running after it exits are killed too, and the runner names the script. The runner prints per-script elapsed
+time, total time and the ten slowest scripts.
 
-`database`, `auth`, `full` and `exhaustive` require `SKELD_TEST_PG_URL`, a PostgreSQL 18 connection string for a
-role allowed to create disposable databases. Missing configuration fails before any scripts start. The database
-group includes diagnostics because each adapter has a distinct hook. Full runs store-dependent integrations on
-both adapters. Protocol and callback behavior matrices normally run on SQLite once; exhaustive restores both
-adapters, repeated credential-change schedules and the overlapping handoff deadline check. Full therefore has
-broader backend/corpus coverage than running each group with its routine profile.
+Quick mode runs the two generated-schema checks with `--schemas 200`. Full and the standalone `schema` category
+keep 4,000 generated schemas. These selections do not change product configuration or shorten product deadlines.
+
+`database`, `auth` and `full` require `SKELD_TEST_PG_URL`, a PostgreSQL 18 connection string for a role allowed
+to create disposable databases. Missing configuration fails before any scripts start. Full runs store-dependent
+integrations on both adapters; protocol and callback behavior runs on SQLite once.
 
 For individual auth scripts, `SKELD_TEST_STORES=sqlite|postgres|both` selects adapters explicitly; the default is
-`both`. `SKELD_TEST_PROFILE=exhaustive` restores repeated matrices. The runner sets these variables according to
-its selected mode, so an inherited environment cannot silently downgrade a full run. `diag-hooks.ts` needs both
-stores to prove all twenty hooks. The conformance kit creates fresh stores and schemas per case, reusing one
-owned PostgreSQL database for its serial cases; other database proofs keep their own databases.
+`both`. The runner sets it according to its selected mode, so an inherited environment cannot silently downgrade
+a full run.
 
-Legacy categories still work: `pnpm test security`, `browser`, `lifecycle`, `contracts`, `schema`, `logging`, or
-`auth`. They are topic selections, not cost groups. The no-codegen check gets its required Node flag. Diagnostic
-mode gives each script a fresh directory and removes it afterward.
-
-The tooling group packs core and auth once each. Marker checks, consumer declaration checks and the installed
-consumer all inspect those same artifacts. The standalone `pack-check` and `consumer-check` commands remain
-available; avoid running them again after tooling/full. The consumer checker accepts `--packed-dir <directory>`
-when artifacts already exist, and the marker checker accepts multiple tarball paths.
+Categories are topic selections, not cost groups: `pnpm test security`, `browser`, `lifecycle`, `contracts`,
+`schema`, `logging` or `auth`. The no-codegen check gets its required Node flag. Diagnostic mode gives each
+script a fresh directory and removes it afterward.
 
 For a single script, build first, then run it directly:
 
@@ -81,9 +73,11 @@ node --conditions=skeld-source tests/security/body-limit.ts
 node --conditions=skeld-source --disallow-code-generation-from-strings tests/schema/no-codegen.ts
 ```
 
-`logging/log-destination.ts` drives the logging benchmark driver against six failing-sink and dead-reader fixtures and
-takes about two minutes; it runs in the extended group. Some correctness checks exercise real deadlines; their
-waiting is part of the behavior being checked, not a throughput benchmark.
+`logging/log-destination.ts` starts one server per failure: a stdout reader that stops reading, one that has
+exited, and sinks that throw, reject, never settle or log from inside themselves, plus a healthy sink as the
+control. Each gets a burst past the 1 MiB queue, and the script checks that ordinary requests still answer, that
+held bytes stay within the queue and that the failure really happened. Logging scripts print one pass or fail line
+per case and write no files.
 
 ## Keep the checks honest
 
@@ -92,7 +86,7 @@ waiting is part of the behavior being checked, not a throughput benchmark.
 - Pair refusal cases with a valid control. A dead server, broken import or unrelated compiler error must not pass.
   Compiler probes use `support/support-compile.ts`: each negative case marks its intended line and names its
   diagnostic code. Positive controls must compile cleanly.
-- Prefer public APIs and real wire behavior. The retention proof is a deliberate exception: it inspects internal
+- Prefer public APIs and real wire behavior. The retention check is a deliberate exception: it inspects internal
   deadline ownership that a response alone cannot expose. Its narrow lint exception allows source imports, so
   the queue and the running engine come from the same implementation.
 - When repairing a check that passed incorrectly, show that a deliberate violation makes it fail. Keep such
@@ -103,4 +97,4 @@ waiting is part of the behavior being checked, not a throughput benchmark.
   or increase an assertion count.
 
 Tests execute TypeScript source. Their build emits declarations for project-reference checks, not runnable copies
-that can silently fall behind the source. No production behavior is changed by this organization.
+that can silently fall behind the source.

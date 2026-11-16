@@ -619,7 +619,7 @@ async function reserveCase(report: ReturnType<typeof createReport>): Promise<voi
 }
 
 async function main(): Promise<void> {
-  const report = createReport('log-close');
+  const report = createReport();
   await readingCase(report);
   await silentCases(report, 1);
   await pairCase(report);

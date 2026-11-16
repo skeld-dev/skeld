@@ -8,7 +8,7 @@ import { createServer } from '@skeld/core/server';
 import { createReport } from '../support/support-proof.ts';
 import * as namespace from './log-boundaries.ts';
 
-const report = createReport('log-boundaries');
+const report = createReport();
 const lines: string[] = [];
 const server = createServer({
   log: {

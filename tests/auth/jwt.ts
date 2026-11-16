@@ -1,5 +1,5 @@
 // Does:  Proves JWT verification through real gated requests: boot-fixed policy, refused tokens, no fall-through.
-// Holds: A token is admitted only when issuer, audience, algorithm, key and claims match; no key URL comes from a token.
+// Holds: A token is admitted only if issuer, audience, algorithm, key and claims match; no key URL comes from a token.
 // biome-ignore-all lint/performance/noAwaitInLoops: each case is a request that must finish before the next
 // biome-ignore-all lint/nursery/noUnsafeTypeAssertion: hostile fixtures deliberately break the option types
 
@@ -19,8 +19,6 @@ const ISSUER = 'https://issuer.example.test';
 const AUDIENCE = 'api://skeld';
 const pki = await childPki(import.meta.url);
 const report = createReport(
-  'v05',
-  'jwt',
   'JWT verification fixes issuer, audience, algorithms and keys at boot, refuses wrong signatures, claims and key types, takes no header key URL, never falls through to another kind, and has no signing surface',
 );
 const host = await providerHost(pki.good);

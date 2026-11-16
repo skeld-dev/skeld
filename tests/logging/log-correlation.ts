@@ -256,7 +256,7 @@ function exchangesOf(run: { exchanged: Exchanged[] }, fixture: Fixture): Exchang
 }
 
 async function main(): Promise<void> {
-  const report = createReport('log-correlation');
+  const report = createReport();
   const list = fixtures();
   const accepted = list.filter((fixture) => fixture.name.startsWith('valid traceparent ('));
   const refused = list.filter((fixture) => !accepted.includes(fixture));

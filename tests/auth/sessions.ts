@@ -15,13 +15,13 @@ import {
   startApp,
   type App,
 } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 import { cleanAll, type Kind, makeRig, type Rig, rigKinds, toNumber } from './support-store.ts';
 import type { Pool } from 'pg';
 
 const statement =
   'session tokens are random 256-bit opaque values in one canonical spelling, stored only as SHA-256 digests; the cookie has the contracted attributes; every authenticated request reads the store; rotation leaves one replacement; revocation, disable and generation changes stop stale issuance and renewal; concurrent requests agree';
-const report = createReport('v03', statement);
+const report = createReport(statement);
 
 const NAME = '__Host-skeld';
 // biome-ignore lint/security/noSecrets: the base64url alphabet, not a secret

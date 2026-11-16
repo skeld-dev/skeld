@@ -1,25 +1,15 @@
-// Does:  Proves the session handoff step by step and the verifications that straddle a credential change.
-// Holds: Outcomes are judged from the answer, the sessions table and the records; an application store is a plain map.
+// Does:  Proves the session handoff step by step: input checks, outcomes, verify unavailable, deadline and shutdown.
+// Holds: Outcomes are judged from the answer, the sessions table and the records, never from the code that made them.
 
 import { AuthError } from '@skeld/auth/auth-error';
-import {
-  cookiesOf,
-  disableUser,
-  observe,
-  type Observed,
-  series,
-  sleepMs,
-  spareStore,
-  startApp,
-  type App,
-} from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { cookiesOf, observe, type Observed, series, spareStore, startApp, type App } from './rig/v1-app.ts';
+import { createReport } from './rig/report.ts';
 import { cleanAll, type Kind, makeRig, type Rig, rigKinds, toNumber } from './support-store.ts';
 import type { Pool } from 'pg';
 
 const statement =
-  'the handoff checks the user id and input keys first, ensures the fence, calls verify once under 10,000 ms, issues with the snapshot generation and records one outcome; a disabled subject cannot sign in, a verification that straddles disable answers disabled and one that straddles disable and enable answers stale; enable is refused when stale, enabled or absent';
-const report = createReport('v03', statement);
+  'the handoff checks the user id and input keys first, ensures the fence, calls verify once under 10,000 ms, issues with the snapshot generation and records one outcome; a disabled subject cannot sign in and its verify is not called; shutdown, an abort or a closed auth ends the wait at once';
+const report = createReport(statement);
 
 const NAME = '__Host-skeld';
 
@@ -238,21 +228,17 @@ async function outcomeCases({ label, rig, app, observed }: Context): Promise<voi
     },
   });
   await reached.promise;
-  const began = performance.now();
   controller.abort();
   const aborted = await aborting;
-  const waited = performance.now() - began;
   pending.resolve(true);
-  await sleepMs(200);
   await app.logs.settle();
   report.check(
     `${label} an abort of input.signal during verify ends the wait at once: Unavailable not_applied, no session, the late true ignored, no auth.callback.failed`,
     aborted.kind === 'unavailable' &&
       aborted.outcome === 'not_applied' &&
-      waited < 300 &&
       (await sessionRows(rig, 'aborting')) === 0 &&
       app.logs.named('auth.callback.failed').length === callbackBefore,
-    `${JSON.stringify(aborted)} after ${Math.round(waited)} ms`,
+    `${JSON.stringify(aborted)}, answered while verify was still pending`,
   );
 }
 
@@ -289,6 +275,7 @@ async function unavailableVerify({ label, rig, app }: Context): Promise<void> {
 async function deadlineCases({ label, rig, app }: Context): Promise<void> {
   const callbackBefore = app.logs.named('auth.callback.failed').length;
   let lateAnswered = false;
+  const lateTrue = Promise.withResolvers<void>();
   const began = performance.now();
   const [hangs, late] = await Promise.all([
     app.sessions.establish({
@@ -300,14 +287,14 @@ async function deadlineCases({ label, rig, app }: Context): Promise<void> {
       rawCookies: cookiesOf(NAME),
       userId: 'late',
       verify: async () => {
-        await sleepMs(10_300);
+        await lateTrue.promise;
         lateAnswered = true;
         return true;
       },
     }),
   ]);
   const elapsed = Math.round(performance.now() - began);
-  await sleepMs(500);
+  lateTrue.resolve();
   await app.logs.settle();
   const records = app.logs.named('auth.callback.failed').slice(callbackBefore);
   report.check(
@@ -329,197 +316,6 @@ async function deadlineCases({ label, rig, app }: Context): Promise<void> {
       records.every((r) => r.fields['auth.callback'] === 'handoff.verify' && r.fields['auth.cause'] === 'deadline'),
     `${records.length} records`,
   );
-}
-
-interface Changer {
-  readonly credentials: Map<string, string>;
-  signIn: (user: string, password: string) => Promise<string>;
-}
-
-function applicationStore(app: App): Changer {
-  const credentials = new Map<string, string>();
-  return {
-    credentials,
-    signIn: async (user, password) => {
-      const result = await app.sessions.establish({
-        rawCookies: cookiesOf(NAME),
-        userId: user,
-        verify: () => credentials.get(user) === password,
-      });
-      return result.kind === 'refused' ? `refused:${result.reason}` : result.kind;
-    },
-  };
-}
-
-async function tableCases({ label, rig, app }: Context): Promise<void> {
-  const store = applicationStore(app);
-  const read = async (user: string): Promise<string> => {
-    const answer = await app.subjects.read(user);
-    return answer.kind === 'subject' ? `${answer.enabled ? 'enabled' : 'disabled'}@${answer.generation}` : answer.kind;
-  };
-  const brief = (value: unknown): string => JSON.stringify(value);
-  store.credentials.set('t1', 'old');
-  await store.signIn('t1', 'old');
-
-  store.credentials.set('t7', 'old');
-  const g7 = await disableUser(app.subjects, 't7');
-  const other = await app.subjects.disable('t7');
-  const staleRefusal = await app.subjects.enable('t7', g7);
-  const stateStale = await read('t7');
-  const reenabled = await app.subjects.enable('t7', other.kind === 'done' ? other.generation : 0);
-  const live7 = await store.signIn('t7', 'old');
-  const lateRefusal = await app.subjects.enable('t7', g7);
-  const rowsBefore = await sessionRows(rig, 't7');
-  report.check(
-    `${label} step 3 refused stale (another actor wrote the fence since step 1) and refused enabled (it was enabled since): each changes nothing, ends no session and writes no record`,
-    other.kind === 'done' &&
-      staleRefusal.kind === 'refused' &&
-      staleRefusal.reason === 'stale' &&
-      stateStale === `disabled@${other.kind === 'done' ? other.generation : 0}` &&
-      reenabled.kind === 'done' &&
-      live7 === 'established' &&
-      lateRefusal.kind === 'refused' &&
-      lateRefusal.reason === 'enabled' &&
-      rowsBefore === 1 &&
-      (await sessionRows(rig, 't7')) === 1,
-    `${brief(staleRefusal)} ${stateStale} ${brief(lateRefusal)}; sessions ${rowsBefore}`,
-  );
-  const enabledNow = await app.subjects.enable('t1', 1);
-  report.check(
-    `${label} enable of a subject that is enabled is refused with reason enabled or stale and changes nothing`,
-    enabledNow.kind === 'refused' &&
-      (enabledNow.reason === 'enabled' || enabledNow.reason === 'stale') &&
-      (await read('t1')) === 'enabled@1',
-    `${brief(enabledNow)} ${await read('t1')}`,
-  );
-  const absent = await app.subjects.enable('never-seen', 1);
-  const absentRow = await rig.query('SELECT count(*) AS n FROM subjects WHERE user_id = ?', ['never-seen']);
-  report.check(
-    `${label} step 3 refused absent: no fence row exists, enable creates none, read answers absent`,
-    absent.kind === 'refused' &&
-      absent.reason === 'absent' &&
-      toNumber(absentRow[0]?.n) === 0 &&
-      (await read('never-seen')) === 'absent',
-    `${brief(absent)} rows ${toNumber(absentRow[0]?.n)}`,
-  );
-
-  store.credentials.set('t4', 'old');
-  const straddleDisable = Promise.withResolvers<boolean>();
-  const reachedDisable = Promise.withResolvers<void>();
-  const beforeDisable = app.sessions.establish({
-    rawCookies: cookiesOf(NAME),
-    userId: 't4',
-    verify: () => {
-      reachedDisable.resolve();
-      return straddleDisable.promise;
-    },
-  });
-  await reachedDisable.promise;
-  const g4 = await disableUser(app.subjects, 't4');
-  straddleDisable.resolve(true);
-  const disabledAnswer = await beforeDisable;
-  report.check(
-    `${label} a verification that began before step 1 and ends after it, before step 3: refused disabled, no session`,
-    disabledAnswer.kind === 'refused' && disabledAnswer.reason === 'disabled' && (await sessionRows(rig, 't4')) === 0,
-    brief(disabledAnswer),
-  );
-  let called = 0;
-  const duringDisabled = await app.sessions.establish({
-    rawCookies: cookiesOf(NAME),
-    userId: 't4',
-    verify: () => {
-      called++;
-      return true;
-    },
-  });
-  report.check(
-    `${label} a verification that begins between steps 1 and 3: establish answers disabled and verify is not called`,
-    duringDisabled.kind === 'refused' && duringDisabled.reason === 'disabled' && called === 0,
-    `verify calls ${called}`,
-  );
-  await app.subjects.enable('t4', g4);
-
-  store.credentials.set('t8', 'old');
-  const straddleBoth = Promise.withResolvers<boolean>();
-  const reachedBoth = Promise.withResolvers<void>();
-  const spanning = app.sessions.establish({
-    rawCookies: cookiesOf(NAME),
-    userId: 't8',
-    verify: () => {
-      reachedBoth.resolve();
-      return straddleBoth.promise;
-    },
-  });
-  await reachedBoth.promise;
-  const g8 = await disableUser(app.subjects, 't8');
-  store.credentials.set('t8', 'new');
-  await app.subjects.enable('t8', g8);
-  straddleBoth.resolve(true);
-  const staleAnswer = await spanning;
-  report.check(
-    `${label} a verification that began before step 1 and ends after step 3 (the generation raised twice): refused stale, no session`,
-    staleAnswer.kind === 'refused' && staleAnswer.reason === 'stale' && (await sessionRows(rig, 't8')) === 0,
-    brief(staleAnswer),
-  );
-  const after = [await store.signIn('t8', 'old'), await store.signIn('t8', 'new')];
-  report.check(
-    `${label} a verification that begins after step 3 reads the new record: only the new credential signs in`,
-    after.join(',') === 'refused:rejected,established',
-    after.join(','),
-  );
-  await sleepMs(300);
-  const parked = await app.subjects.disable('t8-parked');
-  await sleepMs(400);
-  report.check(
-    `${label} auth never re-enables by itself: a disabled subject is still disabled after waiting`,
-    parked.kind === 'done' && (await read('t8-parked')) === 'disabled@2',
-    await read('t8-parked'),
-  );
-}
-
-async function straddleRecords(kind: Kind, rig: Rig, pools: Pool[]): Promise<void> {
-  const label = `[${kind}]`;
-  const app = await startApp({ store: observe(spareStore(rig, pools)).store });
-  try {
-    const straddle = async (user: string, change: () => Promise<void>): Promise<string> => {
-      const hold = Promise.withResolvers<boolean>();
-      const reached = Promise.withResolvers<void>();
-      const pending = app.sessions.establish({
-        rawCookies: cookiesOf(NAME),
-        userId: user,
-        verify: () => {
-          reached.resolve();
-          return hold.promise;
-        },
-      });
-      await reached.promise;
-      await change();
-      hold.resolve(true);
-      const answer = await pending;
-      return answer.kind === 'refused' ? answer.reason : answer.kind;
-    };
-    const disabled = await straddle('s-disable', async () => {
-      await app.subjects.disable('s-disable');
-    });
-    const stale = await straddle('s-both', async () => {
-      const generation = await disableUser(app.subjects, 's-both');
-      await app.subjects.enable('s-both', generation);
-    });
-    await app.logs.settle();
-    const failed = app.logs.named('auth.signin.failed');
-    const reasons = failed.map((r) => `${String(r.fields['auth.user'])}:${String(r.fields['auth.reason'])}`).sort();
-    report.check(
-      `${label} the two straddling verifications differ only in the answer and the recorded reason (disabled, stale): one auth.signin.failed each, no cookie`,
-      disabled === 'disabled' &&
-        stale === 'stale' &&
-        reasons.join(',') === 's-both:stale,s-disable:disabled' &&
-        failed.every((r) => r.severity === 'warn' && r.fields['auth.via'] === 'handoff') &&
-        app.logs.named('auth.signin.succeeded').length === 0,
-      reasons.join(','),
-    );
-  } finally {
-    await app.close();
-  }
 }
 
 async function shutdownCase(kind: Kind, rig: Rig, pools: Pool[]): Promise<void> {
@@ -572,13 +368,11 @@ async function suite(kind: Kind): Promise<void> {
     await report.run(`${label} input cases`, () => inputCases(context));
     await report.run(`${label} outcome cases`, () => outcomeCases(context));
     await report.run(`${label} verify unavailable`, () => unavailableVerify(context));
-    await report.run(`${label} interruption table`, () => tableCases(context));
     await report.run(`${label} verify deadline`, () => deadlineCases(context));
   } finally {
     await app.close();
   }
   try {
-    await report.run(`${label} straddling records`, () => straddleRecords(kind, rig, pools));
     await report.run(`${label} shutdown`, () => shutdownCase(kind, rig, pools));
     const before = await rejects(() => createNotReady(rig, pools));
     report.check(

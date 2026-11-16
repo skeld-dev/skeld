@@ -12,8 +12,6 @@ import { createReport } from './rig/report.ts';
 import { sleep } from './rig/util.ts';
 
 const report = createReport(
-  'v06',
-  'password-helpers',
   'the helpers hash and verify through platform Argon2id, parse a record before allocating, bound input and parameters, advise rehash, and touch no store',
 );
 const b64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64').replace(/=+$/, '');

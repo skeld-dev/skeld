@@ -19,12 +19,12 @@ import {
   observe,
   type Observed,
 } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 import { cleanAll, type Kind, makeRig, pgBase, type Rig, rigKinds } from './support-store.ts';
 
 const statement =
   'while the store a check needs is unavailable every request whose required check cannot run is refused 503 AUTH_UNAVAILABLE and never admitted; public requests, optional requests with no credential and JWT requests under a policy with no limit continue; nothing is served from a cache or fallback and service resumes when the store answers';
-const report = createReport('v03', statement);
+const report = createReport(statement);
 
 const NAME = '__Host-skeld';
 const UNAVAILABLE = '{"status":503,"code":"AUTH_UNAVAILABLE","message":"Service unavailable"}';

@@ -13,8 +13,6 @@ import { behaviorKinds as kinds } from '../support/test-profile.ts';
 
 const pki = await childPki(import.meta.url);
 const report = createReport(
-  'v05',
-  'oidc-mapping',
   'the trusted mapper receives the verified issuer and subject and may deny; an email alone attaches nothing; a denied or changed mapping issues no session; no email, name or token text reaches a store row or a log record',
 );
 const host = await providerHost(pki.good);

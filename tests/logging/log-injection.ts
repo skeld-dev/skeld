@@ -547,7 +547,7 @@ async function ceilingRun(report: ReturnType<typeof createReport>): Promise<void
 }
 
 async function main(): Promise<void> {
-  const report = createReport('log-injection');
+  const report = createReport();
   await hostileRun(report);
   await ceilingRun(report);
   report.finish();

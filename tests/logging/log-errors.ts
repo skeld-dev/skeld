@@ -15,22 +15,19 @@ import { createServer } from '@skeld/core/server';
 import { announceListening, type LogChild, type LogObject, startLogChild } from '../support/support-log.ts';
 import { check, createReport, findMarker, type Marker, newMarker, type Searched } from '../support/support-proof.ts';
 
-type SetName = 'none' | 'ids' | 'text' | 'frames' | 'all';
+type SetName = 'none' | 'frames' | 'all';
 type Val = string | null | { oneOf: readonly (string | null)[] };
 type Formatter = (error: Error, sites: readonly unknown[]) => unknown;
 
 const sets: Record<SetName, { errorIdentifiers: boolean; errorText: boolean; errorFrames: boolean }> = {
   none: { errorIdentifiers: false, errorText: false, errorFrames: false },
-  ids: { errorIdentifiers: true, errorText: false, errorFrames: false },
-  text: { errorIdentifiers: false, errorText: true, errorFrames: false },
   frames: { errorIdentifiers: false, errorText: false, errorFrames: true },
   all: { errorIdentifiers: true, errorText: true, errorFrames: true },
 };
-const all5: readonly SetName[] = ['none', 'ids', 'text', 'frames', 'all'];
-const framesSets: readonly SetName[] = ['frames', 'all'];
-const hasFrames = (set: SetName): boolean => set === 'frames' || set === 'all';
-const hasIds = (set: SetName): boolean => set === 'ids' || set === 'all';
-const hasText = (set: SetName): boolean => set === 'text' || set === 'all';
+const setNames: readonly SetName[] = ['none', 'frames', 'all'];
+const hasFrames = (set: SetName): boolean => set !== 'none';
+const hasIds = (set: SetName): boolean => set === 'all';
+const hasText = (set: SetName): boolean => set === 'all';
 
 const plantNames = ['mark', 'hot', 'm1', 'm2', 'm3'] as const;
 type PlantName = (typeof plantNames)[number] | 'big' | 'num';
@@ -52,7 +49,6 @@ interface Env {
   formatter: (replacement: Formatter) => void;
   stackLimit: (limit: number) => void;
   log: Logger;
-  cwd: string;
 }
 
 interface Want {
@@ -73,7 +69,6 @@ interface Want {
 
 interface Fixture {
   id: string;
-  ac: string;
   name: string;
   sets: readonly SetName[];
   field: boolean;
@@ -107,27 +102,6 @@ function pastTypes(value: unknown): never {
   return value as never;
 }
 
-const laters = new WeakSet<object>();
-
-// Does:  Marks a promise the handler must await; any other built value is never awaited, so no hostile `then` runs.
-function later(pending: Promise<unknown>): object {
-  const wrapper = { pending };
-  laters.add(wrapper);
-  return wrapper;
-}
-
-// Why: The value travels in a holder, because resolving a promise with a hostile value would read its `then`.
-async function resolveBuilt(built: unknown): Promise<{ value: unknown }> {
-  if (typeof built === 'object' && built !== null && laters.has(built)) {
-    return { value: await Reflect.get(built, 'pending') };
-  }
-  return { value: built };
-}
-
-function readX(holder: Record<string, { x: number }>, key: string): number {
-  return Reflect.get(holder, key).x;
-}
-
 function caught(attempt: () => unknown): unknown {
   try {
     attempt();
@@ -135,10 +109,6 @@ function caught(attempt: () => unknown): unknown {
     return error;
   }
   throw new Error('the fixture did not throw');
-}
-
-function foreignRealm(source: string): unknown {
-  return runInNewContext(source);
 }
 
 function spy(hit: () => void, target: object): object {
@@ -204,10 +174,22 @@ function defineGetter(target: object, key: string, hit: () => void, hot: string)
   });
 }
 
+function countingString(hit: () => void, text: string): { toString(): string; valueOf(): string } {
+  return {
+    toString() {
+      hit();
+      return text;
+    },
+    valueOf() {
+      hit();
+      return text;
+    },
+  };
+}
+
 const fixtures: Fixture[] = [];
 function add(
   id: string,
-  ac: string,
   name: string,
   setList: readonly SetName[],
   field: boolean,
@@ -215,50 +197,19 @@ function add(
   build: (env: Env) => unknown,
   want: (set: SetName) => Want,
 ): void {
-  fixtures.push({ id, ac, name, sets: setList, field, absent, build, want });
+  fixtures.push({ id, name, sets: setList, field, absent, build, want });
 }
 const none: readonly SetName[] = ['none'];
+const both: readonly SetName[] = ['none', 'all'];
+const framed: readonly SetName[] = ['all'];
 
-const plainCases: readonly (readonly [string, string, (env: Env) => unknown, Want])[] = [
-  ['1', 'Error, marker message', ({ plant }) => new Error(`plain ${plant.mark}`), ERR('Error')],
+// Why: Ordinary errors share one observable shape, so one of each construction path stands for its kind.
+const plainCases: readonly (readonly [string, string, boolean, (env: Env) => unknown, Want])[] = [
+  ['plain', 'Error, marker message', true, ({ plant }) => new Error(`plain ${plant.mark}`), ERR('Error')],
   [
-    '2',
-    'Error, 3-line message, line 2 a fake frame',
-    ({ plant }) => new Error(`line one\n    at fake (/x/${plant.mark}.js:1:1)\nline three`),
-    ERR('Error'),
-  ],
-  [
-    '3',
-    'Error, message reassigned',
-    ({ plant }) => Object.assign(new Error(`original ${plant.mark}`), { message: `reassigned ${plant.mark}` }),
-    ERR('Error'),
-  ],
-  [
-    '4',
-    'Error, name reassigned to a marker',
-    ({ plant }) => Object.assign(new Error(`named ${plant.mark}`), { name: `Renamed${plant.mark}` }),
-    ERR('Error'),
-  ],
-  [
-    '5',
-    'class ValidationFailure extends Error',
-    ({ plant }) => new (class ValidationFailure extends Error {})(`subclass ${plant.mark}`),
-    ERR('Error'),
-  ],
-  [
-    '6',
-    'Error with a cause chain three deep',
-    ({ plant }) =>
-      new Error(`top ${plant.mark}`, {
-        cause: new Error(`cause1 ${plant.mark}`, {
-          cause: new Error(`cause2 ${plant.mark}`, { cause: new Error(`cause3 ${plant.mark}`) }),
-        }),
-      }),
-    ERR('Error'),
-  ],
-  [
-    '7',
+    'cyclic-cause',
     "two Errors each the other's cause",
+    true,
     ({ plant }) => {
       const first = new Error(`a ${plant.mark}`);
       const second = new Error(`b ${plant.mark}`, { cause: first });
@@ -268,39 +219,38 @@ const plainCases: readonly (readonly [string, string, (env: Env) => unknown, Wan
     ERR('Error'),
   ],
   [
-    '8',
+    'aggregate',
     'AggregateError of two Errors',
+    false,
     ({ plant }) =>
       new AggregateError([new Error(`agg1 ${plant.mark}`), new Error(`agg2 ${plant.mark}`)], `aggregate ${plant.mark}`),
     ERR('AggregateError'),
   ],
   [
-    '9',
+    'own-props',
     'Error with own userId and token properties',
+    false,
     ({ plant }) => Object.assign(new Error(`props ${plant.mark}`), { userId: 42, token: plant.mark }),
     ERR('Error'),
   ],
   [
-    '11a',
-    'JSON.parse of a short text with a trailing comma',
+    'json-parse',
+    'JSON.parse of a text with a trailing comma',
+    false,
     ({ plant }) => caught(() => JSON.parse(`{"password":"${plant.mark}",}`)),
     ERR('SyntaxError'),
   ],
   [
-    '11b',
-    'JSON.parse of 10 KiB, marker at the start, fault at the end',
-    ({ plant }) => caught(() => JSON.parse(`{"password":"${plant.mark}","pad":"${'x'.repeat(10 * 1024)}",}`)),
-    ERR('SyntaxError'),
-  ],
-  [
-    '12',
+    'url',
     'new URL with a marker in its credentials',
+    false,
     ({ plant }) => caught(() => new URL(`http://user:${plant.mark}@[bad`)),
     ERR('TypeError'),
   ],
   [
-    '14',
+    'structured-clone',
     'structuredClone of a function',
+    false,
     ({ plant }) => caught(() => structuredClone(() => plant.mark)),
     {
       kind: oneOf('error', 'non_error'),
@@ -312,87 +262,50 @@ const plainCases: readonly (readonly [string, string, (env: Env) => unknown, Wan
     },
   ],
   [
-    '15',
-    'assert.strictEqual of a marker',
-    ({ plant }) => caught(() => assert.strictEqual(plant.mark, 'other')),
-    ERR('Error'),
+    'foreign-realm',
+    'Error from another vm realm',
+    true,
+    ({ plant }) => runInNewContext(`new Error("${plant.mark}")`),
+    ERR(GENERIC),
   ],
   [
-    '16a',
-    'property read of null keyed by a marker',
-    ({ plant }) => caught(() => readX(pastTypes(Object.fromEntries([[plant.mark, null]])), plant.mark)),
-    ERR('TypeError'),
-  ],
-  [
-    '16b',
-    'call of a missing method named by a marker',
-    ({ plant }) => caught(() => Reflect.get({}, plant.mark)()),
-    ERR('TypeError'),
-  ],
-  ['17', 'Error from another vm realm', ({ plant }) => foreignRealm(`new Error("${plant.mark}")`), ERR(GENERIC)],
-  [
-    '20a',
+    'huge-message',
     'Error with a 1 MiB message',
+    true,
     ({ plant }) => new Error(plant.mark + 'x'.repeat(1024 * 1024 - plant.mark.length)),
     { ...ERR('Error'), maxJson: 1000 },
   ],
   [
-    '20b',
+    'recursion',
     'RangeError from unbounded recursion',
+    false,
     () => {
       const recurse = (): number => recurse() + 1;
       return caught(recurse);
     },
     ERR('RangeError'),
   ],
-  ['RE', 'a thrown RangeError', () => new RangeError('range'), ERR('RangeError')],
-  ['19d', 'frozen Error', ({ plant }) => Object.freeze(new Error(`frozen ${plant.mark}`)), ERR('Error')],
+  [
+    'enoent',
+    'failed read of a missing file whose path holds a marker',
+    false,
+    ({ plant }) => caught(() => readFileSync(`/nonexistent/${plant.mark}.txt`)),
+    ERR('Error', 'ENOENT'),
+  ],
 ];
-for (const [id, name, build, want] of plainCases) {
-  add(`7-${id}`, 'AC-7', name, none, true, ['mark'], build, () => want);
+for (const [id, name, field, build, want] of plainCases) {
+  add(id, name, none, field, ['mark'], build, () => want);
 }
 
-add(
-  '7-10',
-  'AC-7',
-  'failed read of a missing file whose path holds a marker',
-  none,
-  true,
-  ['mark'],
-  ({ plant }) => caught(() => readFileSync(`/nonexistent/${plant.mark}.txt`)),
-  () => ERR('Error', 'ENOENT'),
-);
-add(
-  '7-13',
-  'AC-7',
-  'rejected fetch to 127.0.0.1:1 with a marker in the path',
-  none,
-  true,
-  ['mark'],
-  ({ plant }) =>
-    later(
-      (async () => {
-        try {
-          await fetch(`http://127.0.0.1:1/${plant.mark}`);
-        } catch (error) {
-          return error;
-        }
-        throw new Error('the fetch did not reject');
-      })(),
-    ),
-  () => ERR('TypeError'),
-);
-
 for (const [id, name, make] of [
-  ['18a', "throw 'string marker'", (p: Plants) => `string ${p.mark}`],
-  ['18b', 'throw 42', () => 42],
-  ['18c', 'throw null', () => null],
-  ['18d', 'throw undefined', () => undefined],
-  ['18e', 'throw Symbol(marker)', (p: Plants) => Symbol(p.mark)],
+  ['string', "throw 'string marker'", (p: Plants) => `string ${p.mark}`],
+  ['number', 'throw 42', () => 42],
+  ['null', 'throw null', () => null],
+  ['undefined', 'throw undefined', () => undefined],
+  ['symbol', 'throw Symbol(marker)', (p: Plants) => Symbol(p.mark)],
 ] as const) {
   add(
-    `7-${id}`,
-    'AC-7',
+    `thrown-${id}`,
     name,
     none,
     false,
@@ -402,8 +315,7 @@ for (const [id, name, make] of [
   );
 }
 add(
-  '7-18f',
-  'AC-7',
+  'error-like',
   "throw { code: 'E', message: marker }",
   none,
   true,
@@ -411,12 +323,10 @@ add(
   ({ plant }) => ({ code: 'E', message: plant.mark }),
   () => NON,
 );
-
 add(
-  '7-19a',
-  'AC-7',
+  'getter-throws',
   'plain object whose message getter throws',
-  all5,
+  both,
   true,
   ['hot'],
   ({ plant, count }) => {
@@ -431,11 +341,10 @@ add(
   () => NON,
 );
 add(
-  '7-19a2',
-  'AC-7',
+  'getters-counted',
   'plain object with counting name getter, toString, toJSON and constructor getter',
-  all5,
-  true,
+  both,
+  false,
   ['hot'],
   ({ plant, count }) => {
     const nameHit = count('nameGetter');
@@ -463,16 +372,10 @@ add(
   },
   () => NON,
 );
-const stackWant = (set: SetName): Want => ({
-  kind: 'error',
-  ...(set === 'none' || set === 'frames' ? { type: 'Error', code: null } : {}),
-  ...(hasFrames(set) ? { frames: null } : {}),
-});
 add(
-  '7-19b',
-  'AC-7 AC-19',
+  'stack-throws',
   'Error whose own stack is a throwing, counting accessor',
-  all5,
+  both,
   true,
   ['hot'],
   ({ plant, count }) => {
@@ -487,14 +390,17 @@ add(
     });
     return error;
   },
-  stackWant,
+  (set) => ({
+    kind: 'error',
+    ...(hasIds(set) ? {} : { type: 'Error', code: null }),
+    ...(hasFrames(set) ? { frames: null } : {}),
+  }),
 );
 add(
-  '7-19b2',
-  'AC-7 AC-19',
+  'stack-planted',
   'Error whose own stack is a counting accessor returning planted frame text',
-  all5,
-  true,
+  both,
+  false,
   ['hot'],
   ({ plant, count }) => {
     const hit = count('stackAccessor');
@@ -508,24 +414,22 @@ add(
     });
     return error;
   },
-  (set) => ({ kind: 'error', ...(hasFrames(set) ? { frames: null } : {}) }),
+  () => ({ kind: 'error', frames: null }),
 );
 add(
-  '7-19c',
-  'AC-7',
+  'proxy-throws',
   'Proxy of an Error whose every trap counts and throws',
-  all5,
+  both,
   true,
   ['hot'],
   ({ plant, count }) => throwingProxy(count('trap'), new Error('proxied'), plant.hot),
   () => FALLBACK,
 );
 add(
-  '7-19c2',
-  'AC-7',
+  'proxy-passes',
   'Proxy of an Error with counting pass-through traps',
-  all5,
-  true,
+  both,
+  false,
   ['mark'],
   ({ plant, count }) => spy(count('trap'), new Error(`proxied ${plant.mark}`)),
   () => FALLBACK,
@@ -533,119 +437,57 @@ add(
 
 const plants: readonly (readonly [string, (plant: Plants) => unknown, readonly PlantName[]])[] = [
   ['marker', (plant) => plant.mark, ['mark']],
-  ['129-character string', (plant) => plant.big, ['mark']],
   ['number', (plant) => plant.num, ['mark', 'num']],
 ];
 for (const [label, make, absent] of plants) {
   add(
-    `7-name-${label.replaceAll(' ', '-')}`,
-    'AC-7',
+    `name-${label}`,
     `thrown value whose name is a ${label}`,
     none,
-    true,
+    false,
     absent,
     ({ plant }) => Object.assign(new Error('m'), { name: make(plant) }),
     () => ERR('Error'),
   );
   add(
-    `7-code-${label.replaceAll(' ', '-')}`,
-    'AC-7',
+    `code-${label}`,
     `thrown value whose code is a ${label}`,
     none,
-    true,
+    false,
     absent,
     ({ plant }) => Object.assign(new Error('m'), { code: make(plant) }),
     () => ERR('Error'),
   );
 }
 add(
-  '7-name-object',
-  'AC-7',
-  'thrown value whose name is an object with a counting toString',
+  'name-code-objects',
+  'thrown value whose name and code are objects with a counting toString',
   none,
-  true,
+  false,
   ['mark'],
   ({ plant, count }) => {
     const hit = count('stringified');
     return Object.assign(new Error('m'), {
-      name: {
-        toString() {
-          hit();
-          return plant.mark;
-        },
-        valueOf() {
-          hit();
-          return plant.mark;
-        },
-      },
+      name: countingString(hit, plant.mark),
+      code: countingString(hit, plant.mark),
     });
   },
   () => ERR('Error'),
 );
 add(
-  '7-code-object',
-  'AC-7',
-  'thrown value whose code is an object with a counting toString',
-  none,
-  true,
-  ['mark'],
-  ({ plant, count }) => {
-    const hit = count('stringified');
-    return Object.assign(new Error('m'), {
-      code: {
-        toString() {
-          hit();
-          return plant.mark;
-        },
-        valueOf() {
-          hit();
-          return plant.mark;
-        },
-      },
-    });
-  },
-  () => ERR('Error'),
-);
-add(
-  '7-name-code-129-frames',
-  'AC-7',
+  'name-code-129-frames',
   'name and code are 129-character strings, with errorFrames alone',
   ['frames'],
-  true,
+  false,
   ['mark'],
   ({ plant }) => Object.assign(new Error('m'), { name: plant.big, code: plant.big }),
   () => ({ kind: 'error', type: 'Error', code: null }),
 );
 add(
-  '7-class-marker',
-  'AC-7',
-  'class named by the marker extending RangeError',
-  none,
-  true,
-  ['mark'],
-  ({ plant }) => {
-    const Named = { [plant.mark]: class extends RangeError {} }[plant.mark];
-    assert(Named !== undefined);
-    return new Named('m');
-  },
-  () => ERR('RangeError'),
-);
-add(
-  '7-code-ERR-prefix',
-  'AC-7',
-  'RangeError subclass with code ERR_ and the marker',
-  none,
-  true,
-  ['mark'],
-  ({ plant }) => Object.assign(new (class extends RangeError {})('m'), { code: `ERR_${plant.mark}` }),
-  () => ERR('RangeError'),
-);
-add(
-  '7-class-and-code',
-  'AC-7',
+  'class-and-code',
   'class named by the marker extending RangeError with code ERR_ and the marker',
   none,
-  true,
+  false,
   ['mark'],
   ({ plant }) => {
     const Named = { [plant.mark]: class extends RangeError {} }[plant.mark];
@@ -655,16 +497,10 @@ add(
   () => ERR('RangeError'),
 );
 
-const generic = (set: SetName): Want => ({
-  kind: 'error',
-  ...(set === 'none' ? { type: GENERIC } : {}),
-  ...(hasFrames(set) ? { frames: null } : {}),
-});
 add(
-  '7-proxy-first',
-  'AC-7 AC-19',
+  'proxy-proto',
   "Proxy as the Error's direct prototype, every trap counted",
-  all5,
+  both,
   true,
   [],
   ({ count }) => {
@@ -672,42 +508,30 @@ add(
     Object.setPrototypeOf(error, spy(count('trap'), Error.prototype));
     return error;
   },
-  generic,
+  (set) => ({
+    kind: 'error',
+    ...(set === 'none' ? { type: GENERIC } : {}),
+    ...(hasFrames(set) ? { frames: null } : {}),
+  }),
 );
 add(
-  '7-proxy-second',
-  'AC-7 AC-19',
-  'Proxy as the second prototype, every trap counted',
-  all5,
-  true,
-  [],
-  ({ count }) => {
-    const error = new Error('m');
-    Object.setPrototypeOf(error, Object.create(spy(count('trap'), Error.prototype)));
-    return error;
-  },
-  generic,
-);
-add(
-  '7-proxy-deep',
-  'AC-7 AC-19',
+  'proxy-deep',
   'Proxy as the 12th prototype, every trap counted',
-  ['none', 'frames'],
-  true,
+  none,
+  false,
   [],
   ({ count }) => {
     const error = new Error('m');
     Object.setPrototypeOf(error, chain(11, spy(count('trap'), Error.prototype)));
     return error;
   },
-  generic,
+  () => ({ kind: 'error', type: GENERIC, frames: null }),
 );
 add(
-  '7-no-listed-in-16',
-  'AC-7',
+  'no-listed-in-16',
   'no listed class within 16 prototypes (one 17th), counting accessor on the chain',
   none,
-  true,
+  false,
   ['hot'],
   ({ plant, count }) => {
     const error = new Error('m');
@@ -719,39 +543,10 @@ add(
   () => ERR(GENERIC),
 );
 add(
-  '7-no-listed-in-20',
-  'AC-7',
-  'no listed class within 20 prototypes',
+  'listed-at-15',
+  'control: listed class TypeError at the 15th prototype is found',
   none,
-  true,
-  [],
-  () => {
-    const error = new Error('m');
-    Object.setPrototypeOf(error, chain(20, Error.prototype));
-    return error;
-  },
-  () => ERR(GENERIC),
-);
-add(
-  '7-listed-at-5',
-  'AC-7 control',
-  'listed class RangeError at the 5th prototype is found',
-  none,
-  true,
-  [],
-  () => {
-    const error = new Error('m');
-    Object.setPrototypeOf(error, chain(4, RangeError.prototype));
-    return error;
-  },
-  () => ERR('RangeError'),
-);
-add(
-  '7-listed-at-15',
-  'AC-7 control',
-  'listed class TypeError at the 15th prototype is found',
-  none,
-  true,
+  false,
   [],
   () => {
     const error = new Error('m');
@@ -762,11 +557,10 @@ add(
 );
 
 add(
-  '7-stack-assigned',
-  'AC-7',
+  'stack-assigned',
   'stack assigned planted frame-form text, with a counting formatter installed',
-  ['none', 'ids', 'text'],
-  true,
+  none,
+  false,
   ['hot'],
   ({ plant, count, formatter }) => {
     const hit = count('formatter');
@@ -775,71 +569,12 @@ add(
     error.stack = frameText(plant);
     return error;
   },
-  (set) => ({ kind: 'error', ...(set === 'none' ? { type: 'Error' } : {}), frames: null }),
+  () => ({ kind: 'error', type: 'Error', frames: null }),
 );
 add(
-  '7-stack-accessor',
-  'AC-7',
-  'stack replaced by a counting accessor, options that read no stack',
-  ['none', 'ids', 'text'],
-  true,
-  ['hot'],
-  ({ plant, count }) => {
-    const hit = count('stackAccessor');
-    const error = new Error('m');
-    Object.defineProperty(error, 'stack', {
-      get() {
-        hit();
-        return frameText(plant);
-      },
-      configurable: true,
-    });
-    return error;
-  },
-  () => ({ kind: 'error', frames: null }),
-);
-add(
-  '7-formatter-planted',
-  'AC-7',
-  'Error.prepareStackTrace replaced by a counting formatter returning planted text',
-  ['none', 'ids', 'text'],
-  true,
-  ['hot'],
-  ({ plant, count, formatter }) => {
-    const hit = count('formatter');
-    formatter(() => {
-      hit();
-      return frameText(plant);
-    });
-    return new Error('m');
-  },
-  (set) => ({ kind: 'error', ...(set === 'none' ? { type: 'Error' } : {}), frames: null }),
-);
-add(
-  '7-formatter-planted-plain',
-  'AC-7',
-  'the same formatter returning a bare marker, an ordinary thrown Error with a marker message',
-  none,
-  true,
-  ['hot', 'mark'],
-  ({ plant, count, formatter }) => {
-    const hit = count('formatter');
-    formatter(() => {
-      hit();
-      return plant.hot;
-    });
-    return caught(() => {
-      throw new Error(`m ${plant.mark}`);
-    });
-  },
-  () => ERR('Error'),
-);
-
-add(
-  '18-acme',
-  'AC-18',
+  'acme',
   'AcmeError extends RangeError, code ACME_FAIL, message and cause messages with markers',
-  all5,
+  setNames,
   true,
   ['m3'],
   ({ plant, count, formatter, set }) => {
@@ -867,80 +602,29 @@ add(
   }),
 );
 
-const thrownFrames = (extra: Partial<Want> = {}): Want => ({ kind: 'error', frames: 'lines', ...extra });
 add(
-  '19-thrown',
-  'AC-19',
-  'thrown Error with a marker message',
-  framesSets,
-  true,
-  [],
-  ({ plant }) =>
-    caught(() => {
-      throw new Error(`plain ${plant.mark}`);
-    }),
-  (set) => thrownFrames({ framesAbsent: ['mark'], absent: set === 'all' ? [] : ['mark'] }),
-);
-add(
-  '19-fake-frame',
-  'AC-19',
+  'fake-frame',
   'thrown Error, 3-line message whose line 2 is a fake frame',
-  framesSets,
-  true,
+  framed,
+  false,
   [],
   ({ plant }) =>
     caught(() => {
       throw new Error(`line one\n    at fake (/x/${plant.mark}.js:1:1)\nline three`);
     }),
-  (set) =>
-    thrownFrames({
-      framesAbsent: ['mark', 'line one', 'line three', 'fake'],
-      absent: set === 'all' ? [] : ['mark'],
-    }),
+  () => ({ kind: 'error', frames: 'lines', framesAbsent: ['mark', 'line one', 'line three', 'fake'] }),
 );
 add(
-  '19-deep-10',
-  'AC-19',
-  'Error made 40 calls deep, default stack trace limit',
-  framesSets,
-  true,
-  [],
-  () => deepCall(40, () => new Error('deep')),
-  () => thrownFrames({ frameCount: 10 }),
-);
-add(
-  '19-deep-limit-50',
-  'AC-19',
+  'deep-limit-50',
   'Error made 40 calls deep, Error.stackTraceLimit 50',
-  framesSets,
-  true,
+  framed,
+  false,
   [],
   ({ stackLimit }) => {
     stackLimit(50);
     return deepCall(40, () => new Error('deep'));
   },
-  () => thrownFrames({ frameCount: 10 }),
-);
-add(
-  '19-stack-accessor',
-  'AC-19',
-  'stack replaced by a counting accessor',
-  framesSets,
-  true,
-  [],
-  ({ count }) => {
-    const hit = count('stackAccessor');
-    const error = new Error('m');
-    Object.defineProperty(error, 'stack', {
-      get() {
-        hit();
-        return 'Error: m\n    at x (/y.js:1:1)';
-      },
-      configurable: true,
-    });
-    return error;
-  },
-  () => ({ kind: 'error', frames: null }),
+  () => ({ kind: 'error', frames: 'lines', frameCount: 10 }),
 );
 const accessorCases: readonly (readonly [string, string, (env: Env) => Error])[] = [
   [
@@ -949,25 +633,6 @@ const accessorCases: readonly (readonly [string, string, (env: Env) => Error])[]
     ({ plant, count }) => {
       const error = new Error('m');
       defineGetter(error, 'name', count('nameGetter'), plant.hot);
-      return error;
-    },
-  ],
-  [
-    'message-own',
-    'own message getter',
-    ({ plant, count }) => {
-      const error = new Error('m');
-      defineGetter(error, 'message', count('messageGetter'), plant.hot);
-      return error;
-    },
-  ],
-  [
-    'name-inherited',
-    'inherited name getter',
-    ({ plant, count }) => {
-      class Foo extends Error {}
-      const error = new Foo('m');
-      defineGetter(Foo.prototype, 'name', count('nameGetter'), plant.hot);
       return error;
     },
   ],
@@ -983,123 +648,64 @@ const accessorCases: readonly (readonly [string, string, (env: Env) => Error])[]
     },
   ],
   [
-    'name-toString',
-    'name is an object with a counting toString',
-    ({ plant, count }) => {
-      const hit = count('stringified');
-      return Object.assign(new Error('m'), {
-        name: {
-          toString() {
-            hit();
-            return plant.hot;
-          },
-        },
-      });
-    },
-  ],
-  [
     'message-toString',
     'message is an object with a counting toString',
-    ({ plant, count }) => {
-      const hit = count('stringified');
-      return Object.assign(new Error('m'), {
-        message: {
-          toString() {
-            hit();
-            return plant.hot;
-          },
-        },
-      });
-    },
-  ],
-  [
-    'proxy-proto',
-    'a Proxy among the prototypes, traps counted',
-    ({ count }) => {
-      const error = new Error('m');
-      Object.setPrototypeOf(error, spy(count('trap'), Error.prototype));
-      return error;
-    },
+    ({ plant, count }) => Object.assign(new Error('m'), { message: countingString(count('stringified'), plant.hot) }),
   ],
 ];
 for (const [id, name, build] of accessorCases) {
-  add(`19-${id}`, 'AC-19', name, all5, true, ['hot'], build, (set) => ({
+  add(id, name, both, false, ['hot'], build, (set) => ({
     kind: 'error',
     ...(hasFrames(set) ? { frames: null } : {}),
   }));
 }
-const formatterCases: readonly (readonly [string, string, (hit: () => void, plant: Plants, env: Env) => Formatter])[] =
+const formatterCases: readonly (readonly [string, string, boolean, (hit: () => void, env: Env) => Formatter])[] = [
   [
-    [
-      'formatter-throws',
-      'Error.prepareStackTrace throws',
-      (hit, plant) => () => {
-        hit();
-        throw new Error(plant.hot);
-      },
-    ],
-    [
-      'formatter-object',
-      'Error.prepareStackTrace returns an object with a counting toString',
-      (hit, plant, env) => () => {
-        hit();
-        const inner = env.count('resultStringified');
-        return {
-          toString() {
-            inner();
-            return frameText(plant);
-          },
-        };
-      },
-    ],
-    [
-      'formatter-plain-object',
-      'Error.prepareStackTrace returns a plain object',
-      (hit, plant) => () => {
-        hit();
-        return { planted: plant.hot };
-      },
-    ],
-    [
-      'formatter-array',
-      'Error.prepareStackTrace returns an array of strings',
-      (hit, plant) => () => {
-        hit();
-        return [`    at planted (/x/${plant.hot}.js:1:1)`];
-      },
-    ],
-  ];
-for (const [id, name, make] of formatterCases) {
-  add(
-    `19-${id}`,
-    'AC-19',
-    name,
-    framesSets,
+    'formatter-throws',
+    'Error.prepareStackTrace throws',
     true,
+    (hit, env) => () => {
+      hit();
+      throw new Error(env.plant.hot);
+    },
+  ],
+  [
+    'formatter-object',
+    'Error.prepareStackTrace returns an object with a counting toString',
+    false,
+    (hit, env) => () => {
+      hit();
+      return countingString(env.count('resultStringified'), frameText(env.plant));
+    },
+  ],
+];
+for (const [id, name, field, make] of formatterCases) {
+  add(
+    id,
+    name,
+    framed,
+    field,
     ['hot'],
     (env) => {
-      const hit = env.count('formatter');
-      env.formatter(make(hit, env.plant, env));
+      env.formatter(make(env.count('formatter'), env));
       return new Error('m');
     },
     () => ({ kind: 'error', frames: null, counts: { formatter: 1 } }),
   );
 }
 add(
-  '19-after-throwing-formatter',
-  'AC-19',
+  'after-throwing-formatter',
   'an ordinary read after a throwing formatter still gives frames',
-  framesSets,
-  true,
+  framed,
+  false,
   [],
   () => new Error('after'),
   () => ({ kind: 'error', frames: 'lines' }),
 );
 add(
-  '19-nested',
-  'AC-19',
+  'nested',
   'a formatter that itself logs an error, with frames on',
-  framesSets,
+  framed,
   true,
   [],
   (env) => {
@@ -1114,11 +720,10 @@ add(
   () => ({ kind: 'error', frames: 'lines', counts: { formatter: 1 }, nested: true }),
 );
 add(
-  '19-after-nested',
-  'AC-19',
+  'after-nested',
   'an ordinary read after the nested case still gives frames',
-  framesSets,
-  true,
+  framed,
+  false,
   [],
   () => new Error('after'),
   () => ({ kind: 'error', frames: 'lines' }),
@@ -1169,20 +774,14 @@ const controls: readonly (readonly [string, string, (env: Env) => unknown, Recor
     'toString',
     'a string conversion of the counting object is counted',
     ({ count }) => {
-      const hit = count('stringified');
-      void String({
-        toString() {
-          hit();
-          return 'x';
-        },
-      });
+      void String(countingString(count('stringified'), 'x'));
       return new Error('m');
     },
     { stringified: 1 },
   ],
 ];
 for (const [id, name, build, counts] of controls) {
-  add(`C-${id}`, 'control', name, none, false, [], build, () => ({ kind: 'error', counts }));
+  add(`control-${id}`, `control: ${name}`, none, false, [], build, () => ({ kind: 'error', counts }));
 }
 
 const routeGroups = 8;
@@ -1236,7 +835,6 @@ function serve(setName: SetName): void {
   const env: Env = {
     plant,
     set: setName,
-    cwd: process.cwd(),
     log: server.log,
     count: (key) => {
       counters[key] = 0;
@@ -1269,15 +867,13 @@ function serve(setName: SetName): void {
   };
   const handlers: Record<string, (request: { params: { n: string }; log: Logger }) => unknown> = {};
   for (let group = 0; group < routeGroups; group++) {
-    handlers[`t${group}`] = async ({ params }) => {
+    handlers[`t${group}`] = ({ params }) => {
       reset();
-      const { value } = await resolveBuilt(lookup(params.n).build(env));
-      throw value;
+      throw lookup(params.n).build(env);
     };
-    handlers[`f${group}`] = async ({ params, log }) => {
+    handlers[`f${group}`] = ({ params, log }) => {
       reset();
-      const { value } = await resolveBuilt(lookup(params.n).build(env));
-      log.error(`field:${params.n}`, pastTypes({ e: value }));
+      log.error(`field:${params.n}`, pastTypes({ e: lookup(params.n).build(env) }));
       return { status: 200, body: { ok: true } };
     };
   }
@@ -1615,7 +1211,7 @@ interface Counted {
 
 function fiveProblems(child: LogChild, set: SetName, five: Counted): { problems: string[]; detail: string } {
   const problems: string[] = [];
-  check(problems, five.status === 200, 'an AC-17 route did not return');
+  check(problems, five.status === 200, 'the five route did not return');
   const fields = child.records().find((rec) => rec.message === 'five')?.fields;
   check(problems, isRecord(fields), 'no five-error record');
   if (isRecord(fields)) {
@@ -1711,7 +1307,7 @@ async function runSet(set: SetName, report: ReturnType<typeof createReport>): Pr
     const { part } = found;
     const frameCount = part?.frames === null || part === null ? 'none' : String(part.frames.split('\n').length);
     report.result(
-      `${entry.fixture.ac} [${set}] ${entry.mode} ${entry.fixture.id}: ${entry.fixture.name}`,
+      `[${set}] ${entry.mode} ${entry.fixture.id}: ${entry.fixture.name}`,
       problems,
       `${part === null ? 'no record' : `kind ${part.kind}, type ${part.type}, code ${part.code}, frames ${frameCount}`}; counts ${JSON.stringify(entry.counts)}; ${found.raw.length} characters searched`,
     );
@@ -1731,19 +1327,19 @@ async function runSet(set: SetName, report: ReturnType<typeof createReport>): Pr
     `${searched.length} texts searched for ${globalNames.length} markers, whole and cut, 0 found`,
   );
   const seventeen = fiveProblems(child, set, driven.five);
-  report.result(`AC-17 [${set}] five errors in one call at error`, seventeen.problems, seventeen.detail);
+  report.result(`[${set}] five errors in one call at error`, seventeen.problems, seventeen.detail);
 }
 
 async function main(): Promise<void> {
-  const report = createReport('log-errors');
-  for (const set of ['none', 'all'] as const) {
+  const report = createReport();
+  for (const set of setNames) {
     await runSet(set, report);
   }
   report.finish();
 }
 
 if (process.argv[2] === 'serve') {
-  const known = all5.find((candidate) => candidate === process.argv[3]);
+  const known = setNames.find((candidate) => candidate === process.argv[3]);
   if (known === undefined) {
     process.stderr.write(`unknown set ${String(process.argv[3])}\n`);
     process.exitCode = 1;

@@ -14,8 +14,6 @@ import type { SigningKey } from './rig/provider.ts';
 
 const pki = await childPki(import.meta.url);
 const report = createReport(
-  'v05',
-  'oidc-tokens',
   'the callback accepts only an ID Token signed by the fixed issuer for the fixed client with the attempt nonce and sane times, and refuses a provider configuration that does not match; each refusal is its contracted closed code',
 );
 const host = await providerHost(pki.good);

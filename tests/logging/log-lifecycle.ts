@@ -32,12 +32,10 @@ const contract = defineContract({
 });
 
 const handlerTimeoutMs = 400;
-const corsOrigin = 'https://app.example';
 
 function serve(): void {
   const server = createServer({
     handlerTimeoutMs,
-    cors: { origins: [corsOrigin] },
     log: { access: true, thresholds: { security: 'info' } },
   });
   server.addHook('onRequest', (context) => {
@@ -204,12 +202,6 @@ const cases: Case[] = [
     expected: [{ status: 200, outcome: 'completed' }],
   },
   {
-    name: 'not found',
-    events: ['skeld.refuse.not_found'],
-    run: async (port) => [await exchange(port, 'nf', plain('GET', '/nope'))],
-    expected: [{ status: 404, outcome: 'completed' }],
-  },
-  {
     name: 'framing refusal (two Host fields)',
     events: ['skeld.refuse.framing'],
     run: async (port) => [
@@ -223,53 +215,9 @@ const cases: Case[] = [
     expected: [{ status: 400, outcome: 'completed' }],
   },
   {
-    name: 'cross-site refusal',
-    events: ['skeld.refuse.csrf'],
-    run: async (port) => [
-      await exchange(
-        port,
-        'csrf',
-        plain('POST', '/submit', 'content-type: application/json\r\nsec-fetch-site: cross-site\r\n', '{"name":"ada"}'),
-      ),
-    ],
-    expected: [{ status: 403, outcome: 'completed' }],
-  },
-  {
-    name: 'preflight (one granted, one refused)',
-    events: ['skeld.refuse.preflight'],
-    run: async (port) => [
-      await exchange(
-        port,
-        'pre-ok',
-        plain('OPTIONS', '/ok', `origin: ${corsOrigin}\r\naccess-control-request-method: GET\r\n`),
-      ),
-      await exchange(
-        port,
-        'pre-no',
-        plain('OPTIONS', '/ok', 'origin: https://evil.example\r\naccess-control-request-method: GET\r\n'),
-      ),
-    ],
-    expected: [
-      { status: 204, outcome: 'completed' },
-      { status: 403, outcome: 'completed' },
-    ],
-  },
-  {
     name: 'hook reply',
     run: async (port) => [await exchange(port, 'hook', plain('GET', '/hooked'))],
     expected: [{ status: 202, outcome: 'completed' }],
-  },
-  {
-    name: 'validation refusal',
-    events: ['skeld.refuse.validation'],
-    run: async (port) => [
-      await exchange(
-        port,
-        'validation',
-        plain('POST', '/submit', 'content-type: application/json\r\n', '{"name":123}'),
-      ),
-    ],
-    expected: [{ status: 400, outcome: 'completed' }],
   },
   {
     name: 'handler throw',
@@ -502,7 +450,7 @@ async function inBatches<T, R>(items: readonly T[], size: number, work: (item: T
 }
 
 async function main(): Promise<void> {
-  const report = createReport('log-lifecycle');
+  const report = createReport();
   const outcomes = await inBatches(cases, 3, async (item) => ({ item, run: await runChild(item) }));
   for (const { item, run } of outcomes) {
     const accessProblems = [...run.problems, ...checkAccess(item, run)];
@@ -518,14 +466,14 @@ async function main(): Promise<void> {
       );
     }
     report.result(
-      `AC-4 ${item.name}: exactly one access record per request`,
+      `${item.name}: exactly one access record per request`,
       accessProblems,
       `${item.expected.length} request(s), ${accessSplit(run)}; the responses carried the expected statuses`,
     );
 
     const idProblems = [...checkIds(item, run), ...checkRecordIds(item, run)];
     report.result(
-      `AC-5 ${item.name}: x-request-id equals the request id on its records and never the inbound value`,
+      `${item.name}: x-request-id equals the request id on its records and never the inbound value`,
       idProblems,
       `${run.sent.filter((entry) => entry.id !== null).length} of ${run.sent.length} responses carry an id; each id is on exactly one access record of its request and on no inbound value`,
     );

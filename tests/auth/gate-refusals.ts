@@ -2,11 +2,12 @@
 // Holds: Each refusal is judged by status, exact body bytes and headers, and none reaches its handler or sets a cookie.
 
 import { randomBytes } from 'node:crypto';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { AuthError } from '@skeld/auth/auth-error';
 import { definePolicy, isGrant } from '@skeld/auth/policy';
 import { createAuth } from '@skeld/auth/server';
 import { defineContract } from '@skeld/core/contract';
-import type { Gate, GateRoute, IdentifyOutcome, AuthorizeOutcome, AccessTypes } from '@skeld/core/gate';
+import type { AccessTypes, AuthorizeOutcome, Gate, GateRequest, GateRoute, IdentifyOutcome } from '@skeld/core/gate';
 import { object, string } from '@skeld/core/schema';
 import { expose } from '@skeld/core/secret';
 import { createServer } from '@skeld/core/server';
@@ -23,17 +24,16 @@ import {
   type Reply,
   send,
   series,
-  sleepMs,
   startApp,
   disableUser,
   establishFor,
   ORIGIN,
 } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 
 const statement =
   'identity is checked before the body is read and authorization after validation; missing, invalid and conflicting credentials and a denial each have their fixed refusal byte for byte; optional access admits a missing credential and never an invalid one; tenant membership is judged before the action; a hidden resource and a denied action share one 404; a grant is released exactly once on every way a request ends; no refused request reaches its handler';
-const report = createReport('v01', statement);
+const report = createReport(statement);
 
 const BODY = {
   missing: '{"status":401,"code":"CREDENTIAL_MISSING","message":"Credential required"}',
@@ -503,8 +503,8 @@ const gateContract = defineContract({
 });
 
 interface Behaviours {
-  identify: () => IdentifyOutcome<unknown> | Promise<IdentifyOutcome<unknown>>;
-  authorize: () => AuthorizeOutcome | Promise<AuthorizeOutcome>;
+  identify: (request: GateRequest) => IdentifyOutcome<unknown> | Promise<IdentifyOutcome<unknown>>;
+  authorize: (request: GateRequest) => AuthorizeOutcome | Promise<AuthorizeOutcome>;
   release: (grant: unknown) => void;
 }
 
@@ -522,8 +522,8 @@ async function withGate(
     boot: () => undefined,
     bind: (_route: GateRoute) => ({
       cookie: false,
-      identify: () => behaviours.identify(),
-      authorize: () => behaviours.authorize(),
+      identify: (request) => behaviours.identify(request),
+      authorize: (_principal, _input, request) => behaviours.authorize(request),
       release: (grant) => behaviours.release(grant),
     }),
   };
@@ -548,17 +548,39 @@ async function withGate(
 
 const never = <T>(): Promise<T> => new Promise<T>(() => undefined);
 const grantOf = (): AuthorizeOutcome => ({ kind: 'admit', grant: { g: 1 } });
-const okRelease = (): void => undefined;
+const said =
+  <T>(text: string) =>
+  (): T =>
+    JSON.parse(text);
+const throws = (): never => {
+  throw new Error(SECRET_TEXT);
+};
+const rejects = (): Promise<never> => Promise.reject(new Error(SECRET_TEXT));
+
+// Does:  Lets the event loop run a few turns, so a late continuation inside the server has run before a count.
+async function turns(): Promise<void> {
+  await series([1, 2, 3], async () => {
+    await nextTurn();
+  });
+}
+
+// Does:  Answers whether the promise settles within ms; the timer only bounds a failing case and never delays a pass.
+function within(promise: Promise<unknown>, ms = 3000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    timer.unref();
+    void promise.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
 
 async function coreGateCases(): Promise<void> {
   const throwing = createServer({ log: false });
   throwing.routes(
     defineContract({ p: { method: 'GET', path: '/p', responses: { 200: object({ ok: string({ maxLength: 8 }) }) } } }),
-    {
-      p: () => {
-        throw new Error(SECRET_TEXT);
-      },
-    },
+    { p: throws },
   );
   const baseline = await throwing.listen({ host: '127.0.0.1', port: 0 });
   const fixed500 = (await get(baseline.port, '/p')).body;
@@ -568,157 +590,104 @@ async function coreGateCases(): Promise<void> {
     fixed500.includes('"code":"INTERNAL"'),
     fixed500,
   );
-  const malformed: [string, Behaviours][] = [
-    [
-      'identify answers a kind that is neither value',
-      { identify: () => JSON.parse('{"kind":"maybe"}'), authorize: grantOf, release: okRelease },
-    ],
-    [
-      'identify refuses with an unknown reason',
-      { identify: () => JSON.parse('{"kind":"refuse","reason":"nope"}'), authorize: grantOf, release: okRelease },
-    ],
-    [
-      'identify admits a null principal on a policy route',
-      { identify: () => JSON.parse('{"kind":"admit","principal":null}'), authorize: grantOf, release: okRelease },
-    ],
+  const malformed: [string, Partial<Behaviours>][] = [
+    ['identify answers a kind that is neither value', { identify: said('{"kind":"maybe"}') }],
+    ['identify refuses with an unknown reason', { identify: said('{"kind":"refuse","reason":"nope"}') }],
+    ['identify admits a null principal on a policy route', { identify: said('{"kind":"admit","principal":null}') }],
     [
       'identify answers retryAfterSeconds 0',
-      {
-        identify: () => JSON.parse('{"kind":"refuse","reason":"rate_limited","retryAfterSeconds":0}'),
-        authorize: grantOf,
-        release: okRelease,
-      },
+      { identify: said('{"kind":"refuse","reason":"rate_limited","retryAfterSeconds":0}') },
     ],
     [
       'identify answers retryAfterSeconds 86401',
-      {
-        identify: () => JSON.parse('{"kind":"refuse","reason":"rate_limited","retryAfterSeconds":86401}'),
-        authorize: grantOf,
-        release: okRelease,
-      },
+      { identify: said('{"kind":"refuse","reason":"rate_limited","retryAfterSeconds":86401}') },
     ],
     [
       'identify answers retryAfterSeconds 1.5',
-      {
-        identify: () => JSON.parse('{"kind":"refuse","reason":"rate_limited","retryAfterSeconds":1.5}'),
-        authorize: grantOf,
-        release: okRelease,
-      },
+      { identify: said('{"kind":"refuse","reason":"rate_limited","retryAfterSeconds":1.5}') },
     ],
     [
       'identify answers retryAfterSeconds "3"',
-      {
-        identify: () => JSON.parse('{"kind":"refuse","reason":"rate_limited","retryAfterSeconds":"3"}'),
-        authorize: grantOf,
-        release: okRelease,
-      },
+      { identify: said('{"kind":"refuse","reason":"rate_limited","retryAfterSeconds":"3"}') },
     ],
-    [
-      'identify admits with no principal member',
-      { identify: () => JSON.parse('{"kind":"admit"}'), authorize: grantOf, release: okRelease },
-    ],
-    [
-      'identify admits with an undefined principal',
-      { identify: () => ({ kind: 'admit', principal: undefined }), authorize: grantOf, release: okRelease },
-    ],
-    [
-      'authorize admits with no grant member',
-      { identify: () => admit, authorize: () => JSON.parse('{"kind":"admit"}'), release: okRelease },
-    ],
-    [
-      'authorize admits with an undefined grant',
-      { identify: () => admit, authorize: () => ({ kind: 'admit', grant: undefined }), release: okRelease },
-    ],
-    ['identify answers nothing', { identify: () => JSON.parse('null'), authorize: grantOf, release: okRelease }],
-    [
-      'identify throws',
-      {
-        identify: () => {
-          throw new Error(SECRET_TEXT);
-        },
-        authorize: grantOf,
-        release: okRelease,
-      },
-    ],
-    [
-      'identify rejects',
-      { identify: () => Promise.reject(new Error(SECRET_TEXT)), authorize: grantOf, release: okRelease },
-    ],
-    [
-      'authorize answers a kind that is neither value',
-      { identify: () => admit, authorize: () => JSON.parse('{"kind":"yes"}'), release: okRelease },
-    ],
-    [
-      'authorize refuses with an unknown reason',
-      { identify: () => admit, authorize: () => JSON.parse('{"kind":"refuse","reason":"nope"}'), release: okRelease },
-    ],
-    ['authorize answers nothing', { identify: () => admit, authorize: () => JSON.parse('null'), release: okRelease }],
-    [
-      'authorize throws',
-      {
-        identify: () => admit,
-        authorize: () => {
-          throw new Error(SECRET_TEXT);
-        },
-        release: okRelease,
-      },
-    ],
-    [
-      'authorize rejects',
-      { identify: () => admit, authorize: () => Promise.reject(new Error(SECRET_TEXT)), release: okRelease },
-    ],
+    ['identify admits with no principal member', { identify: said('{"kind":"admit"}') }],
+    ['identify admits with an undefined principal', { identify: () => ({ kind: 'admit', principal: undefined }) }],
+    ['authorize admits with no grant member', { authorize: said('{"kind":"admit"}') }],
+    ['authorize admits with an undefined grant', { authorize: () => ({ kind: 'admit', grant: undefined }) }],
+    ['identify answers nothing', { identify: said('null') }],
+    ['identify throws', { identify: throws }],
+    ['identify rejects', { identify: rejects }],
+    ['authorize answers a kind that is neither value', { authorize: said('{"kind":"yes"}') }],
+    ['authorize refuses with an unknown reason', { authorize: said('{"kind":"refuse","reason":"nope"}') }],
+    ['authorize answers nothing', { authorize: said('null') }],
+    ['authorize throws', { authorize: throws }],
+    ['authorize rejects', { authorize: rejects }],
   ];
-  await series(malformed, async ([name, behaviours]) => {
-    await withGate(behaviours, undefined, async (port, runs, logs) => {
-      const reply = await get(port, '/p');
-      await logs.settle();
-      const errors = logs.named('skeld.request.error');
-      report.check(
-        `[core] ${name}: 500 with the fixed body, no handler run, one request.error with reason gate and no thrown text`,
-        reply.status === 500 &&
-          reply.body === fixed500 &&
-          runs() === 0 &&
-          errors.length === 1 &&
-          errors[0]?.all['skeld.reason'] === 'gate' &&
-          !logs.text().includes(SECRET_TEXT) &&
-          !reply.raw.includes(SECRET_TEXT),
-        `${reply.status} ${reply.body}; handler runs ${runs()}; request.error records ${errors.length}; reason ${String(errors[0]?.all['skeld.reason'])}`,
+  // Why: Each case has its own server and log sink, so the cases run at once instead of one log settle after another.
+  await Promise.all(
+    malformed.map(async ([name, partial]) => {
+      await withGate(
+        { identify: () => admit, authorize: grantOf, release: () => undefined, ...partial },
+        undefined,
+        async (port, runs, logs) => {
+          const reply = await get(port, '/p');
+          await logs.settle();
+          const errors = logs.named('skeld.request.error');
+          report.check(
+            `[core] ${name}: 500 with the fixed body, no handler run, one request.error with reason gate and no thrown text`,
+            reply.status === 500 &&
+              reply.body === fixed500 &&
+              runs() === 0 &&
+              errors.length === 1 &&
+              errors[0]?.all['skeld.reason'] === 'gate' &&
+              !logs.text().includes(SECRET_TEXT) &&
+              !reply.raw.includes(SECRET_TEXT),
+            `${reply.status} ${reply.body}; handler runs ${runs()}; request.error records ${errors.length}; reason ${String(errors[0]?.all['skeld.reason'])}`,
+          );
+        },
       );
-    });
-  });
+    }),
+  );
 
-  let released: unknown[] = [];
   const grant = { g: 'identity-checked' };
+  let released: unknown[] = [];
+  let releasedNext = Promise.withResolvers<void>();
+  const record = (value: unknown): void => {
+    released.push(value);
+    releasedNext.resolve();
+  };
+  const fresh = (): void => {
+    released = [];
+    releasedNext = Promise.withResolvers<void>();
+  };
   await withGate(
-    {
-      identify: () => admit,
-      authorize: () => ({ kind: 'admit', grant }),
-      release: (value) => void released.push(value),
-    },
+    { identify: () => admit, authorize: () => ({ kind: 'admit', grant }), release: record },
     undefined,
     async (port, runs) => {
       const reply = await get(port, '/p');
-      await sleepMs(100);
+      const releasedAtAll = await within(releasedNext.promise);
+      await turns();
       report.check(
         '[core] an admitted request runs the handler once and releases the grant exactly once, by identity',
-        reply.status === 200 && runs() === 1 && released.length === 1 && released[0] === grant,
+        reply.status === 200 && runs() === 1 && releasedAtAll && released.length === 1 && released[0] === grant,
         `${reply.status}; handler runs ${runs()}; releases ${released.length}`,
       );
     },
   );
-  released = [];
+  fresh();
   await withGate(
     {
       identify: () => admit,
       authorize: () => ({ kind: 'admit', grant }),
       release: (value) => {
-        released.push(value);
+        record(value);
         throw new Error(SECRET_TEXT);
       },
     },
     undefined,
     async (port, runs, logs) => {
       const reply = await get(port, '/p');
+      await within(releasedNext.promise);
       await logs.settle();
       report.check(
         '[core] a release that throws changes nothing for the client: 200, one skeld.hook.error, no thrown text',
@@ -731,16 +700,13 @@ async function coreGateCases(): Promise<void> {
       );
     },
   );
-  released = [];
+  fresh();
   await withGate(
-    {
-      identify: () => ({ kind: 'refuse', reason: 'csrf_token' }),
-      authorize: grantOf,
-      release: (value) => void released.push(value),
-    },
+    { identify: () => ({ kind: 'refuse', reason: 'csrf_token' }), authorize: grantOf, release: record },
     undefined,
     async (port, runs) => {
       const reply = await get(port, '/p');
+      await turns();
       report.check(
         '[core] a refusal at identify runs no handler and releases nothing',
         reply.status === 403 && runs() === 0 && released.length === 0,
@@ -749,77 +715,88 @@ async function coreGateCases(): Promise<void> {
     },
   );
 
-  released = [];
-  const slow = 700;
+  fresh();
+  const lateIdentity = Promise.withResolvers<IdentifyOutcome<unknown>>();
+  let authorizeCalls = 0;
   await withGate(
     {
-      identify: () => sleepMs(slow).then(() => admit),
-      authorize: () => ({ kind: 'admit', grant }),
-      release: (value) => void released.push(value),
+      identify: () => lateIdentity.promise,
+      authorize: () => {
+        authorizeCalls++;
+        return { kind: 'admit', grant };
+      },
+      release: record,
     },
     250,
     async (port, runs) => {
       const reply = await get(port, '/p');
-      await sleepMs(slow + 300);
+      lateIdentity.resolve(admit);
+      await turns();
       report.check(
         '[core] an identify that answers admit after the handler deadline admits nothing: an error status, no handler, no grant made',
-        reply.status >= 500 && runs() === 0 && released.length === 0,
+        reply.status >= 500 && runs() === 0 && authorizeCalls === 0 && released.length === 0,
+        `${reply.status} ${reply.body}; handler runs ${runs()}; authorize calls ${authorizeCalls}; releases ${released.length}`,
+      );
+    },
+  );
+  fresh();
+  const lateGrant = Promise.withResolvers<AuthorizeOutcome>();
+  await withGate(
+    { identify: () => admit, authorize: () => lateGrant.promise, release: record },
+    250,
+    async (port, runs) => {
+      const reply = await get(port, '/p');
+      const before = released.length;
+      lateGrant.resolve({ kind: 'admit', grant });
+      const releasedLate = await within(releasedNext.promise);
+      await turns();
+      report.check(
+        '[core] an authorize that answers admit after the handler deadline: no handler, and its grant is released once, when it arrives',
+        reply.status >= 500 &&
+          runs() === 0 &&
+          before === 0 &&
+          releasedLate &&
+          released.length === 1 &&
+          released[0] === grant,
         `${reply.status} ${reply.body}; handler runs ${runs()}; releases ${released.length}`,
       );
     },
   );
-  released = [];
+  fresh();
+  await withGate({ identify: () => admit, authorize: never, release: record }, 250, async (port, runs) => {
+    const reply = await get(port, '/p');
+    report.check(
+      '[core] an authorize that never settles ends at the deadline with an error status and no handler',
+      reply.status >= 500 && runs() === 0,
+      `${reply.status} ${reply.body}`,
+    );
+  });
+  fresh();
+  const asked = Promise.withResolvers<void>();
   await withGate(
     {
       identify: () => admit,
-      authorize: () => sleepMs(slow).then(() => ({ kind: 'admit', grant })),
-      release: (value) => void released.push(value),
-    },
-    250,
-    async (port, runs) => {
-      const reply = await get(port, '/p');
-      await sleepMs(slow + 300);
-      report.check(
-        '[core] an authorize that answers admit after the handler deadline: no handler, and its grant is released once, at once',
-        reply.status >= 500 && runs() === 0 && released.length === 1 && released[0] === grant,
-        `${reply.status} ${reply.body}; handler runs ${runs()}; releases ${released.length}`,
-      );
-    },
-  );
-  released = [];
-  await withGate(
-    {
-      identify: () => admit,
-      authorize: () => never<AuthorizeOutcome>(),
-      release: (value) => void released.push(value),
-    },
-    250,
-    async (port, runs) => {
-      const reply = await get(port, '/p');
-      report.check(
-        '[core] an authorize that never settles ends at the deadline with an error status and no handler',
-        reply.status >= 500 && runs() === 0,
-        `${reply.status} ${reply.body}`,
-      );
-    },
-  );
-  released = [];
-  await withGate(
-    {
-      identify: () => admit,
-      authorize: () => sleepMs(500).then(() => ({ kind: 'admit', grant })),
-      release: (value) => void released.push(value),
+      authorize: (request) => {
+        asked.resolve();
+        return new Promise((resolve) => {
+          request.signal.addEventListener('abort', () => setImmediate(() => resolve({ kind: 'admit', grant })), {
+            once: true,
+          });
+        });
+      },
+      release: record,
     },
     undefined,
     async (port, runs) => {
       const client = await openSocket(port);
       client.write('GET /p HTTP/1.1\r\nhost: x\r\n\r\n');
-      await sleepMs(100);
+      await asked.promise;
       client.destroy();
-      await sleepMs(900);
+      const releasedLate = await within(releasedNext.promise);
+      await turns();
       report.check(
-        '[core] a client that leaves while authorize runs: the late grant is released once and no handler runs',
-        runs() === 0 && released.length === 1 && released[0] === grant,
+        '[core] a client that leaves while authorize runs: the grant that arrives after is released once and no handler runs',
+        releasedLate && runs() === 0 && released.length === 1 && released[0] === grant,
         `handler runs ${runs()}; releases ${released.length}`,
       );
     },
@@ -950,6 +927,12 @@ async function policyReleaseCases(kind: Kind): Promise<void> {
   const logs = createLogs();
   const issued: unknown[] = [];
   const releases = new Map<unknown, number>();
+  let releasedNext = Promise.withResolvers<void>();
+  const slowStarted = Promise.withResolvers<void>();
+  const slowHold = Promise.withResolvers<void>();
+  const slowEnded = Promise.withResolvers<void>();
+  const goneStarted = Promise.withResolvers<void>();
+  const goneHold = Promise.withResolvers<void>();
   const plain = definePolicy('plain', { credentials: ['session'], actions: { use: () => true, no: () => false } });
   const useGrant = plain.operation('use', () => 'used');
   const auth = createAuth({ store: rig.store, origin: ORIGIN, policies: [plain] });
@@ -979,6 +962,7 @@ async function policyReleaseCases(kind: Kind): Promise<void> {
             : (grant) => {
                 releases.set(grant, (releases.get(grant) ?? 0) + 1);
                 release(grant);
+                releasedNext.resolve();
               },
       };
     },
@@ -1025,18 +1009,21 @@ async function policyReleaseCases(kind: Kind): Promise<void> {
       },
       slow: async (request) => {
         handlerStarts++;
-        await sleepMs(1500);
+        slowStarted.resolve();
+        await slowHold.promise;
         liveAtTimeout = String(isGrant(request.grant));
         try {
           afterTimeout = useGrant(request.grant);
         } catch (error) {
           afterTimeout = error instanceof AuthError ? error.code : String(error);
         }
+        slowEnded.resolve();
         return { status: 200, body: { ok: 'late' } };
       },
       gone: async () => {
         handlerStarts++;
-        await sleepMs(500);
+        goneStarted.resolve();
+        await goneHold.promise;
         return { status: 200, body: { ok: 'gone' } };
       },
       pre: () => ({ status: 200, body: { ok: 'pre' } }),
@@ -1059,13 +1046,17 @@ async function policyReleaseCases(kind: Kind): Promise<void> {
       drive?: () => Promise<void>,
     ): Promise<void> => {
       const before = issued.length;
+      releasedNext = Promise.withResolvers<void>();
       let reply: Reply | null = null;
       if (drive === undefined) {
         reply = await get(port, `/e/${name === 'preThrows' ? 'pre-throws' : name}`, [cookie]);
       } else {
         await drive();
       }
-      await sleepMs(1900);
+      if (grantExpected) {
+        await within(releasedNext.promise);
+      }
+      await turns();
       const delta = issued.length - before;
       report.check(
         `${label} ${name}: ${grantExpected ? 'one grant issued and released exactly once' : 'no grant issued and none released'}`,
@@ -1080,19 +1071,23 @@ async function policyReleaseCases(kind: Kind): Promise<void> {
     await way('early', (reply) => reply.status === 202, false);
     await way('denied', (reply) => reply.status === 403, false);
     const slowBefore = issued.length;
-    const slowReply = get(port, '/e/slow', [cookie]);
-    await sleepMs(1000);
+    releasedNext = Promise.withResolvers<void>();
+    const timedOut = await get(port, '/e/slow', [cookie]);
+    await slowStarted.promise;
+    const releasedByDeadline = await within(releasedNext.promise);
     const grantAtTimeout = issued[slowBefore];
     const releasedAtTimeout = releases.get(grantAtTimeout) ?? 0;
-    const timedOut = await slowReply;
-    await sleepMs(900);
+    slowHold.resolve();
+    await slowEnded.promise;
+    await turns();
     report.check(
-      `${label} a handler past its deadline: the response is 503, the grant was already released once at the deadline (1,000 ms in, the handler still running)`,
+      `${label} a handler past its deadline: the response is 503 and the grant is released once while the handler still runs`,
       timedOut.status === 503 &&
+        releasedByDeadline &&
         releasedAtTimeout === 1 &&
         (releases.get(grantAtTimeout) ?? 0) === 1 &&
         handlerStarts === 1,
-      `${timedOut.status}; releases at 1,000 ms ${releasedAtTimeout}; releases at the end ${releases.get(grantAtTimeout) ?? 0}`,
+      `${timedOut.status}; releases while the handler ran ${releasedAtTimeout}; releases at the end ${releases.get(grantAtTimeout) ?? 0}`,
     );
     report.check(
       `${label} the handler that outlived its deadline holds a released grant: isGrant false, its operation GRANT_RELEASED`,
@@ -1106,10 +1101,11 @@ async function policyReleaseCases(kind: Kind): Promise<void> {
       async () => {
         const client = await openSocket(port);
         client.write(`GET /e/gone HTTP/1.1\r\nhost: x\r\ncookie: __Host-skeld=${alice.token}\r\n\r\n`);
-        await sleepMs(200);
+        await goneStarted.promise;
         client.destroy();
       },
     );
+    goneHold.resolve();
     await logs.settle();
     report.check(`${label} the thrown text reaches no record`, !logs.text().includes(SECRET_TEXT), '');
     const total = [...releases.values()].reduce((sum, count) => sum + count, 0);

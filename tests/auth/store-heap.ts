@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createPostgresStore, type PgPool } from '@skeld/auth/postgres';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 
 const self = fileURLToPath(import.meta.url);
 const UNITS = 400_000;
@@ -68,7 +68,6 @@ if (process.argv[2] === 'child') {
   await child();
 } else {
   const report = createReport(
-    'v10/review-fixes',
     'the PostgreSQL store keeps nothing for a unit that has ended: after 400,000 sessionRead units the heap, after a forced collection, is within 4 MB of the start',
   );
   const run = spawnSync(process.execPath, ['--expose-gc', '--conditions=skeld-source', self, 'child'], {

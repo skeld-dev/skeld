@@ -1,4 +1,4 @@
-// Does:  Proves the OIDC outbound requests verify TLS, follow no redirect and stay bounded in time, size and concurrency.
+// Does:  Proves OIDC outbound requests verify TLS, follow no redirect and stay bounded in time, size and concurrency.
 // Holds: Browser input never names an outbound URL; cache freshness is never lengthened and stale data fails closed.
 // biome-ignore-all lint/performance/noAwaitInLoops: each case is a request that must finish before the next
 // biome-ignore-all lint/security/noSecrets: header names and canary text are fixtures, not secrets
@@ -13,8 +13,6 @@ import { sleep } from './rig/util.ts';
 
 const pki = await childPki(import.meta.url);
 const report = createReport(
-  'v05',
-  'oidc-outbound',
   'discovery, key and token requests verify TLS, follow no redirect, are bounded in concurrency, queue, time and body size; browser input names no outbound URL; freshness is never lengthened and stale data fails closed; rotation, an unknown kid and a shared refresh work without stale trust',
 );
 const host = await providerHost(pki.good);
@@ -233,54 +231,90 @@ async function timeCases(kind: Kind): Promise<void> {
     report.check(
       `${tag} a server that never answers, and one that stalls mid-body, both end at the 5 s deadline: 503`,
       a.status === 503 && b.status === 503 && ms >= 4900 && ms <= 6500,
-      `${a.status}, ${b.status} after ${ms} ms (host shared with another verifier and an engineer)`,
+      `${a.status}, ${b.status} after ${ms} ms`,
     );
+  });
+}
+
+// Does:  Answers whether the promise settles within ms; the timer only bounds a failing case and never delays a pass.
+function within(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    timer.unref();
+    void promise.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
   });
 }
 
 async function burstCase(kind: Kind): Promise<void> {
   const burst = make();
   await withApp(kind, [burst], async ({ app, tag }) => {
+    const held: (() => void)[] = [];
     let active = 0;
     let peak = 0;
+    let holding = true;
+    const sixteen = Promise.withResolvers<void>();
     burst.provider.token = ({ res }) => {
       active += 1;
       peak = Math.max(peak, active);
-      setTimeout(() => {
+      res.once('finish', () => {
         active -= 1;
+      });
+      const answer = (): void => {
         res.writeHead(400, { 'content-type': 'application/json' }).end('{"error":"invalid_grant"}');
-      }, 1500);
+      };
+      if (!holding) {
+        answer();
+        return;
+      }
+      held.push(answer);
+      if (held.length === 16) {
+        sixteen.resolve();
+      }
     };
-    const trips: { browser: Browser; trip: Trip }[] = [];
-    for (let i = 0; i < 100; i++) {
-      const browser = app.browser();
-      trips.push({ browser, trip: await begin(browser, burst) });
-    }
-    const began = performance.now();
-    const settled = await Promise.all(
+    const first = app.browser();
+    const trips = [{ browser: first, trip: await begin(first, burst) }];
+    trips.push(
+      ...(await Promise.all(
+        Array.from({ length: 99 }, async () => {
+          const browser = app.browser();
+          return { browser, trip: await begin(browser, burst) };
+        }),
+      )),
+    );
+    const arrivals: string[] = [];
+    const twenty = Promise.withResolvers<void>();
+    const hops = Promise.all(
       trips.map(async ({ browser, trip }) => {
-        const hop = await browser.callback(burst.name, { code: trip.code, state: trip.state });
-        return { hop: location(hop), ms: performance.now() - began };
+        const hop = location(await browser.callback(burst.name, { code: trip.code, state: trip.state }));
+        arrivals.push(hop);
+        if (arrivals.filter((item) => item === unavailable(burst.name)).length === 20) {
+          twenty.resolve();
+        }
+        return hop;
       }),
     );
-    const refusedList = settled.filter((item) => item.hop === unavailable(burst.name));
-    const refusedAtOnce = refusedList.length;
-    const answeredList = settled.filter((item) => item.hop === response(burst.name));
-    const firstAnswer = Math.min(...answeredList.map((item) => item.ms));
-    const lastRefusal = Math.max(...refusedList.map((item) => item.ms));
-    const answered = settled.filter((item) => item.hop === response(burst.name)).length;
+    const bounded = await within(Promise.all([sixteen.promise, twenty.promise]), 15_000);
+    const heldAtBound = held.length;
+    const answeredAtBound = arrivals.length;
+    holding = false;
+    for (const answer of held.splice(0)) {
+      answer();
+    }
+    const settled = await hops;
+    const answered = settled.filter((hop) => hop === response(burst.name)).length;
+    const refused = settled.filter((hop) => hop === unavailable(burst.name)).length;
     report.check(
-      `${tag} 100 concurrent token requests: at most 16 in flight at the provider`,
-      peak <= 16 && peak > 1,
-      `peak in flight ${peak}`,
+      `${tag} 100 concurrent token requests with every response held: 16 reach the provider and 20 are refused at once`,
+      bounded && heldAtBound === 16 && answeredAtBound === 20 && peak === 16,
+      `held at the provider ${heldAtBound}, answers before any release ${answeredAtBound}, peak in flight ${peak}`,
     );
     report.check(
-      `${tag} 16 run, 64 wait their turn and the other 20 are refused at once (provider_unavailable)`,
-      answered === 80 &&
-        refusedAtOnce === 20 &&
-        burst.provider.tokenRequests.length === 80 &&
-        lastRefusal < firstAnswer,
-      `${answered} reached the provider and were answered, ${refusedAtOnce} refused, the last after ${Math.round(lastRefusal)} ms and before the first answer at ${Math.round(firstAnswer)} ms, provider saw ${burst.provider.tokenRequests.length}`,
+      `${tag} once released, the 64 that waited run in turn: 80 answered by the provider, 20 refused provider_unavailable`,
+      answered === 80 && refused === 20 && burst.provider.tokenRequests.length === 80 && peak === 16,
+      `${answered} answered, ${refused} refused, provider saw ${burst.provider.tokenRequests.length}, peak in flight ${peak}`,
     );
     burst.provider.token = null;
     const retry = await login(app, burst);
@@ -380,14 +414,15 @@ async function freshnessCases(kind: Kind): Promise<void> {
       })) === 3,
       'fetches 3',
     );
-    stale.provider.cacheControl = 'max-age=2';
-    stale.provider.jwksCacheControl = 'max-age=2';
+    stale.provider.cacheControl = 'max-age=1';
+    stale.provider.jwksCacheControl = 'max-age=1';
     const fine = await login(app, stale);
     report.check(`${tag} control: a login with a short-lived document and key set succeeds`, fine.session, fine.hop);
     stale.provider.discovery = ({ res }) => res.destroy();
     stale.provider.jwks = ({ res }) => res.destroy();
     const fetchesBefore = stale.provider.hits.discovery;
-    await sleep(2300);
+    // Why: The documents were fetched before the login ended, so 1.3 s after it they are past their 1 s freshness.
+    await sleep(1300);
     const lapsed = await app.browser().start(stale.name);
     report.check(
       `${tag} past its freshness the document is not trusted: the refetch fails and the start is 503 (stale fails closed)`,
@@ -488,8 +523,9 @@ async function keyCases(kind: Kind): Promise<void> {
       `${gone.hop}; ${goneAgain.hop}; fetches +${down.provider.hits.jwks - downBefore}; records ${reasons.join(', ')}`,
     );
 
+    // Why: The entries are counted before any key is judged, so 33 copies of one real key under distinct kids suffice.
     crowded.provider.jwks = ({ json }) =>
-      json(200, { keys: Array.from({ length: 33 }, (_, i) => rsaKey(`many-${i}`, 2048).jwk) });
+      json(200, { keys: Array.from({ length: 33 }, (_, i) => ({ ...crowded.provider.key.jwk, kid: `many-${i}` })) });
     const many = await login(app, crowded);
     report.check(
       `${tag} a key set of 33 entries is refused whole: provider_unavailable`,
@@ -510,14 +546,19 @@ async function keyCases(kind: Kind): Promise<void> {
 
 for (const kind of kinds) {
   await report.run(`${kind} outbound`, async () => {
-    await tlsCases(kind);
-    await redirectCases(kind);
-    await sizeCases(kind);
-    await timeCases(kind);
+    // Why: The 5 s deadline case overlaps cases that leave the in-flight bound alone; the burst fills it and runs last.
+    await Promise.all([
+      timeCases(kind),
+      (async (): Promise<void> => {
+        await tlsCases(kind);
+        await redirectCases(kind);
+        await sizeCases(kind);
+        await injectionCases(kind);
+        await freshnessCases(kind);
+        await keyCases(kind);
+      })(),
+    ]);
     await burstCase(kind);
-    await injectionCases(kind);
-    await freshnessCases(kind);
-    await keyCases(kind);
   });
 }
 

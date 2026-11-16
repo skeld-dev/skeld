@@ -12,8 +12,6 @@ import { kinds, makeStoreRig, type StoreRig } from './rig/stores.ts';
 
 const pki = await childPki(import.meta.url);
 const report = createReport(
-  'v05',
-  'oidc-flow',
   'the authorization-code flow uses S256 PKCE, state, nonce and a browser-bound, expiring, single-use attempt; a wrong browser consumes nothing; concurrent valid callbacks yield one result; one provider cannot stand in for another',
 );
 const host = await providerHost(pki.good);

@@ -11,7 +11,7 @@ import { loadPki, makePki } from './rig/pki.ts';
 import { providerHost } from './rig/provider.ts';
 import { type Kind, makeStoreRig } from './rig/stores.ts';
 import { behaviorKinds as kinds } from '../support/test-profile.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 
 const variants = ['environment', 'agent-subclass', 'agent-lax', 'agent-options', 'check-server-identity'] as const;
 const inherited = process.env.SKELD_PKI_DIR;
@@ -60,7 +60,6 @@ if (variant === 'agent-subclass') {
 
 const pki = loadPki(inherited);
 const report = createReport(
-  'v10/review-fixes',
   'with NODE_TLS_REJECT_UNAUTHORIZED=0 in the environment, a discovery, key-set or token request to a provider whose certificate is from an untrusted authority, or names another host, is refused, and with the test authority configured it succeeds',
 );
 const good = await providerHost(pki.good);

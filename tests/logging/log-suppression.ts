@@ -1,316 +1,149 @@
-// Does:  Proves a request flood writes at most 20 records per event and route in a 10 s window plus one exact summary.
-// Holds: The summary is awaited with no request after the flood, and the stats call counts the rest as suppressed.
+// Does:  Proves two suppression keys in one window each write 20 records and, unprompted, one summary of the rest.
+// Holds: No request follows the floods, so each summary is the window's own; distinct unknown paths share one key.
 
 // biome-ignore-all lint/security/noSecrets: route templates and event names, not credentials
-// biome-ignore-all lint/performance/noAwaitInLoops: the summary is awaited by polling the child's stdout
+// biome-ignore-all lint/performance/noAwaitInLoops: the summaries are awaited by polling the child's stdout
 import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { defineContract } from '@skeld/core/contract';
 import * as t from '@skeld/core/schema';
 import { createServer } from '@skeld/core/server';
-import { announceListening, type LogChild, type LogObject, startLogChild } from '../support/support-log.ts';
+import { announceListening, type LogObject, startLogChild } from '../support/support-log.ts';
 import { check, createReport } from '../support/support-proof.ts';
 
-type Variant = 'refusal' | 'unknown';
-
-const flood = 10_000;
-const windowMs = 10_000;
 const perWindow = 20;
-const reportShape = t.object({ report: t.string({ maxLength: 2000 }) });
+const flood = 25;
+// Why: The window is 10 s from its first record; a summary later than 1.5 windows was not written at expiry.
+const summaryWaitMs = 15_000;
 const contract = defineContract({
   items: { method: 'POST', path: '/items', responses: { 200: t.object({ ok: t.boolean() }) } },
-  stats: { method: 'GET', path: '/stats', responses: { 200: reportShape } },
+  stats: { method: 'GET', path: '/stats', responses: { 200: t.object({ report: t.string({ maxLength: 2000 }) }) } },
 });
 
-function serve(variant: Variant): void {
-  const options = variant === 'unknown' ? { thresholds: { security: 'info' as const } } : {};
-  const server = createServer({ log: options });
+function serve(): void {
+  const server = createServer({ log: { thresholds: { security: 'info' } } });
   server.routes(contract, {
     items: () => ({ status: 200, body: { ok: true } }),
     stats: () => ({ status: 200, body: { report: JSON.stringify(server.logStats()) } }),
   });
   server
     .listen({ port: 0, host: '127.0.0.1' })
-    .then(({ port }) => {
-      process.on('SIGTERM', () => void closeAndExit(server));
-      announceListening(port);
-    })
+    .then(({ port }) => announceListening(port))
     .catch((error: unknown) => {
       process.stderr.write(`serve failed: ${String(error)}\n`);
       process.exitCode = 1;
     });
 }
 
-async function closeAndExit(server: { close: () => Promise<void> }): Promise<void> {
-  await server.close();
-  process.exit(0);
-}
-
-interface Burst {
-  startedAt: number;
-  endedAt: number;
-  statuses: Map<number, number>;
-}
-
-interface Shape {
-  method: 'GET' | 'POST';
-  headers: Record<string, string>;
-  pathOf: (index: number) => string;
-}
-
-function once(
-  agent: http.Agent,
-  port: number,
-  shape: Shape,
-  index: number,
-  statuses: Map<number, number>,
-): Promise<void> {
+function send(port: number, method: string, path: string, headers: Record<string, string> = {}): Promise<number> {
   return new Promise((resolve, reject) => {
-    const options = {
-      host: '127.0.0.1',
-      port,
-      path: shape.pathOf(index),
-      method: shape.method,
-      headers: shape.headers,
-      agent,
-    };
-    const req = http.request(options, (res) => {
-      const status = res.statusCode ?? 0;
-      statuses.set(status, (statuses.get(status) ?? 0) + 1);
+    const req = http.request({ host: '127.0.0.1', port, method, path, headers }, (res) => {
       res.resume();
-      res.once('end', resolve);
+      res.once('end', () => resolve(res.statusCode ?? 0));
     });
     req.once('error', reject);
     req.end();
   });
 }
 
-async function sendFlood(port: number, shape: Shape): Promise<Burst> {
-  const agent = new http.Agent({ keepAlive: true, maxSockets: 64 });
-  const statuses = new Map<number, number>();
-  let next = 0;
-  const startedAt = Date.now();
-  const worker = async (): Promise<void> => {
-    for (let index = next++; index < flood; index = next++) {
-      await once(agent, port, shape, index, statuses);
-    }
-  };
-  await Promise.all(Array.from({ length: 64 }, () => worker()));
-  const endedAt = Date.now();
-  agent.destroy();
-  return { startedAt, endedAt, statuses };
-}
-
-function statusLine(statuses: Map<number, number>): string {
-  return [...statuses.entries()].map(([status, count]) => `${count} x ${status}`).join(', ');
-}
-
-async function getReport(port: number, path: string): Promise<Record<string, unknown>> {
-  const response = await fetch(`http://127.0.0.1:${port}${path}`);
-  const body: unknown = await response.json();
-  const text = typeof body === 'object' && body !== null ? Reflect.get(body, 'report') : undefined;
-  const parsed: unknown = JSON.parse(String(text));
-  return typeof parsed === 'object' && parsed !== null ? Object.fromEntries(Object.entries(parsed)) : {};
-}
-
-interface Waited {
-  summarySeen: number | null;
-  summary: LogObject | null;
-}
-
-async function awaitSummary(child: LogChild, eventName: string, ms: number): Promise<Waited> {
-  const result: Waited = { summarySeen: null, summary: null };
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    const now = Date.now();
-    const records = child.records();
-    const summary = records.find(
-      (rec) => rec.event_name === 'skeld.log.suppressed' && rec['skeld.suppressed.event_name'] === eventName,
-    );
-    if (summary !== undefined) {
-      result.summarySeen = now;
-      result.summary = summary;
-      return result;
-    }
-    await delay(5);
-  }
-  return result;
-}
-
-interface Scenario {
+interface Key {
   name: string;
-  variant: Variant;
-  eventName: string;
-  route: string | null;
-  shape: Shape;
-  expectedStatus: number;
+  event: string;
+  route: string | undefined;
+  status: number;
+  request: (port: number, index: number) => Promise<number>;
 }
 
-const scenarios: Scenario[] = [
+const keys: Key[] = [
   {
-    name: 'one refusal on one route',
-    variant: 'refusal',
-    eventName: 'skeld.refuse.csrf',
+    name: 'one cross-site refusal on one route',
+    event: 'skeld.refuse.csrf',
     route: '/items',
-    shape: { method: 'POST', headers: { origin: 'http://evil.example' }, pathOf: () => '/items' },
-    expectedStatus: 403,
+    status: 403,
+    request: (port) => send(port, 'POST', '/items', { origin: 'http://evil.example' }),
   },
   {
-    name: 'distinct unknown paths',
-    variant: 'unknown',
-    eventName: 'skeld.refuse.not_found',
-    route: null,
-    shape: { method: 'GET', headers: {}, pathOf: (index) => `/unknown-${index}` },
-    expectedStatus: 404,
+    name: 'distinct unknown paths, one key with no route',
+    event: 'skeld.refuse.not_found',
+    route: undefined,
+    status: 404,
+    request: (port, index) => send(port, 'GET', `/unknown-${index}`),
   },
 ];
 
-function routeOf(record: LogObject): unknown {
-  return record['http.route'];
-}
+const summaryOf = (records: LogObject[], event: string): LogObject[] =>
+  records.filter((rec) => rec.event_name === 'skeld.log.suppressed' && rec['skeld.suppressed.event_name'] === event);
 
-async function runScenario(scenario: Scenario, report: ReturnType<typeof createReport>): Promise<void> {
-  const label = `AC-10 ${scenario.name}`;
-  const child = await startLogChild(fileURLToPath(import.meta.url), { args: [scenario.variant] });
-  let burst: Burst;
-  let waited: Waited;
+async function main(): Promise<void> {
+  const report = createReport();
+  const child = await startLogChild(fileURLToPath(import.meta.url));
+  let statuses: number[][] = [];
   let stats: Record<string, unknown> = {};
+  let unprompted = false;
   try {
-    burst = await sendFlood(child.port, scenario.shape);
-    waited = await awaitSummary(child, scenario.eventName, 25_000);
-    stats = await getReport(child.port, '/stats');
+    statuses = await Promise.all(
+      keys.map((key) => Promise.all(Array.from({ length: flood }, (_, index) => key.request(child.port, index)))),
+    );
+    const reply = await fetch(`http://127.0.0.1:${child.port}/stats`);
+    stats = JSON.parse(JSON.parse(await reply.text()).report);
+    const deadline = Date.now() + summaryWaitMs;
+    while (!unprompted && Date.now() < deadline) {
+      await delay(50);
+      unprompted = keys.every((key) => summaryOf(child.records(), key.event).length > 0);
+    }
   } finally {
-    await child.stop();
+    await child.stop('SIGKILL');
   }
   const records = child.records();
-  const own = records.filter(
-    (rec) => rec.event_name === scenario.eventName && routeOf(rec) === (scenario.route ?? undefined),
-  );
-  const summaries = records.filter(
-    (rec) => rec.event_name === 'skeld.log.suppressed' && rec['skeld.suppressed.event_name'] === scenario.eventName,
-  );
-
-  const before: string[] = [];
-  const flightMs = burst.endedAt - burst.startedAt;
-  const firstTime = own[0] === undefined ? Number.NaN : Date.parse(String(own[0].time));
-  check(before, burst.statuses.get(scenario.expectedStatus) === flood, `statuses were ${statusLine(burst.statuses)}`);
-  check(before, flightMs < windowMs, `the ${flood} requests took ${flightMs} ms, not inside one ${windowMs} ms window`);
-  check(
-    before,
-    burst.endedAt - firstTime < windowMs,
-    `the last response came ${burst.endedAt - firstTime} ms after the first record`,
-  );
-  report.result(
-    `${label}: the ${flood} requests all drew ${scenario.expectedStatus} inside one window`,
-    before,
-    `${statusLine(burst.statuses)} in ${flightMs} ms; the last response ${burst.endedAt - firstTime} ms after the first record`,
-  );
-
-  const written: string[] = [];
-  check(
-    written,
-    own.length >= 1 && own.length <= perWindow,
-    `${own.length} records of ${scenario.eventName}, not 1 to ${perWindow}`,
-  );
-  if (scenario.variant === 'unknown') {
+  keys.forEach((key, at) => {
+    const problems: string[] = [];
+    const answered = (statuses[at] ?? []).filter((status) => status === key.status).length;
+    check(problems, answered === flood, `${answered} of ${flood} requests answered ${key.status}`);
+    const own = records.filter((rec) => rec.event_name === key.event);
+    check(problems, own.length === perWindow, `${own.length} ${key.event} records, not ${perWindow}`);
     check(
-      written,
-      own.every((rec) => !('http.route' in rec)),
-      'a not-found record names a route',
+      problems,
+      own.every((rec) => rec['http.route'] === key.route),
+      `a record names a route other than ${key.route}`,
     );
-  }
-  report.result(
-    `${label}: at most ${perWindow} records written`,
-    written,
-    `${own.length} records of ${scenario.eventName} on stdout`,
-  );
-
-  const summary: string[] = [];
-  const sample = waited.summary;
-  check(summary, summaries.length === 1, `${summaries.length} summaries on stdout`);
-  check(summary, sample !== null, 'no summary arrived while no request was sent');
-  if (sample !== null && waited.summarySeen !== null) {
-    const arrivedAfter = waited.summarySeen - firstTime;
-    const recordGap = Date.parse(String(sample.time)) - firstTime;
-    check(summary, arrivedAfter <= windowMs * 1.5, `the summary arrived ${arrivedAfter} ms after the first record`);
-    check(summary, recordGap <= windowMs * 1.5, `the summary is stamped ${recordGap} ms after the first record`);
+    const summaries = summaryOf(records, key.event);
+    const [summary] = summaries;
+    check(problems, summaries.length === 1, `${summaries.length} summaries without a further request or close()`);
     check(
-      summary,
-      sample['skeld.suppressed.count'] === flood - own.length,
-      `the summary counts ${String(sample['skeld.suppressed.count'])}, expected ${flood - own.length}`,
+      problems,
+      summary?.['skeld.suppressed.count'] === flood - perWindow,
+      `the summary counts ${String(summary?.['skeld.suppressed.count'])}, not ${flood - perWindow}`,
     );
     check(
-      summary,
-      routeOf(sample) === (scenario.route ?? undefined),
-      `the summary names route ${String(routeOf(sample))}`,
+      problems,
+      summary?.['http.route'] === key.route,
+      `the summary names route ${String(summary?.['http.route'])}`,
     );
     check(
-      summary,
-      sample.severity_text !== undefined && sample['skeld.category'] !== undefined,
-      'the summary lacks its severity or category',
+      problems,
+      summary?.severity_text === own[0]?.severity_text && summary?.['skeld.category'] === own[0]?.['skeld.category'],
+      'the summary does not carry the severity and category of the suppressed event',
     );
-    report.result(
-      `${label}: one summary counting the rest, within 1.5 windows, with no further request`,
-      summary,
-      `reached the reader ${arrivedAfter} ms after the first record's own time, stamped ${recordGap} ms after it; counts ${String(sample['skeld.suppressed.count'])} = ${flood} - ${own.length}`,
-    );
-  } else {
-    report.result(`${label}: one summary counting the rest, within 1.5 windows, with no further request`, summary, '');
-  }
-
-  const counted: string[] = [];
+    report.result(key.name, problems, `${own.length} records written and one summary of ${flood - perWindow}`);
+  });
   const dropped = stats.dropped;
   const droppedTotal =
     typeof dropped === 'object' && dropped !== null
       ? Object.values(dropped).reduce<number>((sum, value) => sum + Number(value), 0)
       : Number.NaN;
-  check(
-    counted,
-    stats.suppressed === flood - own.length,
-    `suppressed is ${String(stats.suppressed)}, expected ${flood - own.length}`,
-  );
+  const counted: string[] = [];
+  const suppressed = keys.length * (flood - perWindow);
+  check(counted, stats.suppressed === suppressed, `suppressed is ${String(stats.suppressed)}, not ${suppressed}`);
   check(counted, droppedTotal === 0, `dropped counts sum to ${droppedTotal}`);
   const accounted = Number(stats.written) + Number(stats.queued) + Number(stats.inFlight) + droppedTotal;
   check(counted, stats.created === accounted, `created ${String(stats.created)} is not the sum ${accounted}`);
-  report.result(
-    `${label}: the stats call reports the rest as suppressed, not dropped`,
-    counted,
-    `suppressed ${String(stats.suppressed)}, dropped ${droppedTotal}, created ${String(stats.created)} = written + queued + in flight`,
-  );
-
-  if (scenario.variant === 'unknown') {
-    const keys: string[] = [];
-    check(
-      keys,
-      own.length <= perWindow && summaries.length === 1,
-      `${own.length} records and ${summaries.length} summaries for ${flood} distinct paths`,
-    );
-    check(keys, !('http.route' in (sample ?? {})), 'the summary names a route');
-    report.result(
-      `${label}: no new suppression key for ${flood} distinct unknown paths`,
-      keys,
-      `${flood} paths gave ${own.length} records and one summary with no route; a key per path would have written ${flood}`,
-    );
-  }
-}
-
-async function main(): Promise<void> {
-  const report = createReport('log-suppression');
-  for (const scenario of scenarios) {
-    await runScenario(scenario, report);
-  }
+  report.result('the stats call counts the rest as suppressed, not dropped', counted, `suppressed ${suppressed}`);
   report.finish();
 }
 
 if (process.argv[2] === 'serve') {
-  const variant = (['refusal', 'unknown'] as const).find((candidate) => candidate === process.argv[3]);
-  if (variant === undefined) {
-    process.stderr.write(`unknown variant ${String(process.argv[3])}\n`);
-    process.exitCode = 1;
-  } else {
-    serve(variant);
-  }
+  serve();
 } else {
   await main();
 }

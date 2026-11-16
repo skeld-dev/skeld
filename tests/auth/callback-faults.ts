@@ -1,5 +1,5 @@
 // Does:  Proves a throwing, rejecting, malformed or late application callback never admits and leaks no text.
-// Holds: Each failed request gets the contracted fixed answer and exactly one auth.callback.failed record, never the callback's words.
+// Holds: Each failed request gets the fixed answer and one auth.callback.failed record, never the callback's words.
 // biome-ignore-all lint/performance/noAwaitInLoops: each case is a request that must finish before the next
 // biome-ignore-all lint/nursery/noUnsafeTypeAssertion: a hostile callback deliberately answers shapes the type forbids
 // biome-ignore-all lint/security/noSecrets: canary text and header names are fixtures, not secrets
@@ -19,12 +19,10 @@ import { nowSeconds, providerHost, rsaKey, sign } from './rig/provider.ts';
 import { createReport } from './rig/report.ts';
 import { type Kind, makeStoreRig } from './rig/stores.ts';
 import { behaviorKinds as kinds } from '../support/test-profile.ts';
-import { parseRecord, settleLog, sleep } from './rig/util.ts';
+import { parseRecord, settleLog } from './rig/util.ts';
 
 const pki = await childPki(import.meta.url);
 const report = createReport(
-  'v06',
-  'callback-faults',
   'a policy callback, the JWT map, the OIDC mapper and the handoff verify that throw, reject, answer malformed or answer late never admit; each failed request gets the contracted fixed answer, exactly one auth.callback.failed record, and none of the callback text',
 );
 const CANARY = 'CANARY-CALLBACK-TEXT-7f3a';
@@ -84,215 +82,58 @@ function pairs(records: readonly LogLine[]): string[] {
   );
 }
 
-interface Fault {
-  readonly name: string;
-  readonly set: () => void;
-  readonly status: number;
-  readonly code: string;
-  readonly expect: string;
-}
+type Fault = readonly [name: string, hook: keyof typeof hooks, answer: Hook, expect: string];
 
 const thrower = (): never => {
   throw new Error(CANARY);
 };
 const rejecter: Hook = () => Promise.reject(new Error(CANARY));
-const late =
-  (value: unknown, ms: number): Hook =>
-  () =>
-    new Promise((resolve) => setTimeout(() => resolve(value), ms));
+// Does:  Makes callbacks that answer only when the test releases them, after the request was refused.
+function holder(): { held: (value: unknown) => Hook; called: () => Promise<void>; release: () => void } {
+  const answers: (() => void)[] = [];
+  let next = Promise.withResolvers<void>();
+  return {
+    held: (value) => () =>
+      new Promise((resolve) => {
+        answers.push(() => resolve(value));
+        next.resolve();
+      }),
+    called: async () => {
+      await next.promise;
+      next = Promise.withResolvers<void>();
+    },
+    release: () => {
+      for (const answerNow of answers.splice(0)) {
+        answerNow();
+      }
+    },
+  };
+}
 
-const policyFaults: Fault[] = [
-  {
-    name: 'load throws',
-    set: () => {
-      hooks.load = thrower;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.load:threw',
-  },
-  {
-    name: 'load rejects',
-    set: () => {
-      hooks.load = rejecter;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.load:threw',
-  },
-  {
-    name: 'tenant.of throws',
-    set: () => {
-      hooks.of = thrower;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.tenant:threw',
-  },
-  {
-    name: 'tenant.of answers a non-string',
-    set: () => {
-      hooks.of = () => 42;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.tenant:malformed',
-  },
-  {
-    name: 'tenant.of answers an empty name',
-    set: () => {
-      hooks.of = () => '';
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.tenant:malformed',
-  },
-  {
-    name: 'tenant.of answers undefined',
-    set: () => {
-      hooks.of = () => undefined;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.tenant:malformed',
-  },
-  {
-    name: 'tenant.member answers undefined',
-    set: () => {
-      hooks.member = () => undefined;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.tenant:malformed',
-  },
-  {
-    name: 'tenant.member rejects',
-    set: () => {
-      hooks.member = rejecter;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.tenant:threw',
-  },
-  {
-    name: 'tenant.member answers a non-boolean',
-    set: () => {
-      hooks.member = () => 'yes';
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.tenant:malformed',
-  },
-  {
-    name: 'action throws',
-    set: () => {
-      hooks.action = thrower;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.action:threw',
-  },
-  {
-    name: 'action rejects',
-    set: () => {
-      hooks.action = rejecter;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.action:threw',
-  },
-  {
-    name: 'action answers a truthy non-boolean',
-    set: () => {
-      hooks.action = () => 1;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.action:malformed',
-  },
-  {
-    name: 'action answers undefined (abstains)',
-    set: () => {
-      hooks.action = () => undefined;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'policy.action:malformed',
-  },
+const policyFaults: readonly Fault[] = [
+  ['load throws', 'load', thrower, 'policy.load:threw'],
+  ['load rejects', 'load', rejecter, 'policy.load:threw'],
+  ['tenant.of throws', 'of', thrower, 'policy.tenant:threw'],
+  ['tenant.of answers a non-string', 'of', () => 42, 'policy.tenant:malformed'],
+  ['tenant.of answers an empty name', 'of', () => '', 'policy.tenant:malformed'],
+  ['tenant.of answers undefined', 'of', () => undefined, 'policy.tenant:malformed'],
+  ['tenant.member answers undefined', 'member', () => undefined, 'policy.tenant:malformed'],
+  ['tenant.member rejects', 'member', rejecter, 'policy.tenant:threw'],
+  ['tenant.member answers a non-boolean', 'member', () => 'yes', 'policy.tenant:malformed'],
+  ['action throws', 'action', thrower, 'policy.action:threw'],
+  ['action rejects', 'action', rejecter, 'policy.action:threw'],
+  ['action answers a truthy non-boolean', 'action', () => 1, 'policy.action:malformed'],
+  ['action answers undefined (abstains)', 'action', () => undefined, 'policy.action:malformed'],
 ];
-const mapFaults: Fault[] = [
-  {
-    name: 'map throws',
-    set: () => {
-      hooks.map = thrower;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'jwt.map:threw',
-  },
-  {
-    name: 'map rejects',
-    set: () => {
-      hooks.map = rejecter;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'jwt.map:threw',
-  },
-  {
-    name: 'map answers a user id that is not text',
-    set: () => {
-      hooks.map = () => ({ kind: 'accept', userId: 42 });
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'jwt.map:malformed',
-  },
-  {
-    name: 'map answers an unknown kind',
-    set: () => {
-      hooks.map = () => ({ kind: 'admit' });
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'jwt.map:malformed',
-  },
-  {
-    name: 'map answers undefined',
-    set: () => {
-      hooks.map = () => undefined;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'jwt.map:malformed',
-  },
-  {
-    name: 'map answers an object with no kind',
-    set: () => {
-      hooks.map = () => ({ userId: 'u-1' });
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'jwt.map:malformed',
-  },
-  {
-    name: 'map accepts with an undefined user id',
-    set: () => {
-      hooks.map = () => ({ kind: 'accept', userId: undefined });
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'jwt.map:malformed',
-  },
-  {
-    name: 'map answers null',
-    set: () => {
-      hooks.map = () => null;
-    },
-    status: 500,
-    code: 'INTERNAL',
-    expect: 'jwt.map:malformed',
-  },
+const mapFaults: readonly Fault[] = [
+  ['map throws', 'map', thrower, 'jwt.map:threw'],
+  ['map rejects', 'map', rejecter, 'jwt.map:threw'],
+  ['map answers a user id that is not text', 'map', () => ({ kind: 'accept', userId: 42 }), 'jwt.map:malformed'],
+  ['map answers an unknown kind', 'map', () => ({ kind: 'admit' }), 'jwt.map:malformed'],
+  ['map answers undefined', 'map', () => undefined, 'jwt.map:malformed'],
+  ['map answers an object with no kind', 'map', () => ({ userId: 'u-1' }), 'jwt.map:malformed'],
+  ['map accepts with an undefined user id', 'map', () => ({ kind: 'accept', userId: undefined }), 'jwt.map:malformed'],
+  ['map answers null', 'map', () => null, 'jwt.map:malformed'],
 ];
 
 function cleanErrorText(text: string): boolean {
@@ -365,9 +206,9 @@ async function gateSection(kind: Kind): Promise<void> {
       ['policy', policyFaults, '/policy', key],
       ['jwt map', mapFaults, '/token', token],
     ] as const) {
-      for (const fault of faults) {
+      for (const [name, hook, answerOf, expect] of faults) {
         Object.assign(hooks, healthy);
-        fault.set();
+        hooks[hook] = answerOf;
         const before = records.filter((record) => record.event_name === 'auth.callback.failed').length;
         const handledBefore = handled;
         const reply = await call(base, path, headers);
@@ -376,77 +217,68 @@ async function gateSection(kind: Kind): Promise<void> {
         const written = pairs(records.filter((record) => record.event_name === 'auth.callback.failed').slice(before));
         const clean = cleanErrorText(reply.text);
         report.check(
-          `${tag} ${section}: ${fault.name} gives ${fault.status} ${fault.code}, no handler, one auth.callback.failed ${fault.expect}, no callback text in the response`,
-          reply.status === fault.status &&
-            reply.code === fault.code &&
+          `${tag} ${section}: ${name} gives 500 INTERNAL, no handler, one auth.callback.failed ${expect}, no callback text in the response`,
+          reply.status === 500 &&
+            reply.code === 'INTERNAL' &&
             handled === handledBefore &&
             written.length === 1 &&
-            written[0] === fault.expect &&
+            written[0] === expect &&
             clean,
           `${reply.status} ${reply.code}; handler runs +${handled - handledBefore}; records ${written.join(', ') || 'none'}`,
         );
       }
     }
-    const lateFaults: [string, () => void, string, Record<string, string>, number, string, string][] = [
+    const lateFaults: [string, keyof typeof hooks, string, Record<string, string>, number, string, string][] = [
+      ['policy load late (past 5,000 ms)', 'load', '/policy', key, 503, 'AUTH_UNAVAILABLE', 'policy.load:deadline'],
       [
         'policy action late (past 5,000 ms)',
-        () => {
-          hooks.action = late(true, 6500);
-        },
+        'action',
         '/policy',
         key,
         503,
         'AUTH_UNAVAILABLE',
         'policy.action:deadline',
       ],
-      [
-        'policy load late (past 5,000 ms)',
-        () => {
-          hooks.load = late({ id: 1 }, 6500);
-        },
-        '/policy',
-        key,
-        503,
-        'AUTH_UNAVAILABLE',
-        'policy.load:deadline',
-      ],
-      [
-        'map late (past 5,000 ms)',
-        () => {
-          hooks.map = late({ kind: 'accept', userId: 'u-late' }, 6500);
-        },
-        '/token',
-        token,
-        500,
-        'INTERNAL',
-        'jwt.map:deadline',
-      ],
+      ['map late (past 5,000 ms)', 'map', '/token', token, 500, 'INTERNAL', 'jwt.map:deadline'],
     ];
-    for (const [name, set, path, headers, status, code, expect] of lateFaults) {
-      Object.assign(hooks, healthy);
-      set();
-      const before = records.filter((record) => record.event_name === 'auth.callback.failed').length;
-      const handledBefore = handled;
+    Object.assign(hooks, healthy);
+    const lateBefore = records.filter((record) => record.event_name === 'auth.callback.failed').length;
+    const handledBeforeLate = handled;
+    // Why: The three deadlines run at once; each request is sent only after the one before reached its held callback.
+    const late = holder();
+    const pending: Promise<{ answer: Reply; took: number }>[] = [];
+    for (const [, hook, route, sent] of lateFaults) {
+      hooks[hook] = late.held(
+        hook === 'map' ? { kind: 'accept', userId: 'u-late' } : hook === 'load' ? { id: 1 } : true,
+      );
       const started = Date.now();
-      const reply = await call(base, path, headers);
-      const took = Date.now() - started;
-      Object.assign(hooks, healthy);
-      await sleep(300);
-      await settleLog(lines);
-      const written = pairs(records.filter((record) => record.event_name === 'auth.callback.failed').slice(before));
+      pending.push(call(base, route, sent).then((got) => ({ answer: got, took: Date.now() - started })));
+      await late.called();
+      hooks[hook] = healthy[hook];
+    }
+    const replies = await Promise.all(pending);
+    late.release();
+    await settleLog(lines);
+    const written = pairs(records.filter((record) => record.event_name === 'auth.callback.failed').slice(lateBefore));
+    lateFaults.forEach(([name, , , , status, code, expect], index) => {
+      const seen = replies[index];
       report.check(
         `${tag} ${name} is answered ${status} ${code} at the deadline, never admitted, one record ${expect}`,
-        reply.status === status &&
-          reply.code === code &&
-          handled === handledBefore &&
-          written.length === 1 &&
-          written[0] === expect &&
-          !reply.text.includes(CANARY) &&
-          took >= 4900 &&
-          took < 6400,
-        `${reply.status} ${reply.code} after ${took} ms; records ${written.join(', ') || 'none'}`,
+        seen !== undefined &&
+          seen.answer.status === status &&
+          seen.answer.code === code &&
+          !seen.answer.text.includes(CANARY) &&
+          written.filter((pair) => pair === expect).length === 1 &&
+          seen.took >= 4900 &&
+          seen.took < 6400,
+        `${seen?.answer.status} ${seen?.answer.code} after ${seen?.took} ms; records ${written.join(', ') || 'none'}`,
       );
-    }
+    });
+    report.check(
+      `${tag} the late answers, released after the refusals, admit nothing and write nothing more`,
+      handled === handledBeforeLate && written.length === lateFaults.length,
+      `handler runs +${handled - handledBeforeLate}; records ${written.length}`,
+    );
     for (const [name, answerOf] of [
       ['null', () => null],
       ['undefined', () => undefined],
@@ -635,10 +467,12 @@ async function oidcSection(kind: Kind): Promise<void> {
         `${seen.hop}; ${calls} calls; callback records ${written.join(', ')}; sign-in refusals ${refusals.map((record) => JSON.stringify(record.fields)).join(' ')}`,
       );
     }
-    mapper = late({ kind: 'user', userId: 'u-1' }, 6500);
+    const late = holder();
+    mapper = late.held({ kind: 'user', userId: 'u-1' });
     const before = app.events('auth.callback.failed').length;
     const seen = await login();
     mapper = () => ({ kind: 'user', userId: 'u-1' });
+    late.release();
     await app.settle();
     const written = pairs(app.events('auth.callback.failed').slice(before));
     report.check(
@@ -790,11 +624,14 @@ async function symbolSection(kind: Kind): Promise<void> {
 }
 
 for (const kind of kinds) {
-  await report.run(`${kind} verifier answers`, () => verifierSection(kind));
-  await report.run(`${kind} symbol-keyed action`, () => symbolSection(kind));
-  await report.run(`${kind} gate callbacks`, () => gateSection(kind));
-  await report.run(`${kind} handoff verify`, () => handoffSection(kind));
-  await report.run(`${kind} OIDC mapper`, () => oidcSection(kind));
+  // Why: Each section has its own store, server and log sink, so their 5,000 ms deadlines overlap instead of adding up.
+  await Promise.all([
+    report.run(`${kind} verifier answers`, () => verifierSection(kind)),
+    report.run(`${kind} symbol-keyed action`, () => symbolSection(kind)),
+    report.run(`${kind} gate callbacks`, () => gateSection(kind)),
+    report.run(`${kind} handoff verify`, () => handoffSection(kind)),
+    report.run(`${kind} OIDC mapper`, () => oidcSection(kind)),
+  ]);
 }
 
 await host.close();

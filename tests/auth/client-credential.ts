@@ -9,14 +9,14 @@ import { HttpError } from '@skeld/core/http-error';
 import { object, string } from '@skeld/core/schema';
 import { expose } from '@skeld/core/secret';
 import { appRoutes, observe, series, startApp } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 import { compileProbes } from '../support/support-compile.ts';
 import { cleanAll, makeRig, type Kind, rigKinds } from './support-store.ts';
 import { sessionRoutes } from '@skeld/auth/routes';
 
 const statement =
   'the typed client sends its one credential only to non-public routes of its own origin (a bearer as authorization with credentials omitted, a session cookie with credentials included and its CSRF token on unsafe methods), refuses a token outside its grammar before any request, and refuses at creation a route that declares the credential headers';
-const report = createReport('v01', statement);
+const report = createReport(statement);
 
 const ok = { 200: object({ ok: string({ maxLength: 8 }) }) };
 const contract = defineContract({

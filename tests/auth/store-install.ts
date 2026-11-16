@@ -9,7 +9,6 @@ import { createSqliteStore } from '@skeld/auth/sqlite';
 import type { StoreEvent } from '@skeld/auth/store';
 import {
   cleanAll,
-  createReport,
   failureCode,
   fresh,
   isFailure,
@@ -22,6 +21,7 @@ import {
   show,
   sleepMs,
 } from './support-store.ts';
+import { createReport } from './rig/report.ts';
 
 type Report = ReturnType<typeof createReport>;
 
@@ -228,8 +228,6 @@ async function memoryStore(report: Report): Promise<void> {
 
 async function main(): Promise<void> {
   const report = createReport(
-    's06',
-    'store-install',
     'attach on a store never installed creates nothing; a stored row that does not parse is a record failure; the SQLite file is created private; close stops the maintenance timer and leaves the application Pool open',
   );
   try {

@@ -1,8 +1,5 @@
-// Does:  Reports each case of a V05 or V06 proof script on stdout.
-// Holds: The exit code is non-zero when any case failed.
-
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+// Does:  Reports each case of an auth test script on stdout, one line per case and a closing count.
+// Holds: The exit code is non-zero when any case failed or threw.
 
 export interface Report {
   note: (line: string) => void;
@@ -11,22 +8,13 @@ export interface Report {
   finish: () => void;
 }
 
-const root = fileURLToPath(new URL('../../..', import.meta.url));
-
-export function createReport(_task: 'v05' | 'v06', script: string, statement: string): Report {
+export function createReport(statement: string): Report {
   let cases = 0;
   let failed = 0;
   const emit = (line: string): void => {
     process.stdout.write(`${line}\n`);
   };
-  let commit = 'no git';
-  try {
-    commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-  } catch {
-    commit = 'no git';
-  }
-  emit(`${script}: ${statement}`);
-  emit(`candidate: working tree on ${commit}; Node ${process.version}; ${new Date().toISOString()}`);
+  emit(statement);
   const check = (name: string, ok: boolean, detail = ''): boolean => {
     cases++;
     if (!ok) {

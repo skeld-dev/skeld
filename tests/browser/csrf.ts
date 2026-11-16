@@ -1,4 +1,4 @@
-// Does:  Proves the cross-site check on POST, PUT, PATCH and DELETE: the Origin and Sec-Fetch-Site table and its effects.
+// Does:  Proves the cross-site check on POST, PUT, PATCH and DELETE: the Origin and Sec-Fetch-Site table and effects.
 // Holds: A refused request reaches no hook, error handler or handler, and no refused origin is in stderr or stdout.
 // biome-ignore-all lint/performance/noAwaitInLoops: Serial requests keep each case's wire bytes apart.
 

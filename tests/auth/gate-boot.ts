@@ -18,13 +18,13 @@ import { object, string } from '@skeld/core/schema';
 import { createServer, type Server } from '@skeld/core/server';
 import { Pool } from 'pg';
 import { cookieHeader, get, type Observed, ORIGIN, observe, series, spareStore, startApp } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 import { cleanAll, makeRig, type Kind } from './support-store.ts';
 import { behaviorKinds as rigKinds } from '../support/test-profile.ts';
 
 const statement =
   'an omitted access declaration, an unknown policy or action, a policy input that is not in the route schemas, a credential kind that is not installed, a cookie route outside a strict csrf group, an access declaration without a gate, an invalid configuration and every unknown option key refuse boot with the contract wording; public routes do no identity lookup; a server without a gate behaves as before';
-const report = createReport('v01', statement);
+const report = createReport(statement);
 
 const jwtPair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
 const ok = { 200: object({ ok: string({ maxLength: 8 }) }) };

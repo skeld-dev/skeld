@@ -1,49 +1,20 @@
-// Does:  Proves on both adapters that enable refuses after an interleaved credential change and ends old sessions.
-// Holds: Cases are judged from subject answers, real HTTP statuses and direct database reads, never from timing.
+// Does:  Proves on both adapters the generation fence: stale enable, revocation and a sign-in crossing a change.
+// Holds: Orderings are forced by holding verify open; results come from public answers, HTTP statuses and row counts.
 
 import { randomBytes } from 'node:crypto';
-import { once } from 'node:events';
-import { createServer as createNetServer } from 'node:net';
-import { setImmediate as nextTurn } from 'node:timers/promises';
-import { hashPassword, verifyPassword } from '@skeld/auth/password';
-import { sessionRoutes } from '@skeld/auth/routes';
-import { createAuth, type Subjects } from '@skeld/auth/server';
-import { defineContract, errorBodySchema } from '@skeld/core/contract';
-import { object, string } from '@skeld/core/schema';
-import { Secret } from '@skeld/core/secret';
-import { createServer } from '@skeld/core/server';
-import { createLogs, type Logs, observe, series } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import type { Subjects } from '@skeld/auth/server';
+import { createReport } from './rig/report.ts';
+import { cookieHeader, get, series, startApp } from './rig/v1-app.ts';
 import { cleanAll, fresh, type Kind, makeRig, type Rig, rigKinds } from './support-store.ts';
 
-const statement =
-  'enable(userId, expectedGeneration) refuses after an interleaved credential change and ends the sessions of the old credential in the same unit; with the application serialising per user a change and a reconciliation never admit an old-password session; a moved generation stops the change and a reconciliation enables at the generation it read';
-const report = createReport('v03', statement);
+const report = createReport(
+  'enable is fenced by the generation it names and ends the sessions of the disabled subject; revocation ends every session; a sign-in whose verification crosses a credential change issues no session',
+);
 
-const COOKIE = '__Host-skeld';
-
-const routes = defineContract({
-  login: {
-    method: 'POST',
-    path: '/login',
-    access: 'public',
-    body: object({
-      username: string({ minLength: 1, maxLength: 64 }),
-      password: string({ minLength: 1, maxLength: 1024, sensitivity: 'secret' }),
-    }),
-    responses: { 200: object({ status: string({ maxLength: 16 }) }), 401: errorBodySchema },
-  },
-  me: {
-    method: 'GET',
-    path: '/me',
-    access: { policy: 'auth.session', action: 'use' },
-    responses: { 200: object({ userId: string({ maxLength: 128 }) }) },
-  },
-});
+const id = (prefix: string): string => `${prefix}-${randomBytes(5).toString('hex')}`;
 
 type Answer = Awaited<ReturnType<Subjects[keyof Subjects]>>;
 
-// Does:  Names an answer of a subject call without its engine text.
 function show(answer: Answer): string {
   switch (answer.kind) {
     case 'done':
@@ -61,339 +32,6 @@ function show(answer: Answer): string {
   }
 }
 
-// Does:  Is the application's own per-user serialization: one holder at a time, later callers wait their turn.
-class Locks {
-  readonly #tails = new Map<string, Promise<void>>();
-
-  async run<T>(userId: string, work: () => Promise<T>): Promise<T> {
-    const previous = this.#tails.get(userId) ?? Promise.resolve();
-    const { promise: released, resolve: release } = Promise.withResolvers<void>();
-    const tail = previous.then(() => released);
-    this.#tails.set(userId, tail);
-    await previous;
-    try {
-      return await work();
-    } finally {
-      release();
-      if (this.#tails.get(userId) === tail) {
-        this.#tails.delete(userId);
-      }
-    }
-  }
-}
-
-// Does:  Orders every call a scenario makes, so a proof can say which came first.
-class Trace {
-  readonly lines: string[] = [];
-  add(actor: string, text: string): void {
-    this.lines.push(`${actor} ${text}`);
-  }
-  first(text: string): number {
-    return this.lines.findIndex((line) => line.includes(text));
-  }
-  count(text: string): number {
-    return this.lines.filter((line) => line.includes(text)).length;
-  }
-}
-
-interface Env {
-  readonly kind: Kind;
-  readonly rig: Rig;
-  readonly logs: Logs;
-  readonly origin: string;
-  readonly subjects: Subjects;
-  readonly sessions: ReturnType<typeof createAuth>['sessions'];
-  readonly accounts: Map<string, string>;
-  readonly close: () => Promise<void>;
-}
-
-async function freePort(): Promise<number> {
-  const probe = createNetServer().listen(0, '127.0.0.1');
-  await once(probe, 'listening');
-  const address = probe.address();
-  probe.close();
-  if (address === null || typeof address === 'string') {
-    throw new Error('no local port');
-  }
-  return address.port;
-}
-
-// Does:  Boots a real createAuth on a real core server over the rig's store, with the application's own account map.
-async function startEnv(kind: Kind): Promise<Env> {
-  const rig = await makeRig(kind, { attach: false });
-  const observed = observe(rig.store);
-  const logs = createLogs();
-  const accounts = new Map<string, string>();
-  const port = await freePort();
-  const origin = `http://127.0.0.1:${port}`;
-  const auth = createAuth({ store: observed.store, origin });
-  const server = createServer({
-    gate: auth.gate,
-    publicOrigin: origin,
-    csrf: { mode: 'strict' },
-    log: { thresholds: { security: 'info', app: 'info' }, sink: logs.sink },
-  });
-  server.routes(sessionRoutes, auth.handlers.session);
-  server.routes(routes, {
-    login: async (request) => {
-      const { username, password } = request.body;
-      const established = await auth.sessions.establish({
-        rawCookies: request.rawCookies,
-        userId: username,
-        // Why: The handoff's obligation is that verify reads the stored hash inside the call.
-        verify: async (signal) => {
-          const stored = accounts.get(username);
-          if (stored === undefined) {
-            return false;
-          }
-          return (await verifyPassword(password, stored, { signal })).kind === 'match';
-        },
-      });
-      if (established.kind === 'established') {
-        return { status: 200, body: { status: 'session' }, cookies: established.cookies };
-      }
-      return { status: 401, body: { status: 401, code: 'LOGIN_FAILED', message: 'Sign-in refused' } };
-    },
-    me: (request) => ({
-      status: 200,
-      body: { userId: request.principal.kind === 'session' ? request.principal.userId : 'not-a-session' },
-    }),
-  });
-  await server.listen({ port, host: '127.0.0.1' });
-  return {
-    kind,
-    rig,
-    logs,
-    origin,
-    subjects: auth.subjects,
-    sessions: auth.sessions,
-    accounts,
-    close: async () => {
-      await server.close();
-      await rig.dispose();
-    },
-  };
-}
-
-interface Person {
-  readonly id: string;
-  readonly oldPassword: string;
-  readonly newPassword: string;
-  readonly hash: string;
-}
-
-async function newPerson(env: Env, tag: string): Promise<Person> {
-  const id = `${tag}-${randomBytes(5).toString('hex')}`;
-  const oldPassword = `old-${randomBytes(12).toString('base64url')}`;
-  const newPassword = `new-${randomBytes(12).toString('base64url')}`;
-  const hashed = await hashPassword(new Secret(oldPassword));
-  if (hashed.kind !== 'hashed') {
-    throw new Error(`hash answered ${hashed.kind}`);
-  }
-  env.accounts.set(id, hashed.hash);
-  return { id, oldPassword, newPassword, hash: hashed.hash };
-}
-
-async function signIn(env: Env, id: string, password: string): Promise<{ status: number; cookie: string | null }> {
-  const response = await fetch(`${env.origin}/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', origin: env.origin },
-    body: JSON.stringify({ username: id, password }),
-    redirect: 'manual',
-  });
-  await response.text();
-  let cookie: string | null = null;
-  for (const line of response.headers.getSetCookie()) {
-    const pair = line.split(';')[0] ?? '';
-    if (pair.startsWith(`${COOKIE}=`)) {
-      cookie = pair;
-    }
-  }
-  return { status: response.status, cookie };
-}
-
-async function admitted(env: Env, cookie: string | null): Promise<number | string> {
-  if (cookie === null) {
-    return 'no session';
-  }
-  const response = await fetch(`${env.origin}/me`, { headers: { cookie }, redirect: 'manual' });
-  await response.text();
-  return response.status;
-}
-
-// Does:  Says which of the two passwords sign in, by the status of one sign-in each.
-async function signIns(env: Env, person: Person): Promise<string> {
-  const old = await signIn(env, person.id, person.oldPassword);
-  const next = await signIn(env, person.id, person.newPassword);
-  return `old=${old.status} new=${next.status}`;
-}
-
-function traced(
-  env: Env,
-  actor: string,
-  trace: Trace,
-): Pick<Subjects, 'read' | 'disable' | 'enable' | 'revokeSessions'> {
-  const note = (text: string, answer: Answer): void => trace.add(actor, `${text} -> ${show(answer)}`);
-  return {
-    read: async (id) => {
-      const answer = await env.subjects.read(id);
-      note('subjects.read', answer);
-      return answer;
-    },
-    disable: async (id) => {
-      const answer = await env.subjects.disable(id);
-      note('subjects.disable', answer);
-      return answer;
-    },
-    enable: async (id, generation) => {
-      const answer = await env.subjects.enable(id, generation);
-      note(`subjects.enable(${generation})`, answer);
-      return answer;
-    },
-    revokeSessions: async (id) => {
-      const answer = await env.subjects.revokeSessions(id);
-      note('subjects.revokeSessions', answer);
-      return answer;
-    },
-  };
-}
-
-interface Hooks {
-  readonly afterDisable?: () => Promise<void>;
-}
-
-interface ChangeInput {
-  readonly person: Person;
-  readonly locks: Locks;
-  readonly trace: Trace;
-  readonly hooks?: Hooks;
-}
-
-// Does:  Writes the new hash only if the stored one is still the verified one; the hooks make the outcome unknown.
-function writeHash(env: Env, input: ChangeInput, stored: string, nextHash: string): boolean {
-  const { person, trace } = input;
-  const applied = env.accounts.get(person.id) === stored;
-  if (applied) {
-    env.accounts.set(person.id, nextHash);
-  }
-  trace.add('C', `write H->N -> ${applied ? 'applied' : 'not applied'}`);
-  return applied;
-}
-
-// Does:  Step 3 of the contract: enable at the generation step 1 answered, and read before anything else when unknown.
-async function enableAfterWrite(
-  subjects: ReturnType<typeof traced>,
-  id: string,
-  generation: number,
-  written: boolean,
-): Promise<string> {
-  const enabled = await subjects.enable(id, generation);
-  if (enabled.kind === 'done') {
-    return written ? 'changed' : 'conflict';
-  }
-  if (enabled.kind === 'refused') {
-    return `stopped:${enabled.reason}`;
-  }
-  if (enabled.outcome === 'not_applied') {
-    return 'pending:enable';
-  }
-  const read = await subjects.read(id);
-  return read.kind === 'subject' && read.enabled && read.generation === generation + 1 ? 'changed' : 'pending:enable';
-}
-
-// Does:  Runs the application's side of a password change as the contract's three steps under the user's lock.
-function change(env: Env, input: ChangeInput): Promise<string> {
-  const { person, locks, trace, hooks } = input;
-  const subjects = traced(env, 'C', trace);
-  return locks.run(person.id, async () => {
-    const stored = env.accounts.get(person.id) ?? '';
-    const checked = await verifyPassword(new Secret(person.oldPassword), stored);
-    const next = await hashPassword(new Secret(person.newPassword));
-    if (checked.kind !== 'match' || next.kind !== 'hashed') {
-      return 'refused';
-    }
-    const disabled = await subjects.disable(person.id);
-    if (disabled.kind === 'unavailable') {
-      return disabled.outcome === 'not_applied' ? 'not_started' : 'pending:disable';
-    }
-    await hooks?.afterDisable?.();
-    const written = writeHash(env, input, stored, next.hash);
-    return enableAfterWrite(subjects, person.id, disabled.generation, written);
-  });
-}
-
-async function attempt(work: Promise<string>): Promise<string> {
-  try {
-    return await work;
-  } catch (error) {
-    return `threw ${String(error)}`;
-  }
-}
-
-// Does:  Reconciles as the contract says, under the same lock: enable at the generation read, or revoke when enabled.
-function reconcile(env: Env, id: string, locks: Locks, actor: string, trace: Trace): Promise<string> {
-  const subjects = traced(env, actor, trace);
-  return locks.run(id, async () => {
-    const subject = await subjects.read(id);
-    if (subject.kind === 'unavailable') {
-      return 'unavailable';
-    }
-    if (subject.kind === 'absent') {
-      return 'absent';
-    }
-    if (subject.enabled) {
-      return (await subjects.revokeSessions(id)).kind === 'done' ? 'revoked' : 'unavailable';
-    }
-    const enabled = await subjects.enable(id, subject.generation);
-    return enabled.kind === 'done' ? 'enabled' : 'unavailable';
-  });
-}
-
-async function turns(count: number): Promise<void> {
-  await series(Array.from({ length: count }), async () => {
-    await nextTurn();
-  });
-}
-
-type Check = readonly [name: string, ok: boolean, detail: string];
-
-// Does:  Collects the judged assertions of one scenario run.
-class Verdicts {
-  readonly items: Check[] = [];
-  eq(name: string, got: string | number, want: string | number): void {
-    this.items.push([name, got === want, got === want ? `${got}` : `got ${got}, want ${want}`]);
-  }
-  yes(name: string, ok: boolean, detail = ''): void {
-    this.items.push([name, ok, detail]);
-  }
-}
-
-// Does:  Reports every assertion of the first run, and for later runs one line saying whether all of them held.
-function emit(label: string, runs: readonly Verdicts[]): void {
-  const first = runs[0];
-  if (first === undefined) {
-    return;
-  }
-  for (const [name, ok, detail] of first.items) {
-    report.check(`${label} ${name}`, ok, detail);
-  }
-  const rest = runs.slice(1);
-  if (rest.length > 0) {
-    const bad = rest.flatMap((run, index) =>
-      run.items.filter(([, ok]) => !ok).map(([name, , detail]) => `run ${index + 2}: ${name} (${detail})`),
-    );
-    report.check(
-      `${label} the other ${rest.length} runs held all ${first.items.length} assertions`,
-      bad.length === 0,
-      bad.slice(0, 3).join('; '),
-    );
-  }
-}
-
-async function sessionRows(env: Env, id: string): Promise<number> {
-  return await env.rig.count('sessions', 'user_id', id);
-}
-
 async function plant(rig: Rig, userId: string, count: number): Promise<void> {
   const now = Date.now();
   await series(Array.from({ length: count }), async () => {
@@ -404,19 +42,18 @@ async function plant(rig: Rig, userId: string, count: number): Promise<void> {
   });
 }
 
-// Does:  Group 1: the store unit under the public call, whose answer counts the sessions an enable deletes.
-async function unit(kind: Kind): Promise<void> {
-  const label = `[${kind}] store unit:`;
+// Does:  Plants sessions under a disabled subject, which no public call can make, to see what enable deletes.
+async function enableDeletes(kind: Kind): Promise<void> {
   const rig = await makeRig(kind);
   try {
-    const userId = `u1-${randomBytes(5).toString('hex')}`;
+    const userId = id('u1');
     const disabled = await rig.store.ops.subjectDisable({ userId });
     await plant(rig, userId, 3);
     const stale = await rig.store.ops.subjectEnable({ userId, generation: disabled.generation + 1 });
     const kept = await rig.count('sessions', 'user_id', userId);
     const done = await rig.store.ops.subjectEnable({ userId, generation: disabled.generation });
     report.check(
-      `${label} subjectEnable at the disabled generation answers done with revoked 3 and the generation one higher; at another generation it answers lost stale and deletes nothing`,
+      `[${kind}] store unit: subjectEnable at the disabled generation answers done with revoked 3 and the generation one higher; at another generation it answers lost stale and deletes nothing`,
       stale.kind === 'lost' &&
         stale.reason === 'stale' &&
         kept === 3 &&
@@ -431,185 +68,128 @@ async function unit(kind: Kind): Promise<void> {
   }
 }
 
-// Does:  Group 2: the change and the reconciliation hold their own locks, so nothing serialises them.
-async function withoutSerialization(env: Env): Promise<Verdicts> {
-  const out = new Verdicts();
-  const trace = new Trace();
-  const person = await newPerson(env, 'g2');
-  const paused = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  const changeDone = attempt(
-    change(env, {
-      person,
-      locks: new Locks(),
-      trace,
-      hooks: {
-        afterDisable: async () => {
-          paused.resolve();
-          await release.promise;
-        },
-      },
-    }),
-  );
-  await paused.promise;
-  const reconciled = await reconcile(env, person.id, new Locks(), 'R', trace);
-  out.eq('the reconciliation, holding no common lock, enables at the generation it read', reconciled, 'enabled');
-  const early = await signIn(env, person.id, person.oldPassword);
-  out.eq('the old password signs in while the change is paused (session S)', early.status, 200);
-  out.eq('S is admitted on a protected route', await admitted(env, early.cookie), 200);
-  release.resolve();
-  const outcome = await changeDone;
-  out.eq('the change stops at its refused enable and does not report success', outcome, 'stopped:enabled');
-  out.eq(
-    'the change called disable once and enable once: nothing repeated',
-    `${trace.count('C subjects.disable')}/${trace.count('C subjects.enable')}`,
-    '1/1',
-  );
-  out.yes(
-    'the change had written the new hash before its enable was refused',
-    trace.count('write H->N -> applied') === 1,
-  );
-  out.eq(
-    'S is still admitted after the refused enable (the documented residual)',
-    await admitted(env, early.cookie),
-    200,
-  );
-  const settled = await reconcile(env, person.id, new Locks(), 'R2', trace);
-  out.eq('a reconciliation that finds the subject enabled revokes sessions', settled, 'revoked');
-  out.eq('S is refused from then on', await admitted(env, early.cookie), 401);
-  out.eq('no session of the user exists', await sessionRows(env, person.id), 0);
-  out.eq('the old password does not sign in and the new one does', await signIns(env, person), 'old=401 new=200');
-  return out;
-}
-
-// Does:  Group 3: the change and the reconciliation share one per-user serialization.
-async function withSerialization(env: Env): Promise<Verdicts> {
-  const out = new Verdicts();
-  const trace = new Trace();
-  const person = await newPerson(env, 'g3');
-  const locks = new Locks();
-  const paused = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  const changeDone = attempt(
-    change(env, {
-      person,
-      locks,
-      trace,
-      hooks: {
-        afterDisable: async () => {
-          paused.resolve();
-          await release.promise;
-        },
-      },
-    }),
-  );
-  await paused.promise;
-  const reconciling = reconcile(env, person.id, locks, 'R', trace);
-  await turns(25);
-  out.eq('the reconciliation has not read the subject while the change is paused', trace.count('R subjects.read'), 0);
-  const early = await signIn(env, person.id, person.oldPassword);
-  const earlyNew = await signIn(env, person.id, person.newPassword);
-  out.eq(
-    'a sign-in with the old password during the pause is refused',
-    `${early.status} ${early.cookie === null ? 'no cookie' : 'cookie'}`,
-    '401 no cookie',
-  );
-  out.eq(
-    'a sign-in with the new password during the pause is refused too',
-    `${earlyNew.status} ${earlyNew.cookie === null ? 'no cookie' : 'cookie'}`,
-    '401 no cookie',
-  );
-  release.resolve();
-  const outcome = await changeDone;
-  const reconciled = await reconciling;
-  out.eq('the change completes', outcome, 'changed');
-  out.yes(
-    'the reconciliation read the subject only after the change had enabled it',
-    trace.first('C subjects.enable') >= 0 && trace.first('R subjects.read') > trace.first('C subjects.enable'),
-    `C enable at ${trace.first('C subjects.enable')}, R read at ${trace.first('R subjects.read')}`,
-  );
-  out.eq('the reconciliation found it enabled and revoked sessions', reconciled, 'revoked');
-  out.eq('no session of the user exists', await sessionRows(env, person.id), 0);
-  const old = await signIn(env, person.id, person.oldPassword);
-  out.eq('the old password does not sign in', old.status, 401);
-  const next = await signIn(env, person.id, person.newPassword);
-  out.eq('the new password signs in and is admitted', `${next.status} ${await admitted(env, next.cookie)}`, '200 200');
-  out.eq('the only session of the user is the new one', await sessionRows(env, person.id), 1);
-  return out;
-}
-
-// Does:  Group 5: another actor moved the generation during the change, so its enable is refused stale.
-async function staleEnable(env: Env): Promise<Verdicts> {
-  const out = new Verdicts();
-  const trace = new Trace();
-  const person = await newPerson(env, 'g5');
-  const locks = new Locks();
-  const paused = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  const changeDone = attempt(
-    change(env, {
-      person,
-      locks,
-      trace,
-      hooks: {
-        afterDisable: async () => {
-          paused.resolve();
-          await release.promise;
-        },
-      },
-    }),
-  );
-  await paused.promise;
-  const extra = show(await env.subjects.disable(person.id));
-  out.eq('an extra disable during the change raises the generation', extra, 'done(enabled=false,generation=3)');
-  release.resolve();
-  const outcome = await changeDone;
-  out.eq('the change stops: its enable is refused stale', outcome, 'stopped:stale');
-  out.eq(
-    'the change called disable once and enable once: nothing repeated',
-    `${trace.count('C subjects.disable')}/${trace.count('C subjects.enable')}`,
-    '1/1',
-  );
-  out.eq(
-    'the subject stays disabled at the moved generation',
-    show(await env.subjects.read(person.id)),
-    'subject(enabled=false,generation=3)',
-  );
-  out.eq('no password signs in', await signIns(env, person), 'old=401 new=401');
-  const settled = await reconcile(env, person.id, locks, 'R', trace);
-  out.eq('a reconciliation enables at the generation it read', settled, 'enabled');
-  out.eq(
-    'the reconciliation named generation 3',
-    trace.count('R subjects.enable(3) -> done(enabled=true,generation=4)'),
-    1,
-  );
-  out.eq(
-    'the change had written the new hash: only the new password signs in',
-    await signIns(env, person),
-    'old=401 new=200',
-  );
-  out.eq(
-    "the change's own stale enable, repeated now, is refused enabled",
-    show(await env.subjects.enable(person.id, 2)),
-    'refused/enabled',
-  );
-  return out;
-}
-
-async function suite(kind: Kind): Promise<void> {
-  const env = await startEnv(kind);
+async function publicCases(kind: Kind): Promise<void> {
+  const label = `[${kind}]`;
+  const rig = await makeRig(kind, { attach: false });
+  let hold: (() => Promise<void>) | null = null;
+  const app = await startApp({
+    store: rig.store,
+    verify: async () => {
+      await hold?.();
+      return true;
+    },
+  });
+  const { subjects } = app;
+  const admitted = async (token: string | null): Promise<number | string> =>
+    token === null ? 'no session' : (await get(app.port, '/docs', [cookieHeader('__Host-skeld', token)])).status;
+  const rows = (userId: string): Promise<number> => rig.count('sessions', 'user_id', userId);
   try {
-    await report.run(`[${kind}] store unit`, () => unit(kind));
-    emit(`[${kind}] no serialization:`, [await withoutSerialization(env)]);
-    emit(`[${kind}] per-user serialization:`, [await withSerialization(env)]);
-    emit(`[${kind}] stale enable:`, [await staleEnable(env)]);
+    const revokedUser = id('rv');
+    const first = await app.signIn(revokedUser);
+    const second = await app.signIn(revokedUser);
+    const readBefore = await subjects.read(revokedUser);
+    const revoked = await subjects.revokeSessions(revokedUser);
+    const readAfter = await subjects.read(revokedUser);
+    const statuses = `${await admitted(first.token)} ${await admitted(second.token)}`;
+    report.check(
+      `${label} revokeSessions ends every session of the user and raises the generation, leaving it enabled`,
+      revoked.kind === 'done' &&
+        statuses === '401 401' &&
+        (await rows(revokedUser)) === 0 &&
+        readBefore.kind === 'subject' &&
+        readAfter.kind === 'subject' &&
+        readAfter.enabled &&
+        readAfter.generation > readBefore.generation,
+      `${show(revoked)}; sessions answer ${statuses}; ${show(readBefore)} -> ${show(readAfter)}`,
+    );
+
+    const fenced = id('st');
+    const live = await app.signIn(fenced);
+    const firstDisable = await subjects.disable(fenced);
+    const secondDisable = await subjects.disable(fenced);
+    if (firstDisable.kind !== 'done' || secondDisable.kind !== 'done') {
+      throw new Error(`disable answered ${show(firstDisable)} and ${show(secondDisable)}`);
+    }
+    const stale = await subjects.enable(fenced, firstDisable.generation);
+    const afterStale = await subjects.read(fenced);
+    const whileDisabled = await app.signIn(fenced);
+    const enabled = await subjects.enable(fenced, secondDisable.generation);
+    const repeated = await subjects.enable(fenced, secondDisable.generation);
+    const absent = await subjects.enable(id('nobody'), 2);
+    report.check(
+      `${label} enable at a generation another disable moved is refused stale and changes nothing; at the current one it enables`,
+      show(stale) === 'refused/stale' &&
+        show(afterStale) === `subject(enabled=false,generation=${secondDisable.generation})` &&
+        enabled.kind === 'done' &&
+        enabled.enabled &&
+        enabled.generation > secondDisable.generation,
+      `${show(stale)}; ${show(afterStale)}; then ${show(enabled)}`,
+    );
+    report.check(
+      `${label} enable on an enabled subject is refused enabled and on an unknown one absent`,
+      show(repeated) === 'refused/enabled' && show(absent) === 'refused/absent',
+      `${show(repeated)}; ${show(absent)}`,
+    );
+    report.check(
+      `${label} a disabled subject's session is refused and it cannot sign in until enabled`,
+      (await admitted(live.token)) === 401 &&
+        whileDisabled.result === 'refused:disabled' &&
+        whileDisabled.token === null &&
+        (await app.signIn(fenced)).result === 'established',
+      `old session ${await admitted(live.token)}; sign-in while disabled ${whileDisabled.result}`,
+    );
+
+    const crossings: [string, (userId: string) => Promise<unknown>, string][] = [
+      ['revokeSessions', (userId) => subjects.revokeSessions(userId), 'refused:stale'],
+      ['disable', (userId) => subjects.disable(userId), 'refused:disabled'],
+      [
+        'disable then enable',
+        async (userId) => {
+          const off = await subjects.disable(userId);
+          return off.kind === 'done' ? subjects.enable(userId, off.generation) : off;
+        },
+        'refused:stale',
+      ],
+    ];
+    await series(crossings, async ([name, change, want]) => {
+      const userId = id('cx');
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      hold = async () => {
+        entered.resolve();
+        await release.promise;
+      };
+      const signing = app.signIn(userId);
+      await entered.promise;
+      hold = null;
+      await change(userId);
+      release.resolve();
+      const signed = await signing;
+      await app.logs.settle();
+      const failed = app.logs
+        .named('auth.signin.failed')
+        .filter((record) => record.fields['auth.user'] === userId)
+        .map((record) => `${String(record.fields['auth.via'])}:${String(record.fields['auth.reason'])}`);
+      report.check(
+        `${label} a sign-in whose verify was running when ${name} completed issues no session: ${want}, one record`,
+        signed.result === want &&
+          signed.token === null &&
+          (await rows(userId)) === 0 &&
+          failed.join() === `handoff:${want.slice('refused:'.length)}`,
+        `${signed.result}; cookie ${signed.token === null ? 'none' : 'set'}; sessions ${await rows(userId)}; records ${failed.join()}`,
+      );
+    });
   } finally {
-    await env.close();
+    await app.close();
+    await rig.dispose();
   }
 }
 
 try {
-  await series(rigKinds, suite);
+  await series(rigKinds, async (kind) => {
+    await report.run(`[${kind}] enable deletes planted sessions`, () => enableDeletes(kind));
+    await report.run(`[${kind}] public credential changes`, () => publicCases(kind));
+  });
 } finally {
   await cleanAll();
 }

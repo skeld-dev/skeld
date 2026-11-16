@@ -1,30 +1,39 @@
 // Does:  Proves a hashing computation its caller abandoned, and that later fails, leaves no unhandled rejection.
-// Holds: The platform failure is made in a child by replacing crypto.argon2 before auth loads; the parent only judges.
+// Holds: The child replaces crypto.argon2 before auth loads and fails each held computation; the parent only judges.
 
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { syncBuiltinESMExports } from 'node:module';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 
 const self = fileURLToPath(import.meta.url);
+
+type Done = (error: Error | null, out?: Buffer) => void;
 
 async function child(): Promise<void> {
   const unhandled: string[] = [];
   process.on('unhandledRejection', (reason) => {
     unhandled.push(String(reason));
   });
+  const held: Done[] = [];
   let computations = 0;
-  // Why: the platform computation fails 300 ms after it starts, as an out-of-memory allocation would
-  Reflect.set(
-    crypto,
-    'argon2',
-    (_algorithm: string, _parameters: unknown, callback: (error: Error | null, out?: Buffer) => void) => {
-      computations++;
-      setTimeout(() => callback(new Error('platform allocation failed')), 300);
-    },
-  );
+  // Why: Each platform computation is held until the script fails it, as an out-of-memory allocation would.
+  Reflect.set(crypto, 'argon2', (_algorithm: string, _parameters: unknown, done: Done) => {
+    computations++;
+    held.push(done);
+  });
   syncBuiltinESMExports();
+  const failAll = async (): Promise<void> => {
+    for (const done of held.splice(0)) {
+      done(new Error('platform allocation failed'));
+    }
+    for (let turn = 0; turn < 5; turn++) {
+      // biome-ignore lint/performance/noAwaitInLoops: each turn lets the helper's continuations and handlers run
+      await nextTurn();
+    }
+  };
   const { hashPassword, verifyPassword } = await import('@skeld/auth/password');
   const { Secret } = await import('@skeld/core/secret');
   const out: Record<string, unknown> = {};
@@ -36,7 +45,10 @@ async function child(): Promise<void> {
         `rejected ${error instanceof Error ? `${error.name} ${String(Reflect.get(error, 'code'))}` : String(error)}`,
     );
 
-  out.control = await settle(hashPassword(new Secret('control')));
+  const control = settle(hashPassword(new Secret('control')));
+  await nextTurn();
+  await failAll();
+  out.control = await control;
 
   const hashAbort = new AbortController();
   const hashed = settle(hashPassword(new Secret('abandoned'), { signal: hashAbort.signal }));
@@ -48,12 +60,15 @@ async function child(): Promise<void> {
   const verified = settle(verifyPassword(new Secret('abandoned'), hash, { signal: verifyAbort.signal }));
   queueMicrotask(() => verifyAbort.abort());
   out.abandonedVerify = await verified;
+  out.heldWhenAbandoned = held.length;
   const startedBefore = computations;
-  await new Promise((resolve) => setTimeout(resolve, 1200));
+  await failAll();
   out.computationsAfter = computations - startedBefore;
   out.computationsTotal = computations;
-  out.afterAbandon = await settle(hashPassword(new Secret('after')));
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  const after = settle(hashPassword(new Secret('after')));
+  await nextTurn();
+  await failAll();
+  out.afterAbandon = await after;
   out.unhandled = unhandled;
   process.stdout.write(JSON.stringify(out));
 }
@@ -62,7 +77,6 @@ if (process.argv[2] === 'child') {
   await child();
 } else {
   const report = createReport(
-    'v10/review-fixes',
     'a hashing or verifying computation abandoned by its caller (answered busy) that later fails on the platform leaves no unhandled rejection and frees its slot',
   );
   const run = spawnSync(process.execPath, ['--conditions=skeld-source', self, 'child'], {
@@ -97,8 +111,8 @@ if (process.argv[2] === 'child') {
     String(seen.abandonedVerify),
   );
   report.check(
-    'both abandoned computations really ran and failed after their callers had left (two platform calls, 300 ms later)',
-    seen.computationsTotal === 3 && seen.computationsAfter === 0,
+    'both abandoned computations really ran and failed after their callers had left, and neither was retried',
+    seen.heldWhenAbandoned === 2 && seen.computationsTotal === 3 && seen.computationsAfter === 0,
     `${String(seen.computationsTotal)} platform calls in all`,
   );
   report.check(

@@ -1,180 +1,262 @@
-// Does:  Proves a silent or dead reader and a failing sink never stop a request and never grow the queue past 1 MiB.
-// Holds: Each fixture is judged on one driver report, from the status counts, the sum rule and the queue peak.
+// Does:  Proves a stalled or dead stdout reader and a failing sink never stop a request and never hold over 1 MiB.
+// Holds: Each fixture also shows its failure happened (a stuck write, failed writes, failed or hung sink calls).
 
-// biome-ignore-all lint/performance/noAwaitInLoops: the driver runs one after another, never in parallel
-import { spawn } from 'node:child_process';
+// biome-ignore-all lint/performance/noAwaitInLoops: the stats route is polled until the fixture's failure shows
+import { type ChildProcess, spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { defineContract } from '@skeld/core/contract';
+import type { LogSink, LogStats } from '@skeld/core/log';
+import * as t from '@skeld/core/schema';
+import { createServer } from '@skeld/core/server';
+import { announceListening } from '../support/support-log.ts';
 import { check, createReport } from '../support/support-proof.ts';
 
-const fixtures = [
-  'reader-silent',
-  'reader-exited',
-  'sink-throws',
-  'sink-rejects',
-  'sink-hangs',
-  'sink-reenters',
-] as const;
+type SinkMode = 'none' | 'throws' | 'rejects' | 'hangs' | 'reenters' | 'healthy';
+
+interface Observed {
+  stats: LogStats;
+  sinkCalls: number;
+  nested: number;
+  echoed: number;
+}
+
+interface Fixture {
+  sink: SinkMode;
+  reader: 'silent' | 'exited' | 'none';
+  // Does:  Says whether a stats sample shows the fixture's failure (or, for the control, a drained queue).
+  shows: (seen: Observed) => boolean;
+  never: readonly ('write_failed' | 'sink_failed')[];
+}
+
 const queueBytes = 1_048_576;
-const driveTimeoutMs = 180_000;
-const driver = fileURLToPath(new URL('../../benchmarks/logging/drive.ts', import.meta.url));
-const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
+// Why: 400 records of about 4.2 KB queue about 1.7 MB in one handler call, past the 1 MiB queue and a 64 KiB pipe.
+const burstRecords = 400;
+const ordinary = 200;
+const settleMs = 5000;
+const pad = 'x'.repeat(1000);
+const marker = 'logged from inside the sink';
 
-interface Drive {
-  fixture: string;
-  requests: number;
-  answered: number;
-  statuses: Record<string, number>;
-  samples: number;
-  sumHeld: boolean;
-  maxHeldBytes: number;
-  last: { created: number; written: number; queued: number; inFlight: number; dropped: Record<string, number> };
-  sinkCalls: number | null;
-  peakRssBytes: number;
-  droppedShare: number;
-}
+const fixtures: Record<string, Fixture> = {
+  'reader-silent': {
+    sink: 'none',
+    reader: 'silent',
+    shows: ({ stats }) => stats.inFlight > 0 && stats.pendingMs > 0,
+    never: ['write_failed', 'sink_failed'],
+  },
+  'reader-exited': {
+    sink: 'none',
+    reader: 'exited',
+    shows: ({ stats }) => stats.dropped.write_failed > 0,
+    never: ['sink_failed'],
+  },
+  'sink-throws': {
+    sink: 'throws',
+    reader: 'none',
+    shows: ({ stats, sinkCalls }) => sinkCalls > 0 && stats.dropped.sink_failed > 0,
+    never: ['write_failed'],
+  },
+  'sink-rejects': {
+    sink: 'rejects',
+    reader: 'none',
+    shows: ({ stats, sinkCalls }) => sinkCalls > 0 && stats.dropped.sink_failed > 0,
+    never: ['write_failed'],
+  },
+  'sink-hangs': {
+    sink: 'hangs',
+    reader: 'none',
+    shows: ({ stats, sinkCalls }) => sinkCalls === 1 && stats.inFlight > 0 && stats.pendingMs > 0,
+    never: ['write_failed', 'sink_failed'],
+  },
+  'sink-reenters': {
+    sink: 'reenters',
+    reader: 'none',
+    shows: ({ sinkCalls, echoed }) => sinkCalls > 1 && echoed > 0,
+    never: ['write_failed', 'sink_failed'],
+  },
+  'control: healthy sink': {
+    sink: 'healthy',
+    reader: 'none',
+    shows: ({ stats, sinkCalls }) => sinkCalls > 0 && stats.queued === 0 && stats.inFlight === 0,
+    never: ['write_failed', 'sink_failed'],
+  },
+};
 
-type Obj = Record<string, unknown>;
+const report = t.object({ report: t.string({ maxLength: 4000 }) });
+const contract = defineContract({
+  hello: { method: 'GET', path: '/', responses: { 200: t.object({ hello: t.string({ maxLength: 8 }) }) } },
+  burst: { method: 'GET', path: '/burst', responses: { 200: report } },
+  stats: { method: 'GET', path: '/stats', responses: { 200: report } },
+});
 
-function isObject(value: unknown): value is Obj {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function num(object: Obj, key: string): number {
-  const value = object[key];
-  if (typeof value !== 'number') {
-    throw new Error(`report field ${key} is not a number`);
-  }
-  return value;
-}
-
-function member(object: Obj, key: string): Obj {
-  const value = object[key];
-  if (!isObject(value)) {
-    throw new Error(`report field ${key} is not an object`);
-  }
-  return value;
-}
-
-function numbers(object: Obj): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const [key, value] of Object.entries(object)) {
-    if (typeof value !== 'number') {
-      throw new Error(`report member ${key} is not a number`);
-    }
-    out[key] = value;
-  }
-  return out;
-}
-
-function readDrive(text: string): Drive {
-  const root: unknown = JSON.parse(text);
-  if (!isObject(root)) {
-    throw new Error('the report is not a JSON object');
-  }
-  const stats = member(root, 'stats');
-  const last = member(stats, 'last');
-  const sinkCalls = root.sinkCalls;
-  if (sinkCalls !== null && typeof sinkCalls !== 'number') {
-    throw new Error('report field sinkCalls is neither null nor a number');
-  }
-  if (typeof stats.sumHeld !== 'boolean') {
-    throw new Error('report field stats.sumHeld is not a boolean');
-  }
-  if (typeof root.fixture !== 'string') {
-    throw new Error('report field fixture is not a string');
-  }
-  return {
-    fixture: root.fixture,
-    requests: num(root, 'requests'),
-    answered: num(root, 'answered'),
-    statuses: numbers(member(root, 'statuses')),
-    samples: num(stats, 'samples'),
-    sumHeld: stats.sumHeld,
-    maxHeldBytes: num(stats, 'maxHeldBytes'),
-    last: {
-      created: num(last, 'created'),
-      written: num(last, 'written'),
-      queued: num(last, 'queued'),
-      inFlight: num(last, 'inFlight'),
-      dropped: numbers(member(last, 'dropped')),
+function serve(mode: SinkMode): void {
+  let sinkCalls = 0;
+  let nested = 0;
+  let echoed = 0;
+  let inside = false;
+  const sinks: Record<Exclude<SinkMode, 'none'>, LogSink> = {
+    throws: () => {
+      sinkCalls++;
+      throw new Error('the sink fixture throws');
     },
-    sinkCalls,
-    peakRssBytes: num(root, 'peakRssBytes'),
-    droppedShare: num(root, 'droppedShare'),
+    rejects: () => {
+      sinkCalls++;
+      return Promise.reject(new Error('the sink fixture rejects'));
+    },
+    hangs: () => {
+      sinkCalls++;
+      return new Promise<void>(() => undefined);
+    },
+    reenters: (records) => {
+      sinkCalls++;
+      nested += inside ? 1 : 0;
+      echoed += records.some((line) => line.includes(marker)) ? 1 : 0;
+      inside = true;
+      server.log.info(marker);
+      inside = false;
+    },
+    healthy: async () => {
+      sinkCalls++;
+      await delay(1);
+    },
   };
+  const server = createServer({ log: mode === 'none' ? { access: true } : { access: true, sink: sinks[mode] } });
+  server.routes(contract, {
+    hello: () => ({ status: 200, body: { hello: 'world' } }),
+    burst: () => {
+      for (let index = 0; index < burstRecords; index++) {
+        server.log.warn('burst', { a: pad, b: pad, c: pad, d: pad });
+      }
+      return { status: 200, body: { report: String(burstRecords) } };
+    },
+    stats: () => ({
+      status: 200,
+      body: { report: JSON.stringify({ stats: server.logStats(), sinkCalls, nested, echoed }) },
+    }),
+  });
+  server
+    .listen({ port: 0, host: '127.0.0.1' })
+    .then(({ port }) => announceListening(port))
+    .catch((error: unknown) => {
+      process.stderr.write(`serve failed: ${String(error)}\n`);
+      process.exitCode = 1;
+    });
 }
 
-function drive(fixture: string): Promise<string> {
+function portOf(child: ChildProcess): Promise<number> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [driver, '--fixture', fixture], {
-      cwd: sourceRoot,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let out = '';
-    let err = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      out += chunk;
-    });
-    child.stderr.on('data', (chunk: string) => {
-      err += chunk;
-    });
-    const timer = setTimeout(() => child.kill('SIGKILL'), driveTimeoutMs);
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      clearTimeout(timer);
-      if (code === 0) {
-        resolve(out);
-        return;
+    let text = '';
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => {
+      text += chunk;
+      const match = /^listening (\d+)$/m.exec(text);
+      if (match?.[1] !== undefined) {
+        resolve(Number(match[1]));
       }
-      reject(new Error(`the driver ended with code ${code} signal ${signal}: ${err.trim().slice(-300)}`));
     });
+    child.once('exit', () => reject(new Error(`the server child exited before listening: ${text}`)));
   });
 }
 
-function judge(drove: Drive, fixture: string): string[] {
+async function get(port: number, path: string): Promise<{ status: number; body: string }> {
+  const response = await fetch(`http://127.0.0.1:${port}${path}`);
+  return { status: response.status, body: await response.text() };
+}
+
+async function sample(port: number): Promise<Observed> {
+  const reply = await get(port, '/stats');
+  const parsed: Observed = JSON.parse(JSON.parse(reply.body).report);
+  return parsed;
+}
+
+// Does:  Samples the stats route until the fixture's failure shows or the settle time ends; returns every sample.
+async function settle(port: number, fixture: Fixture): Promise<Observed[]> {
+  let last = await sample(port);
+  const samples = [last];
+  const deadline = Date.now() + settleMs;
+  while (!fixture.shows(last) && Date.now() < deadline) {
+    await delay(50);
+    last = await sample(port);
+    samples.push(last);
+  }
+  return samples;
+}
+
+const droppedTotal = (stats: LogStats): number => Object.values(stats.dropped).reduce((sum, count) => sum + count, 0);
+
+async function runFixture(fixture: Fixture): Promise<{ problems: string[]; detail: string }> {
+  const self = fileURLToPath(import.meta.url);
+  const child = spawn(process.execPath, ['--conditions=skeld-source', self, 'serve', fixture.sink], {
+    stdio: ['ignore', fixture.reader === 'none' ? 'ignore' : 'pipe', 'pipe'],
+  });
+  // Why: Destroying the only read end makes every write fail with EPIPE; a silent reader is the end left unread.
+  if (fixture.reader === 'exited') {
+    child.stdout?.destroy();
+  }
   const problems: string[] = [];
-  const other = Object.entries(drove.statuses).filter(([status]) => status !== '200');
-  const total = Object.values(drove.statuses).reduce((sum, count) => sum + count, 0);
-  check(problems, drove.fixture === fixture, `report is for ${drove.fixture}, not ${fixture}`);
-  check(problems, drove.requests > 0, 'no request was sent');
-  check(problems, drove.answered === drove.requests, `${drove.answered} of ${drove.requests} answered 200`);
-  check(problems, total === drove.requests, `statuses add up to ${total}, not ${drove.requests}`);
-  check(problems, other.length === 0, `non-200 statuses: ${JSON.stringify(Object.fromEntries(other))}`);
-  check(problems, drove.samples > 0, `the stats call was sampled ${drove.samples} times`);
-  check(problems, drove.sumHeld, 'the sum rule failed in a sample');
-  const { last } = drove;
-  const dropped = Object.values(last.dropped).reduce((sum, count) => sum + count, 0);
-  const accounted = last.written + dropped + last.queued + last.inFlight;
-  check(problems, last.created === accounted, `last sample: created ${last.created} is not ${accounted}`);
-  check(problems, drove.maxHeldBytes <= queueBytes, `held ${drove.maxHeldBytes} bytes, over ${queueBytes}`);
-  if (fixture === 'sink-hangs') {
-    check(problems, drove.sinkCalls === 1, `sink called ${drove.sinkCalls} times, not once`);
-  }
-  return problems;
-}
-
-const fixed = (value: number, digits: number): string => value.toFixed(digits);
-
-const report = createReport('log-destination');
-report.note('AC-8 and AC-9: six fixtures, one driver report each, run one after another');
-report.note('Peak RSS and dropped share are recorded and not judged (reading M-2)');
-
-for (const fixture of fixtures) {
-  let drove: Drive;
+  let samples: Observed[] = [];
   try {
-    drove = readDrive(await drive(fixture));
-  } catch (error) {
-    report.result(fixture, [`driver: ${error instanceof Error ? error.message : String(error)}`], '');
-    continue;
+    const port = await portOf(child);
+    const burst = await get(port, '/burst');
+    check(problems, burst.status === 200, `the burst answered ${burst.status}`);
+    const afterBurst = await sample(port);
+    const answers = await Promise.all(Array.from({ length: ordinary }, () => get(port, '/')));
+    const fine = answers.filter((answer) => answer.status === 200 && answer.body === '{"hello":"world"}').length;
+    check(problems, fine === ordinary, `${fine} of ${ordinary} ordinary requests answered 200 with their body`);
+    samples = [afterBurst, ...(await settle(port, fixture))];
+  } finally {
+    child.kill('SIGKILL');
+    if (child.exitCode === null && child.signalCode === null) {
+      await once(child, 'exit');
+    }
   }
-  report.result(
-    fixture,
-    judge(drove, fixture),
-    `answered ${drove.answered} of ${drove.requests} (statuses ${JSON.stringify(drove.statuses)}); samples ${drove.samples}; ` +
-      `sum held ${drove.sumHeld}; max held ${drove.maxHeldBytes} bytes; sinkCalls ${drove.sinkCalls}; ` +
-      `peak RSS ${drove.peakRssBytes} bytes; dropped share ${fixed(drove.droppedShare, 4)}`,
+  const last = samples.at(-1);
+  if (last === undefined) {
+    return { problems: [...problems, 'no stats sample'], detail: '' };
+  }
+  const held = Math.max(...samples.map(({ stats }) => stats.queuedBytes + stats.inFlightBytes));
+  const unsummed = samples.filter(
+    ({ stats }) => stats.created !== stats.written + stats.queued + stats.inFlight + droppedTotal(stats),
   );
+  check(
+    problems,
+    unsummed.length === 0,
+    `${unsummed.length} samples break created = written + queued + in flight + dropped`,
+  );
+  check(problems, held <= queueBytes, `${held} bytes held, over ${queueBytes}`);
+  check(problems, last.stats.dropped.queue_full > 0, 'the burst never filled the queue');
+  check(problems, fixture.shows(last), `the failure never showed in ${settleMs} ms`);
+  for (const reason of fixture.never) {
+    check(problems, last.stats.dropped[reason] === 0, `${last.stats.dropped[reason]} records dropped as ${reason}`);
+  }
+  check(problems, last.nested === 0, `${last.nested} sink calls started inside another`);
+  return {
+    problems,
+    detail:
+      `${ordinary} ordinary requests answered; ${samples.length} samples, at most ${held} bytes held; ` +
+      `dropped ${JSON.stringify(last.stats.dropped)}; in flight ${last.stats.inFlight}; sink calls ${last.sinkCalls}`,
+  };
 }
-report.finish();
+
+function pastMode(value: string | undefined): SinkMode {
+  const modes: readonly SinkMode[] = ['none', 'throws', 'rejects', 'hangs', 'reenters', 'healthy'];
+  const mode = modes.find((candidate) => candidate === value);
+  if (mode === undefined) {
+    throw new Error(`unknown sink mode ${String(value)}`);
+  }
+  return mode;
+}
+
+if (process.argv[2] === 'serve') {
+  serve(pastMode(process.argv[3]));
+} else {
+  const results = await Promise.all(
+    Object.entries(fixtures).map(async ([name, fixture]) => ({ name, ...(await runFixture(fixture)) })),
+  );
+  const proof = createReport();
+  for (const { name, problems, detail } of results) {
+    proof.result(name, problems, detail);
+  }
+  proof.finish();
+}

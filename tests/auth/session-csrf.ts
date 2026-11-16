@@ -14,13 +14,13 @@ import {
   startApp,
   type App,
 } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 import { cleanAll, type Kind, makeRig, type Rig, rigKinds, toNumber } from './support-store.ts';
 import { StoreFailure } from '@skeld/auth/store';
 
 const statement =
   'cookie routes sit in strict cross-site groups and cannot be csrfExempt; every unsafe session request, sign-out included, needs the session-bound header token in its one canonical spelling; sign-out reports success only after confirmed revocation and answers 503 on store uncertainty; dead-cookie cleanup never revokes or clears a live session; responses are not cacheable and carry no secret beyond the allowed one';
-const report = createReport('v03', statement);
+const report = createReport(statement);
 
 const NAME = '__Host-skeld';
 const CSRF = '{"status":403,"code":"CSRF_TOKEN_INVALID","message":"CSRF token missing or not accepted"}';

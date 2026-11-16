@@ -15,13 +15,13 @@ import {
   startApp,
   type App,
 } from './rig/v1-app.ts';
-import { createReport } from './rig/v1-report.ts';
+import { createReport } from './rig/report.ts';
 import { behaviorKinds as rigKinds } from '../support/test-profile.ts';
 import { cleanAll, type Kind, makeRig, type Rig, toNumber } from './support-store.ts';
 
 const statement =
   "shared limits charge atomically in bounded windows under bounded keys; auth's public endpoints and an application charge before their expensive work; an unavailable store is Unavailable and never a pass, with no fallback";
-const report = createReport('v04', statement);
+const report = createReport(statement);
 
 const NAME = '__Host-skeld';
 

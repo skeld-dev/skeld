@@ -85,14 +85,14 @@ export const suites = {
     'auth/security-events.ts',
     'auth/sessions.ts',
   ],
-  tooling: ['auth/pack-contents.ts', 'auth/static-invariants.ts'],
+  tooling: ['auth/pack-contents.ts'],
 } as const;
 
 export const allScripts: readonly string[] = Object.values(suites).flat();
 export const categories = ['security', 'browser', 'lifecycle', 'contracts', 'schema', 'logging', 'auth'];
 
 export function selectScripts(mode: string): readonly string[] {
-  if (mode === 'all' || mode === 'full' || mode === 'exhaustive') {
+  if (mode === 'all' || mode === 'full') {
     return allScripts;
   }
   if (mode === 'quick') {

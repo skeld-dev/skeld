@@ -1,7 +1,7 @@
 // Does:  Runs correctness scripts by suite or category, with an explicit mode for diagnostics.
-// Holds: Each script gets its own process; missing scripts, timeouts and nonzero exits fail the run.
+// Holds: Each script runs in its own process group; a timeout kills the group, and timeouts and nonzero exits fail.
 
-import { spawnSync } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,6 +17,8 @@ const diagScripts = [
   'security/error-leak.ts',
   'security/duplicate-host.ts',
 ];
+// Why: The slowest script takes 15 to 20 s on the development host; 90 s leaves room for a slower CI runner.
+const watchdogMs = 90_000;
 const [mode = 'all', ...args] = process.argv.slice(2);
 const list = args.length === 1 && args[0] === '--list';
 
@@ -43,13 +45,78 @@ function scriptsFor(): readonly string[] {
   return selectScripts(mode);
 }
 
+interface Ran {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  leftovers: boolean;
+}
+
+let current: ChildProcess | null = null;
+
+// Does:  Kills a script's whole process group; false when no process of the group was left.
+function killGroup(pid: number): boolean {
+  try {
+    process.kill(-pid, 'SIGKILL');
+    return true;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') {
+      return false;
+    }
+    throw error;
+  }
+}
+
+function runScript(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<Ran> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, argv, { env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    current = child;
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let leftovers = false;
+    const kill = (): boolean => child.pid !== undefined && killGroup(child.pid);
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      kill();
+    }, watchdogMs);
+    child.once('error', reject);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      // Why: A fixture the script started can outlive it and hold the output pipes open, so its group dies with it.
+      leftovers = !timedOut && kill();
+    });
+    child.once('close', (code, signal) => {
+      current = null;
+      resolve({ code, signal, stdout, stderr, timedOut, leftovers });
+    });
+  });
+}
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    if (current?.pid !== undefined) {
+      killGroup(current.pid);
+    }
+    process.exit(130);
+  });
+}
+
 let failed = 0;
 const scripts = scriptsFor();
 const local = ['quick', 'runtime', 'protocol', 'extended', 'tooling', 'diag'].includes(mode);
-const profile = mode === 'exhaustive' ? 'exhaustive' : mode === 'quick' || mode === 'runtime' ? 'quick' : 'standard';
+const fewerSchemas = mode === 'quick' || mode === 'runtime';
 if (list) {
   process.stdout.write(
-    `${mode}: ${scripts.length} scripts; stores=${local ? 'sqlite' : 'both'}; profile=${profile}\n${scripts.join('\n')}\n`,
+    `${mode}: ${scripts.length} scripts; stores=${local ? 'sqlite' : 'both'}; schemas=${fewerSchemas ? '200' : 'all'}\n${scripts.join('\n')}\n`,
   );
   process.exit(0);
 }
@@ -68,32 +135,27 @@ for (const script of scripts) {
     flags.push('--disallow-code-generation-from-strings');
   }
   const scriptArgs =
-    profile === 'quick' && ['schema/differential.ts', 'schema/serializer-differential.ts'].includes(script)
+    fewerSchemas && ['schema/differential.ts', 'schema/serializer-differential.ts'].includes(script)
       ? ['--schemas', '200']
       : [];
   const scriptStarted = performance.now();
   try {
-    const result = spawnSync(
-      process.execPath,
-      [...flags, fileURLToPath(new URL(script, import.meta.url)), ...scriptArgs],
-      {
-        encoding: 'utf8',
-        timeout: 600_000,
-        maxBuffer: 16 * 1024 * 1024,
-        env: {
-          ...process.env,
-          SKELD_TEST_PROFILE: profile,
-          SKELD_TEST_STORES: local ? 'sqlite' : 'both',
-          ...(dir === undefined ? {} : { SKELD_DIAG_DIR: dir }),
-        },
-      },
-    );
-    process.stdout.write(`${script}: ${result.stdout?.trim() ?? ''}\n`);
-    if (result.status !== 0) {
+    // biome-ignore lint/performance/noAwaitInLoops: scripts run one at a time so their timings and ports stay their own
+    const result = await runScript([...flags, fileURLToPath(new URL(script, import.meta.url)), ...scriptArgs], {
+      ...process.env,
+      SKELD_TEST_STORES: local ? 'sqlite' : 'both',
+      ...(dir === undefined ? {} : { SKELD_DIAG_DIR: dir }),
+    });
+    process.stdout.write(`${script}: ${result.stdout.trim()}\n`);
+    if (result.leftovers) {
+      process.stderr.write(`${script}: killed processes it left running\n`);
+    }
+    if (result.timedOut || result.code !== 0) {
       failed++;
-      process.stderr.write(
-        `${script}: exit ${result.status ?? result.signal}\n${result.error ?? ''}\n${result.stderr}`,
-      );
+      const cause = result.timedOut
+        ? `timed out after ${watchdogMs / 1000} s; its process group was killed`
+        : `exit ${result.code ?? result.signal}`;
+      process.stderr.write(`${script}: ${cause}\n${result.stderr}`);
     }
   } finally {
     const seconds = (performance.now() - scriptStarted) / 1000;
