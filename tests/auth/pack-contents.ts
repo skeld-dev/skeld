@@ -156,8 +156,9 @@ try {
     incomplete.map(([key]) => key).join(',') || 'all present',
   );
   report.check(
-    '@skeld/auth depends on @skeld/core alone: no peer, optional or other dependency',
-    JSON.stringify(authManifest.dependencies) === '{"@skeld/core":"0.1.2"}' &&
+    "@skeld/auth depends on @skeld/core alone, at exactly the packed core tarball's version: no range, no peer, optional or other dependency",
+    /^\d+\.\d+\.\d+$/.test(String(manifestOf(coreDir).version)) &&
+      JSON.stringify(authManifest.dependencies) === JSON.stringify({ '@skeld/core': manifestOf(coreDir).version }) &&
       authManifest.peerDependencies === undefined &&
       authManifest.optionalDependencies === undefined,
     JSON.stringify(authManifest.dependencies),
