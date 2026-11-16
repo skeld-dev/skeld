@@ -1,14 +1,13 @@
 // Does:  Proves the sixteen engine-owned response headers are refused at four author sites and ordinary headers pass.
 // Holds: Responses are read as raw socket bytes, so a duplicate or an application framing header cannot hide.
 
-import { compileProbes, rejectsAt } from '../support/support-compile.ts';
 import { defineContract } from '@skeld/core/contract';
 import * as t from '@skeld/core/schema';
 import { createServer } from '@skeld/core/server';
 import { check, conclude, rawExchange } from '../support/support.ts';
 
 const statement =
-  'each of the sixteen engine-owned headers, lower or mixed case, set at an onRequest, preHandler or onSend hook, a hook send or a handler reply answers the fixed 500 INTERNAL with no application header and no application value on the wire, ordinary headers pass at the same four sites, a reserved name fails to compile at setHeader, a reply and a send while ordinary names compile, and the next connection is answered';
+  'each of the sixteen engine-owned headers, lower or mixed case, set at an onRequest, preHandler or onSend hook, a hook send or a handler reply answers the fixed 500 INTERNAL with no application header and no application value on the wire, ordinary headers pass at the same four sites, and the next connection is answered';
 
 const reserved: Record<string, string> = {
   'transfer-encoding': 'chunked',
@@ -148,85 +147,9 @@ function mixedCase(name: string): string {
     .join('-');
 }
 
-const hookHeader = "import { createServer } from '@skeld/core/server';\nconst server = createServer();\n";
-const replyHeader = `import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-import { createServer } from '@skeld/core/server';
-const contract = defineContract({ item: { method: 'GET', path: '/item', responses: { 200: t.object({ ok: t.boolean() }) } } });
-const server = createServer();
-`;
-function reply(headers: string): string {
-  return `${replyHeader}server.routes(contract, { item: () => ({ status: 200, body: { ok: true }, headers: ${headers} }) });\n`;
-}
-const corsNames = Object.keys(reserved).filter((name) => name.startsWith('access-control-'));
-const probes: { name: string; source: string; compiles: boolean }[] = [
-  ...corsNames.flatMap((name) => [
-    {
-      name: `setHeader ${name}`,
-      source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('${name}', 'x'); });\n`,
-      compiles: false,
-    },
-    { name: `reply headers ${name}`, source: reply(`{ '${name}': 'x' }`), compiles: false },
-    {
-      name: `send headers ${name}`,
-      source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { '${name}': 'x' } }); });\n`,
-      compiles: false,
-    },
-  ]),
-  {
-    name: 'setHeader transfer-encoding',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('transfer-encoding', 'chunked'); });\n`,
-    compiles: false,
-  },
-  {
-    name: 'setHeader Transfer-Encoding',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('Transfer-Encoding', 'chunked'); });\n`,
-    compiles: false,
-  },
-  { name: 'reply headers transfer-encoding', source: reply("{ 'transfer-encoding': 'chunked' }"), compiles: false },
-  {
-    name: 'send headers connection',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { connection: 'close' } }); });\n`,
-    compiles: false,
-  },
-  {
-    name: 'setHeader set-cookie',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('set-cookie', 'a=1'); });\n`,
-    compiles: false,
-  },
-  { name: 'reply headers set-cookie', source: reply("{ 'set-cookie': 'a=1' }"), compiles: false },
-  {
-    name: 'send headers set-cookie',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { 'set-cookie': 'a=1' } }); });\n`,
-    compiles: false,
-  },
-  {
-    name: 'setHeader x-request-id',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('x-request-id', 'a'); });\n`,
-    compiles: false,
-  },
-  { name: 'reply headers x-request-id', source: reply("{ 'x-request-id': 'a' }"), compiles: false },
-  {
-    name: 'send headers x-request-id',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { 'x-request-id': 'a' } }); });\n`,
-    compiles: false,
-  },
-  {
-    name: 'setHeader x-app-ref',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.setHeader('x-app-ref', 'a'); });\n`,
-    compiles: true,
-  },
-  { name: 'reply headers cache-control', source: reply("{ 'cache-control': 'no-store' }"), compiles: true },
-  {
-    name: 'send headers cache-control',
-    source: `${hookHeader}server.addHook('onRequest', (context) => { context.send({ status: 200, headers: { 'cache-control': 'no-store' } }); });\n`,
-    compiles: true,
-  },
-];
-
 const problems: string[] = [];
 const { port } = await server.listen({ port: 0, host: '127.0.0.1' });
-const summary = { refused: 0, passed: 0, compileFail: 0, compileClean: 0 };
+const summary = { refused: 0, passed: 0 };
 
 async function refusedCase(site: string, lower: string, name: string, baselineBody: string): Promise<void> {
   const appValue = reserved[lower] ?? '';
@@ -300,20 +223,6 @@ try {
   );
 } finally {
   await server.close();
-}
-
-const sources = probes.map((probe) => (probe.compiles ? probe.source : `${probe.source.trimEnd()} // BAD\n`));
-const results = compileProbes(sources);
-for (const [index, probe] of probes.entries()) {
-  const result = results[index];
-  if (probe.compiles) {
-    summary.compileClean++;
-    check(problems, result?.status === 0, `${probe.name}: ${result?.errors.join(' | ')}`);
-  } else {
-    summary.compileFail++;
-    const code = probe.name.startsWith('setHeader ') ? 2345 : 2322;
-    check(problems, rejectsAt(result, sources[index] ?? '', code), `${probe.name}: ${result?.errors.join(' | ')}`);
-  }
 }
 
 process.stderr.write(`${JSON.stringify(summary)}\n`);

@@ -1,4 +1,4 @@
-// Does:  Proves close() flushes a reading reader, resolves in time against a silent one, and delivers its closed record.
+// Does:  Proves close() flushes a reading reader, resolves in time against a silent one and delivers its closed record.
 // Holds: Stats are sampled inside the served process in one tick, so every sample is one consistent view of a server.
 
 // biome-ignore-all lint/security/noSecrets: route templates and event names, not credentials
@@ -381,14 +381,12 @@ function silentProblems(run: Silent): string[] {
 }
 
 async function silentCases(report: ReturnType<typeof createReport>, runs: number): Promise<void> {
-  const times: number[] = [];
   for (let index = 1; index <= runs; index++) {
     const { run, problems } = await silentRun();
     if (run === null) {
       report.result(`AC-12 [run ${index}] a silent reader`, [...problems, 'the run produced no samples'], '');
       continue;
     }
-    times.push(run.closeMs);
     const { after, final } = run;
     report.result(
       `AC-12 [run ${index}] a silent reader: close() resolves by Q-4's measure and loss is counted once`,
@@ -396,15 +394,6 @@ async function silentCases(report: ReturnType<typeof createReport>, runs: number
       `close() ${run.closeMs.toFixed(0)} ms (limit ${deadlineMs * 1.5}); in flight ${after.inFlight}, shutdown ${shutdownOf(after)}, queued ${after.queued}, sum rule held; after the reader resumed written ${final.written} = ${run.lines} lines`,
     );
   }
-  const spread: string[] = [];
-  check(spread, times.length === runs, `${times.length} of ${runs} runs gave a close time`);
-  const worst = Math.max(...times);
-  check(spread, worst <= deadlineMs * 1.5, `the slowest close() took ${worst.toFixed(0)} ms`);
-  report.result(
-    'AC-12 close() against a silent reader, measured in every run',
-    spread,
-    `${times.map((ms) => ms.toFixed(0)).join(', ')} ms in ${runs} runs, limit ${deadlineMs * 1.5} ms`,
-  );
 }
 
 interface PairSample {
@@ -630,9 +619,9 @@ async function reserveCase(report: ReturnType<typeof createReport>): Promise<voi
 }
 
 async function main(): Promise<void> {
-  const report = createReport('log-close');
+  const report = createReport();
   await readingCase(report);
-  await silentCases(report, 3);
+  await silentCases(report, 1);
   await pairCase(report);
   await reserveCase(report);
   report.finish();

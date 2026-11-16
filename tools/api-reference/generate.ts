@@ -1,4 +1,4 @@
-// Does:  Generates the API reference pages from the public symbols, or checks the committed pages for drift.
+// Does:  Generates the API reference pages of each package from its public symbols, or checks them for drift.
 // Holds: With --check nothing is written; a page that differs from a fresh run is reported and the exit is 1.
 
 import { spawnSync } from 'node:child_process';
@@ -7,7 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import { display, type Entry, type PublicSymbol, type Refusal, root, walk } from './walk.ts';
 
 interface Options {
-  readonly packageDir: string;
+  readonly packageDirs: readonly string[];
   readonly out: string;
   readonly check: boolean;
 }
@@ -20,6 +20,7 @@ interface Page {
 const usage = 'usage: node tools/api-reference/generate.ts [--package <dir>] [--out <dir>] [--check] | --help\n';
 const biome = join(root, 'node_modules/.bin/biome');
 const defaultOut = join(root, 'docs/api');
+const defaultPackages = [join(root, 'packages/core'), join(root, 'packages/auth')];
 
 function parseArgs(args: readonly string[]): Options | 'help' | undefined {
   if (args.length === 1 && args[0] === '--help') {
@@ -41,7 +42,7 @@ function parseArgs(args: readonly string[]): Options | 'help' | undefined {
     given.set(name, value);
   }
   return {
-    packageDir: resolve(given.get('package') ?? join(root, 'packages/core')),
+    packageDirs: [given.get('package') ?? defaultPackages].flat().map((dir) => resolve(dir)),
     out: resolve(given.get('out') ?? defaultOut),
     check,
   };
@@ -121,6 +122,30 @@ function checkPages(pages: readonly Page[]): number {
   return 0;
 }
 
+async function packagePages(packageDir: string, out: string): Promise<Page[] | Refusal> {
+  const result = await walk({ packageDir });
+  if ('refused' in result) {
+    return result;
+  }
+  const folder = join(out, result.packageFolder);
+  const pages: Page[] = [];
+  for (const entry of result.entries) {
+    if (entry.subpath === '.' || !entry.subpath.startsWith('./')) {
+      return { refused: `export ${entry.subpath} of ${result.packageName} has no page name` };
+    }
+    const name = `${entry.subpath.slice(2)}.md`;
+    const page = format(
+      { path: join(folder, name), text: renderPage(result.packageName, entry) },
+      join(defaultOut, result.packageFolder, name),
+    );
+    if ('refused' in page) {
+      return page;
+    }
+    pages.push(page);
+  }
+  return pages;
+}
+
 async function main(args: readonly string[]): Promise<number> {
   const options = parseArgs(args);
   if (options === 'help') {
@@ -131,25 +156,14 @@ async function main(args: readonly string[]): Promise<number> {
     process.stderr.write(usage);
     return 2;
   }
-  const result = await walk({ packageDir: options.packageDir });
-  if ('refused' in result) {
-    return notRun(result.refused);
-  }
-  const folder = join(options.out, result.packageFolder);
   const pages: Page[] = [];
-  for (const entry of result.entries) {
-    if (entry.subpath === '.' || !entry.subpath.startsWith('./')) {
-      return notRun(`export ${entry.subpath} has no page name`);
+  for (const packageDir of options.packageDirs) {
+    // biome-ignore lint/performance/noAwaitInLoops: each walk opens its own compiler API, and two at once gain nothing.
+    const result = await packagePages(packageDir, options.out);
+    if ('refused' in result) {
+      return notRun(result.refused);
     }
-    const name = `${entry.subpath.slice(2)}.md`;
-    const page = format(
-      { path: join(folder, name), text: renderPage(result.packageName, entry) },
-      join(defaultOut, result.packageFolder, name),
-    );
-    if ('refused' in page) {
-      return notRun(page.refused);
-    }
-    pages.push(page);
+    pages.push(...result);
   }
   if (options.check) {
     return checkPages(pages);
@@ -158,7 +172,7 @@ async function main(args: readonly string[]): Promise<number> {
     mkdirSync(dirname(page.path), { recursive: true });
     writeFileSync(page.path, page.text);
   }
-  process.stdout.write(`Reference written: ${pages.length} page(s) in ${display(folder)}.\n`);
+  process.stdout.write(`Reference written: ${pages.length} page(s) in ${display(options.out)}.\n`);
   return 0;
 }
 

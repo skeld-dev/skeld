@@ -11,8 +11,12 @@ export function parseQuery(query: string): QueryObject {
   for (const [key, value] of new URLSearchParams(query)) {
     const seen = result[key];
     if (seen === undefined) {
+      // Why: The result has a null prototype, so a request-supplied name is an own key and cannot reach a prototype.
+      // codeql[js/remote-property-injection]
       result[key] = value;
     } else if (typeof seen === 'string') {
+      // Why: The result has a null prototype, so a request-supplied name is an own key and cannot reach a prototype.
+      // codeql[js/remote-property-injection]
       result[key] = [seen, value];
     } else {
       seen.push(value);

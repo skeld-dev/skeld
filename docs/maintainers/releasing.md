@@ -1,7 +1,8 @@
 # Releases and hosting
 
-The public repository is `skeld-dev/skeld`. Only `packages/core` is published to npm, as
-`@skeld/core`; the first public development version is `0.1.0`. Other workspaces are private.
+The public repository is `skeld-dev/skeld`. Two workspaces are published to npm: `packages/core` as
+`@skeld/core`, whose first public development version is `0.1.0`, and `packages/auth` as `@skeld/auth`,
+first published at `0.2.0`. Other workspaces are private.
 Website deployment is independent of package releases.
 
 ## GitHub setup
@@ -15,10 +16,10 @@ After the first push, configure the repository:
 - Keep automatic Dependabot security-update PRs disabled. Review security alerts and make deliberate fixes;
   weekly version-update PRs remain enabled. Changing Dependabot configuration can cause an immediate update check.
 - Use the committed advanced CodeQL workflow, not a second default-setup scan.
-- Protect `main`: require pull requests, resolved conversations, an up-to-date branch and passing `Checks`.
-- CodeQL runs weekly and during releases, not on every PR. Do not require its status or a CodeQL scanning
-  rule on PRs. Review open findings before a release: a successful scan means analysis completed, not that
-  there are no findings.
+- Protect `main` with a ruleset ("Protect main"): require pull requests, resolved conversations, an up-to-date
+  branch and passing `Checks`, with no bypass actors. The release workflow does not rerun the tests and relies on it.
+- CodeQL runs on pull requests as part of `Checks` and weekly on `main`. `Checks` is the only status to
+  require; a separate CodeQL scanning rule is not needed.
 - Restrict creation, updates and deletion of `v*` tags to maintainers. Disable force pushes to `main`.
 - Require review of workflow and package changes using `.github/CODEOWNERS` when another maintainer
   is available. Do not require a solo author to approve their own pull request.
@@ -34,19 +35,43 @@ Dependabot can propose updates. Node and pnpm follow `.nvmrc` and `packageManage
 
 ## Checks and security coverage
 
-`ci.yml` runs one job on pull requests, on manual request, and when called by the release workflow.
-It checks types, strict Biome lint, unused dependencies, ordinary and diagnostic correctness, API documentation,
-runnable examples, package contents, consumer declarations, the website build and the complete lockfile's
-security advisories. It does not repeat after a PR merges to `main`. Benchmarks are not CI timing gates.
-The initial hosted full check took about four minutes, with about three and a half spent in correctness tests.
-The job has a ten-minute timeout; no correctness coverage was removed to shorten the workflow.
+The pull request is the one gate. `ci.yml` runs on pull requests and on manual request, and it is the only
+place tests and scans run: nothing repeats them after a pull request merges, and the release workflow does not
+run them again. Its first job, `Select checks`, chooses the other jobs with `tools/ci-select.ts`. On a pull
+request it reads the changed paths; a path no rule claims, such as the lockfile, a workflow or a file under
+`tools/`, selects every job. Documentation (`docs/`, any Markdown file) selects only the documentation checks and,
+for files the site renders or links, the website build. An empty diff selects nothing. A manual run selects every job.
 
-`security.yml` runs one job combining CodeQL's extended security queries for JavaScript/TypeScript and
-GitHub Actions with a full-lockfile advisory audit. It runs weekly on Monday, on manual request and during
-a release. It does not run on every PR or push. Both workflows fail on any dependency advisory;
-registry errors also fail. Release packaging also refuses every open CodeQL alert on `main`, after
-waiting for the release scan to finish processing. Resolve defects or explicitly dismiss verified false
-positives with evidence in GitHub; a successful analysis alone is not permission to publish.
+Each tool has one job:
+
+| Tool         | Job                                                      | CI job                             |
+| ------------ | -------------------------------------------------------- | ---------------------------------- |
+| TypeScript   | Types                                                    | Typecheck, lint, audit and Semgrep |
+| Biome        | Formatting and per-file lint                             | Typecheck, lint, audit and Semgrep |
+| Knip         | Unused files, exports and dependencies                   | Typecheck, lint, audit and Semgrep |
+| `pnpm audit` | Dependencies with known vulnerabilities, full lockfile   | Typecheck, lint, audit and Semgrep |
+| Semgrep      | Skeld's own boundaries and conventions (`.semgrep`)      | Typecheck, lint, audit and Semgrep |
+| CodeQL       | Vulnerabilities found by dataflow, and workflow security | CodeQL                             |
+
+- CodeQL analyses JavaScript/TypeScript and GitHub Actions with the `security-extended` queries, configured once
+  in `.github/codeql/codeql-config.yml`. It scans `packages`, `examples`, `tools` and `.github`; tests, benchmarks
+  and the website are left out. The job saves the SARIF results and fails on any result not suppressed in source.
+  It uploads results to code scanning except for pull requests from forks, whose token is read-only.
+- The test groups (runtime with the diagnostic tests, database with PostgreSQL 18, protocol, extended, tooling)
+  run as their own jobs, in parallel, when the changed paths select them. The API documentation, examples,
+  consumer declaration and website jobs run when their paths change.
+- A final `Checks` job fails when any selected job failed or was cancelled. It is the status branch protection requires.
+
+`pnpm run sast` runs the same Semgrep command and the same CodeQL analysis locally (see `CONTRIBUTING.md`).
+
+A pull request's checks cannot run longer than 10 minutes: `Select checks` has 2 minutes, every selected job 7
+and `Checks` 1.
+Benchmarks are not CI timing gates.
+
+`security.yml` runs CodeQL with the same configuration and a full-lockfile advisory audit weekly on Monday and on
+manual request. Release packaging refuses every open CodeQL alert on `main`. Resolve defects; mark a verified
+false positive with a `// codeql[<rule-id>]` comment on the line above it, or dismiss it in GitHub with evidence.
+A dismissal in GitHub does not reach the pull request check, which reads only the analysis results.
 
 Dependabot checks npm/pnpm dependencies and SHA-pinned GitHub Actions weekly. Minor/patch npm upgrades are
 grouped together; major upgrades remain separate. Actions are grouped, with at most two open action PRs and
@@ -60,13 +85,14 @@ establish that a Git dependency or vendored archive is safe.
 
 GitHub documents limitations for pnpm 12's two-document lockfile. The first hosted run nevertheless
 reported advisories from both manifests and the shared lockfile, including benchmark dependencies.
-Do not assume that detection is complete. The scheduled `pnpm audit` job supplies independent full-lockfile
-advisory coverage, including dependencies excluded from automatic update PRs.
+Do not assume that detection is complete. The `pnpm audit` step on pull requests and weekly supplies independent
+full-lockfile advisory coverage, including dependencies excluded from automatic update PRs.
 
 ## npm trusted publisher
 
-`@skeld/core@0.1.0` was bootstrapped from a verified local archive. Future releases use GitHub OIDC;
-no standing `NPM_TOKEN` secret or manual staging approval is needed.
+`@skeld/core@0.1.0` was bootstrapped from a verified local archive. Later releases use GitHub OIDC;
+no standing `NPM_TOKEN` secret or manual staging approval is needed. Each published package needs its
+own trusted publisher, with the same values:
 
 | Field             | Value                       |
 | ----------------- | --------------------------- |
@@ -76,30 +102,49 @@ no standing `NPM_TOKEN` secret or manual staging approval is needed.
 | Environment       | `npm`, restricted to `main` |
 | Allowed action    | Direct publishing           |
 
-Configure with `npm trust github @skeld/core --file release.yml --repository skeld-dev/skeld
---environment npm --allow-publish --yes` (one command). npm requires account 2FA for setup changes;
-normal workflow publications use the trusted identity. Keep account 2FA enabled. New trust configurations
-must be exercised within npm's activation window. The workflow checks npm >=11.15.0.
+Configure with `npm trust github <package> --file release.yml --repository skeld-dev/skeld
+--environment npm --allow-publish --yes` (one command per package). npm requires account 2FA for setup changes;
+normal workflow publications use the trusted identity. Keep account 2FA enabled. The workflow checks npm >=11.15.0.
+
+A maintainer must configure trusted publishing for `@skeld/auth` on npmjs.com before the first release
+that publishes it; the workflow holds no token, so without that configuration the auth publish fails.
+npm's documentation describes the setup from the package's settings page and does not say whether a
+name that has never been published can be configured there. If npm offers no settings for `@skeld/auth`
+yet, bootstrap it from a verified local archive as was done for core. npm also requires a new
+configuration's first successful publish within 2 days, or the configuration expires
+([trusted publisher configuration expiry](https://docs.npmjs.com/trusted-publishers/)).
 
 ## Release procedure
 
-1. Update `packages/core/package.json` to a new stable version and merge the reviewed PR after CI.
-2. **Publish npm release** starts automatically on `main` when that manifest changes. It validates the
-   repository and version against npm. Already-published versions are skipped; registry errors fail.
-3. CI and CodeQL run for that commit. Packaging requires the checks, an advisory-free lockfile and no
-   open CodeQL alerts on `main`. Documented false positives remain visible in GitHub as dismissed alerts.
-4. A clean build job packs core, checks recorder exclusion and exports, and uploads the exact archive
-   with its SHA-256 checksum. A separate publishing job verifies that checksum and publishes with npm
-   provenance and lifecycle scripts disabled. It neither checks out source nor installs project dependencies.
-5. Verify installation and the short package README on npm. An optional GitHub release/tag can point to
-   the workflow's source commit and attach its archive/checksum. Tags do not trigger npm publication.
+1. Update the version in `packages/core/package.json`, `packages/auth/package.json` or both to a new stable
+   version and merge the reviewed PR after CI. The packed auth depends on the exact core version in the
+   workspace, so an auth release that needs a new core releases core with it.
+2. **Publish npm release** starts automatically on `main` when either manifest changes. It validates the
+   repository and each package's name, access and version against npm, and decides per package whether
+   to publish. A version already on npm is skipped; registry errors fail. `@skeld/auth` may be absent from
+   the registry; `@skeld/core` may not.
+3. The tests do not run again. The "Protect main" ruleset requires a pull request, a passing `Checks` status
+   and a branch up to date with `main`, with no bypass actors, so the merged commit is the tree that passed.
+   Packaging requires no open CodeQL alerts on `main`, from the weekly scan. Documented false positives remain
+   visible in GitHub as dismissed or suppressed alerts.
+4. A clean build job builds both packages, packs each one that will be published, checks recorder exclusion
+   and exports on those exact tarballs, and uploads them as one artifact with one SHA-256 checksum file.
+5. A separate publishing job verifies the checksums and publishes core first, then auth, with npm provenance
+   and lifecycle scripts disabled. It neither checks out source nor installs project dependencies. If core's
+   publish fails, auth is not published. Before publishing auth it reads the `@skeld/core` version named in the
+   packed auth manifest and refuses unless that exact version was published earlier in the same run or is
+   already on npm.
+6. Verify installation and the short package READMEs on npm. An optional GitHub release/tag can point to
+   the workflow's source commit and attach its archives/checksums. Tags do not trigger npm publication.
 
 For a failed run, correct the cause and rerun **Publish npm release** on `main`. The workflow refuses
-other branches. If npm already accepted the version, it skips publication; inspect the registry artifact
-before treating an ambiguous publish failure as success. Never reuse an already-published version.
+other branches. A version npm already accepted is skipped, so a rerun after a partial failure publishes
+only what is missing; inspect the registry artifact before treating an ambiguous publish failure as success.
+Never reuse an already-published version.
 
-The package README is a short npm landing page. Detailed behavior lives in `docs/reference/core.md`,
-and `pnpm run reference-check` keeps its example synchronized with `examples/hello`.
+Each package README is a short npm landing page. Detailed behavior lives in `docs/reference/core.md`
+and `docs/reference/auth.md`; `pnpm run reference-check` keeps the core reference example synchronized
+with `examples/hello`.
 
 ## Cloudflare Workers Builds
 

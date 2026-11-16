@@ -58,8 +58,12 @@ export function parseCookies(header: string | undefined): CookieEntries {
       const value = trimmed(header, equals + 1, to);
       const seen = result[name];
       if (seen === undefined) {
+        // Why: The result has a null prototype, so a request-supplied name is an own key and cannot reach a prototype.
+        // codeql[js/remote-property-injection]
         result[name] = value;
       } else if (typeof seen === 'string') {
+        // Why: The result has a null prototype, so a request-supplied name is an own key and cannot reach a prototype.
+        // codeql[js/remote-property-injection]
         result[name] = [seen, value];
       } else {
         seen.push(value);

@@ -5,6 +5,7 @@ import type { BlockList } from 'node:net';
 import type { OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { CorsRoute } from '../cors/grant.ts';
 import type { CsrfRoute } from '../csrf/check.ts';
+import type { GateInput, GateRequest } from '../gate/types.ts';
 import type { PartSchemas, ServerLog } from '../log/shapes.ts';
 import type { Classified, Logger, RequestPart } from '../log/types.ts';
 import type { Router } from '../router/types.ts';
@@ -50,10 +51,20 @@ export interface HookChains {
   readonly onError: readonly OnErrorHook[];
 }
 
+// Does:  A route's gate steps as read once at listen; each call's answer is untrusted until the lifecycle reads it.
+export interface RouteGateRuntime {
+  readonly cookie: boolean;
+  readonly identify: (request: GateRequest) => unknown;
+  readonly authorize: ((principal: unknown, input: GateInput, request: GateRequest) => unknown) | null;
+  readonly release: ((grant: unknown) => unknown) | null;
+}
+
 export interface RouteRuntime {
   readonly info: RouteInfo;
   readonly definition: RouteDefinition;
   readonly handler: RuntimeHandler;
+  readonly gate: RouteGateRuntime | null;
+  readonly gated: boolean;
   readonly validators: RequestValidators;
   readonly serializers: ResponseSerializers;
   readonly bodyLimit: number;

@@ -1,10 +1,10 @@
 name: Publish npm release
 
-# A reviewed core version bump merged to main starts publication.
+# A core or auth version bump merged to main starts publication; the pull request's Checks already ran the tests.
 on:
   push:
     branches: [ main ]
-    paths: [ packages/core/package.json ]
+    paths: [ packages/core/package.json, packages/auth/package.json ]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +22,8 @@ jobs:
     outputs:
       node: ${{ steps.version.outputs.node }}
       publish: ${{ steps.version.outputs.publish }}
+      core: ${{ steps.version.outputs.core }}
+      auth: ${{ steps.version.outputs.auth }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,54 +42,52 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { readFileSync, appendFileSync } from 'node:fs';
-          const pkg = JSON.parse(readFileSync('packages/core/package.json', 'utf8'));
           assert.equal(process.env.RELEASE_REPOSITORY, 'skeld-dev/skeld');
-          assert.equal(pkg.name, '@skeld/core');
-          assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
           assert.equal(process.env.RELEASE_REF, 'refs/heads/main');
-          assert.equal(pkg.repository.url, 'git+https://github.com/skeld-dev/skeld.git');
-          assert.equal(pkg.publishConfig.access, 'public');
           const node = readFileSync('.nvmrc', 'utf8').trim();
           assert.match(node, /^\d+\.\d+\.\d+$/);
           appendFileSync(process.env.GITHUB_OUTPUT, `node=${node}\n`);
-          const response = await fetch('https://registry.npmjs.org/@skeld%2fcore', { signal: AbortSignal.timeout(30_000) });
-          assert.equal(response.status, 200, 'registry metadata must be available');
-          const metadata = await response.json();
-          assert(metadata.versions && metadata['dist-tags']?.latest, 'incomplete registry metadata');
-          const published = Object.hasOwn(metadata.versions, pkg.version);
-          if (!published) {
-            const current = metadata['dist-tags'].latest;
-            assert.match(current, /^\d+\.\d+\.\d+$/);
-            const left = pkg.version.split('.').map(Number);
-            const right = current.split('.').map(Number);
-            const difference = left.map((part, index) => part - right[index]).find((part) => part !== 0);
-            assert(difference > 0, 'new release must be newer than latest');
+          const packages = [
+            { output: 'core', folder: 'packages/core', name: '@skeld/core', mayBeAbsent: false },
+            { output: 'auth', folder: 'packages/auth', name: '@skeld/auth', mayBeAbsent: true },
+          ];
+          let any = false;
+          for (const { output, folder, name, mayBeAbsent } of packages) {
+            const pkg = JSON.parse(readFileSync(`${folder}/package.json`, 'utf8'));
+            assert.equal(pkg.name, name);
+            assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+            assert.equal(pkg.repository.url, 'git+https://github.com/skeld-dev/skeld.git');
+            assert.equal(pkg.publishConfig.access, 'public');
+            const response = await fetch(`https://registry.npmjs.org/${name.replace('/', '%2f')}`, { signal: AbortSignal.timeout(30_000) });
+            let published = false;
+            if (response.status === 404 && mayBeAbsent) {
+              console.log(`${name} has no published version yet`);
+            } else {
+              assert.equal(response.status, 200, `${name} registry metadata must be available`);
+              const metadata = await response.json();
+              assert(metadata.versions && metadata['dist-tags']?.latest, `incomplete registry metadata for ${name}`);
+              published = Object.hasOwn(metadata.versions, pkg.version);
+              if (!published) {
+                const current = metadata['dist-tags'].latest;
+                assert.match(current, /^\d+\.\d+\.\d+$/);
+                const left = pkg.version.split('.').map(Number);
+                const right = current.split('.').map(Number);
+                const difference = left.map((part, index) => part - right[index]).find((part) => part !== 0);
+                assert(difference > 0, `new ${name} release must be newer than latest`);
+              }
+            }
+            appendFileSync(process.env.GITHUB_OUTPUT, `${output}=${!published}\n`);
+            any ||= !published;
+            console.log(published ? `${name} ${pkg.version} is already published; skipping` : `Will publish ${name} ${pkg.version}`);
           }
-          appendFileSync(process.env.GITHUB_OUTPUT, `publish=${!published}\n`);
-          console.log(published ? `${pkg.version} is already published; skipping` : `Will publish ${pkg.version}`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `publish=${any}\n`);
           NODE
           git merge-base --is-ancestor HEAD origin/main
 
-  checks:
-    name: Release checks
-    needs: validate
-    if: needs.validate.outputs.publish == 'true'
-    uses: ./.github/workflows/ci.yml
-    permissions:
-      contents: read
-
-  security:
-    name: Release security
-    needs: validate
-    if: needs.validate.outputs.publish == 'true'
-    uses: ./.github/workflows/security.yml
-    permissions:
-      contents: read
-      security-events: write
-
   package:
-    name: Build verified package
-    needs: [ checks, security ]
+    name: Build verified packages
+    needs: validate
+    if: needs.validate.outputs.publish == 'true'
     permissions:
       contents: read
       security-events: read
@@ -118,14 +118,22 @@ jobs:
             exit 1
           fi
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsc -b packages/core
-      - name: Pack and verify the exact release artifact
+      - run: pnpm exec tsc -b packages/core packages/auth
+      - name: Pack and verify the exact release artifacts
+        env:
+          PACK_CORE: ${{ needs.validate.outputs.core }}
+          PACK_AUTH: ${{ needs.validate.outputs.auth }}
         run: |
           mkdir release
-          pnpm --filter @skeld/core pack --pack-destination "$GITHUB_WORKSPACE/release"
-          node tools/check-pack-markers.ts release/skeld-core-*.tgz
+          if [ "$PACK_CORE" = true ]; then
+            pnpm --filter @skeld/core pack --pack-destination "$GITHUB_WORKSPACE/release"
+          fi
+          if [ "$PACK_AUTH" = true ]; then
+            pnpm --filter @skeld/auth pack --pack-destination "$GITHUB_WORKSPACE/release"
+          fi
+          node tools/check-pack-markers.ts release/*.tgz
           cd release
-          sha256sum skeld-core-*.tgz > SHA256SUMS
+          sha256sum *.tgz > SHA256SUMS
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-${{ github.sha }}
@@ -159,8 +167,44 @@ jobs:
           const [major, minor] = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number);
           assert(major > 11 || (major === 11 && minor >= 15), 'npm >=11.15.0 is required');
           NODE
-      - name: Publish verified tarball with trusted publishing
+      - name: Publish verified core tarball with trusted publishing
+        if: needs.validate.outputs.core == 'true'
         working-directory: release
         run: |
           sha256sum --check SHA256SUMS
           npm publish ./skeld-core-*.tgz --access public --tag latest --provenance --ignore-scripts --registry https://registry.npmjs.org
+      - name: Check the packed auth names a published core
+        if: needs.validate.outputs.auth == 'true'
+        working-directory: release
+        env:
+          CORE_PUBLISHED_HERE: ${{ needs.validate.outputs.core }}
+        run: |
+          sha256sum --check SHA256SUMS
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { readdirSync } from 'node:fs';
+          const manifest = (prefix) => {
+            const tarballs = readdirSync('.').filter((file) => file.startsWith(prefix) && file.endsWith('.tgz'));
+            assert.equal(tarballs.length, 1, `expected one ${prefix}*.tgz`);
+            return JSON.parse(execFileSync('tar', ['-xzOf', tarballs[0], 'package/package.json'], { encoding: 'utf8' }));
+          };
+          const auth = manifest('skeld-auth-');
+          assert.equal(auth.name, '@skeld/auth');
+          const wanted = auth.dependencies?.['@skeld/core'];
+          assert.match(String(wanted), /^\d+\.\d+\.\d+$/, 'packed auth must name an exact core version');
+          if (process.env.CORE_PUBLISHED_HERE === 'true' && manifest('skeld-core-').version === wanted) {
+            console.log(`@skeld/core ${wanted} was published earlier in this run`);
+          } else {
+            const response = await fetch(`https://registry.npmjs.org/@skeld%2fcore/${wanted}`, { signal: AbortSignal.timeout(30_000) });
+            assert.equal(response.status, 200, `@skeld/core ${wanted} is not on npm`);
+            assert.equal((await response.json()).version, wanted);
+            console.log(`@skeld/core ${wanted} is already on npm`);
+          }
+          NODE
+      - name: Publish verified auth tarball with trusted publishing
+        if: needs.validate.outputs.auth == 'true'
+        working-directory: release
+        run: |
+          sha256sum --check SHA256SUMS
+          npm publish ./skeld-auth-*.tgz --access public --tag latest --provenance --ignore-scripts --registry https://registry.npmjs.org

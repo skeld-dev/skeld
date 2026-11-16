@@ -1,10 +1,7 @@
-// Does:  Gives the logging proof scripts a case reporter that keeps its evidence file, and a planted-marker search.
-// Holds: The evidence file holds exactly the lines printed, and the exit code is non-zero when any case failed.
+// Does:  Gives the logging scripts a case reporter that prints to stdout, and a planted-marker search.
+// Holds: Every case prints one pass or fail line, and the exit code is non-zero when any case failed.
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 export interface Report {
   note: (line: string) => void;
@@ -22,16 +19,12 @@ export interface Searched {
   text: string;
 }
 
-const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
-const evidenceDir = join(sourceRoot, '.project/features/.0.1.0-core/evidence/logging');
 const windowLength = 10;
 
-export function createReport(script: string): Report {
-  const lines: string[] = [];
+export function createReport(): Report {
   let cases = 0;
   let failed = 0;
   const emit = (line: string): void => {
-    lines.push(line);
     process.stdout.write(`${line}\n`);
   };
   return {
@@ -47,8 +40,6 @@ export function createReport(script: string): Report {
     },
     finish: () => {
       emit(`${cases - failed} of ${cases} cases passed`);
-      mkdirSync(evidenceDir, { recursive: true });
-      writeFileSync(join(evidenceDir, `${script}.txt`), `${lines.join('\n')}\n`);
       process.exitCode = failed === 0 ? 0 : 1;
     },
   };

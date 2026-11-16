@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Slot, Token } from '#diag';
 import type { CookieEntries } from '../cookie/parse.ts';
 import type { CorsGrant } from '../cors/grant.ts';
+import type { GateRequest } from '../gate/types.ts';
 import type { RequestErrorReason } from '../log/events.ts';
 import type { RequestLog } from '../log/shapes.ts';
 import type { Logger } from '../log/types.ts';
@@ -53,4 +54,8 @@ export interface Exchange {
   cookieEntries: CookieEntries | null;
   rawCookies: RawCookies | null;
   pendingCookies: Map<string, string> | null;
+  gateRequest: GateRequest | null;
+  principal: unknown;
+  grant: unknown;
+  release: ((grant: unknown) => unknown) | null;
 }

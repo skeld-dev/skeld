@@ -358,7 +358,7 @@ function searchedCount(captured: Capture, names: readonly string[]): string {
 }
 
 async function main(): Promise<void> {
-  const report = createReport('log-redaction');
+  const report = createReport();
   const expectedProjections = new Map<string, unknown>(
     Object.entries({
       'classified-body': {

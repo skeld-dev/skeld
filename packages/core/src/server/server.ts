@@ -2,6 +2,7 @@
 // Holds: listen runs at most once, and a server that was closed never starts listening.
 
 import { closed as closeDiagnostics, end, open, start } from '#diag';
+import { bindRoutes, bootGate, resolveGate } from '../gate/boot.ts';
 import { handleRequest } from '../lifecycle/handle-request.ts';
 import type { EngineRuntime } from '../lifecycle/types.ts';
 import { resolveLog } from '../log/options.ts';
@@ -13,10 +14,12 @@ import { createHttpServer } from './listen.ts';
 import { resolveListenOptions, resolveServerOptions, resolveTrustProxy } from './options.ts';
 import { buildRuntime } from './runtime.ts';
 import { createScope, createScopeState } from './scope.ts';
+import type { AccessTypes, NoAccess } from '../gate/types.ts';
 import type { LogStats } from '../log/types.ts';
 import type { HttpServerHandle, ListeningAddress, ListenOptions, Server, ServerOptions } from './types.ts';
 
 export type { Empty, OutgoingCookie, RouteInfo } from '../contract/types.ts';
+export type { AccessTypes, NoAccess } from '../gate/types.ts';
 export type { RequestPart } from '../log/types.ts';
 export type {
   AuthorHeaderName,
@@ -26,6 +29,9 @@ export type {
   CsrfPolicy,
   ErrorContext,
   ErrorHandler,
+  GatedHandler,
+  GatedHandlers,
+  GatedRequest,
   Handler,
   Handlers,
   HookName,
@@ -60,10 +66,14 @@ export type {
  * Throws BootError `INVALID_OPTION` for an option out of range or malformed, or `csrf.mode: 'strict'` without `publicOrigin`.
  * @example const server = createServer({ bodyLimit: 65_536 }); await server.listen({ port: 0 }); await server.close();
  */
+export function createServer<A extends AccessTypes = NoAccess>(options?: ServerOptions<A>): Server<A>;
+// Why: A last overload without a gate keeps ReturnType<typeof createServer> the gate-less Server it was before gates.
+export function createServer(options?: ServerOptions): Server;
 export function createServer(options: ServerOptions = {}): Server {
   const resolved = resolveServerOptions(options);
+  const gate = resolveGate(options.gate);
   const trustProxy = resolveTrustProxy(options.trustProxy);
-  const log = createServerLog(resolveLog(options.log));
+  const log = createServerLog(resolveLog(options.log), gate !== null);
   const root = createScopeState('root', null, log.logger(null));
   let listenCalled = false;
   let closing = false;
@@ -110,10 +120,14 @@ export function createServer(options: ServerOptions = {}): Server {
     } finally {
       end(plugins);
     }
+    if (gate !== null) {
+      await bootGate(gate, root, resolved, log);
+    }
     if (closing) {
       throw new BootError('SERVER_CLOSED', 'Server closed during startup', null, null);
     }
-    const built = buildRuntime(root, resolved, trustProxy, () => closing, log);
+    const gates = { gated: gate !== null, bound: bindRoutes(gate, root, resolved) };
+    const built = buildRuntime(root, resolved, trustProxy, () => closing, log, gates);
     runtime = built;
     handle = createHttpServer(resolved, (req, res) => handleRequest(built, req, res));
     return handle.listen(host, port, root.disposal.abort.signal);

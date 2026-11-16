@@ -2,7 +2,7 @@
 // Holds: An example that fails to compile, fails to run or runs past 10 s is a finding, never a skip.
 
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { display, type Entry, namespaceSubpath, type PublicSymbol, type Refusal, root } from './walk.ts';
@@ -64,21 +64,28 @@ const diagnosticPattern = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
 const exampleLimitMs = 10_000;
 const timeoutText = 'did not exit within 10 s';
 
-function importLines(packageName: string, entries: readonly Entry[]): string[] {
+export interface ImportSource {
+  readonly packageName: string;
+  readonly entries: readonly Entry[];
+}
+
+function importLines(sources: readonly ImportSource[]): string[] {
   const seen = new Set<string>();
   const lines: string[] = [];
-  for (const entry of entries) {
-    const specifier = `'${packageName}${entry.subpath.slice(1)}'`;
-    if (entry.subpath === namespaceSubpath) {
-      lines.push(`import * as t from ${specifier};`);
-      continue;
-    }
-    const names = entry.values.filter((name) => !seen.has(name));
-    for (const name of names) {
-      seen.add(name);
-    }
-    if (names.length > 0) {
-      lines.push(`import { ${names.join(', ')} } from ${specifier};`);
+  for (const { packageName, entries } of sources) {
+    for (const entry of entries) {
+      const specifier = `'${packageName}${entry.subpath.slice(1)}'`;
+      if (entry.subpath === namespaceSubpath) {
+        lines.push(`import * as t from ${specifier};`);
+        continue;
+      }
+      const names = entry.values.filter((name) => !seen.has(name));
+      for (const name of names) {
+        seen.add(name);
+      }
+      if (names.length > 0) {
+        lines.push(`import { ${names.join(', ')} } from ${specifier};`);
+      }
     }
   }
   return lines;
@@ -242,14 +249,15 @@ async function runExamples(
   return { findings, ran };
 }
 
+// Does:  Runs each symbol's example with every value of the given packages imported, the package's own first.
 export async function checkExamples(
   symbols: readonly PublicSymbol[],
-  entries: readonly Entry[],
-  packageName: string,
+  sources: readonly ImportSource[],
   scratch: string,
   abort: AbortSignal,
 ): Promise<ExampleRun | Refusal> {
-  const imports = importLines(packageName, entries);
+  mkdirSync(scratch, { recursive: true });
+  const imports = importLines(sources);
   const examples: Example[] = [];
   for (const symbol of symbols) {
     const code = symbol.block?.example;

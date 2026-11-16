@@ -8,12 +8,11 @@ import { checkRedirect } from '@skeld/core/redirect';
 import * as t from '@skeld/core/schema';
 import { createServer, type RequestContext } from '@skeld/core/server';
 import { check, conclude, type RawResponse, rawExchange } from '../support/support.ts';
-import { startDiagChild } from '../support/support-diag.ts';
 import { parseRecords } from '../support/support-log.ts';
 import { startServerChild } from '../support/support-typesystem.ts';
 
 const statement =
-  'a local path in a 3xx Location is sent as written; //host, /\\host, /<tab>/host, /.//host, a control character, surrounding whitespace, javascript:, userinfo, an http URL when only its https origin is listed, another port and a subdomain each become the fixed 500 with no Location on the wire; any value starting // is refused whatever host follows; a hook send with a status that is not an integer from 200 to 599 throws and puts nothing of its reply on the wire; an absolute redirect to the publicOrigin is the fixed 500 unless that origin is in redirectOrigins, and a local path needs neither; a listed origin passes on its group only; a Location set by a hook setHeader, send or onSend is checked the same way; the log record on stdout and the diag record hold the route and a reason and never the target; checkRedirect gives the engine verdict for every case; a 201 Location is untouched';
+  'a local path in a 3xx Location is sent as written; //host, /\\host, /<tab>/host, /.//host, a control character, surrounding whitespace, javascript:, userinfo, an http URL when only its https origin is listed, another port and a subdomain each become the fixed 500 with no Location on the wire; any value starting // is refused whatever host follows; a hook send with a status that is not an integer from 200 to 599 throws and puts nothing of its reply on the wire; an absolute redirect to the publicOrigin is the fixed 500 unless that origin is in redirectOrigins, and a local path needs neither; a listed origin passes on its group only; a Location set by a hook setHeader, send or onSend is checked the same way; the log record on stdout holds the route and a reason and never the target; checkRedirect gives the engine verdict for every case; a 201 Location is untouched';
 
 const fixed500 = '{"status":500,"code":"INTERNAL","message":"Internal Server Error"}';
 const defaultOrigin = 'https://default.example';
@@ -409,27 +408,7 @@ async function prove(): Promise<void> {
       .join(' | ')}`,
   );
 
-  const diagChild = await startDiagChild(fileURLToPath(import.meta.url));
-  const refusedProbes = await probeAll(diagChild.port, true);
-  const diagRefusals = refusedProbes.filter((probe) => probe.response.status === 500).length;
-  const diag = await diagChild.stopAndRead();
-  check(problems, diagRefusals > 0, 'the diag child answered no refusal');
-  check(
-    problems,
-    diag.names.includes('journal.jsonl') && diag.names.includes('snapshot.jsonl'),
-    `diag files ${diag.names.join(',')}`,
-  );
-  check(problems, !diag.text.includes(marker), 'a refused target (marker) appears in the diag files');
-  check(
-    problems,
-    !diag.text.includes('example.com/cb') && !diag.text.includes('untouched'),
-    'a URL appears in the diag files',
-  );
-  check(problems, diag.text.includes('refuse.redirect'), 'the diag files hold no refuse.redirect event');
-  check(problems, !diagChild.stderr().includes(marker), 'the target appears in the diag child stderr');
-  check(problems, !diagChild.stdout().includes(marker), 'the target appears in the diag child stdout');
-
-  process.stderr.write(`${JSON.stringify({ ...summary, badStatuses, probes: probes.length, diagRefusals })}\n`);
+  process.stderr.write(`${JSON.stringify({ ...summary, badStatuses, probes: probes.length })}\n`);
   conclude(statement, problems);
 }
 

@@ -4,6 +4,8 @@
 import { end, event, track } from '#diag';
 import { derivedBodyCap } from '../compile/body-cap.ts';
 import { HttpError } from '../contract/http-error.ts';
+import { isUnsafeMethod } from '../csrf/check.ts';
+import { CSRF_TOKEN_HEADER } from '../gate/gate.ts';
 import type { ContractRoutes, ErrorDetail, RouteDefinition } from '../contract/types.ts';
 import { compileCheck } from '../schema/check.ts';
 import { explain } from '../schema/explain.ts';
@@ -13,10 +15,18 @@ import { isRequired } from '../schema/messages.ts';
 import { toPointer } from '../schema/pointer.ts';
 import type { Check, Finish, Schema } from '../schema/types.ts';
 import { type ReadBody, readResponseBody } from './response.ts';
-import type { Client, ClientOptions } from './types.ts';
+import type { Client, ClientCredential, ClientOptions } from './types.ts';
 import { type CallValues, createUrlBuilder } from './url.ts';
 
-export type { CallInput, CallResult, Client, ClientOptions, FetchStatus, RouteCall } from './types.ts';
+export type {
+  CallInput,
+  CallResult,
+  Client,
+  ClientCredential,
+  ClientOptions,
+  FetchStatus,
+  RouteCall,
+} from './types.ts';
 
 interface CallParts {
   readonly params?: CallValues;
@@ -44,6 +54,12 @@ interface ResponseLimits {
 
 // Why: The server's default bodyLimit; a response no schema bounds is held to what a request may carry.
 const FALLBACK_RESPONSE_BYTES = 1_048_576;
+
+// Why: RFC 6750 section 2.1 writes a bearer token as b64token; the contract bounds it to 4,096 characters.
+const BEARER_TOKEN = /^[A-Za-z0-9\-._~+/]+=*$/;
+const MAX_BEARER_TOKEN = 4096;
+const CSRF_TOKEN = /^[A-Za-z0-9_-]{1,256}$/;
+const CREDENTIAL_HEADERS = ['authorization', CSRF_TOKEN_HEADER] as const;
 
 // Why: The Fetch standard's redirect statuses (https://fetch.spec.whatwg.org/#redirect-status); 304 is not one.
 const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
@@ -96,6 +112,74 @@ function checkDepth(name: string, route: RouteDefinition): void {
       );
     }
   }
+}
+
+// Does:  Copies the credential option once: absent, a bearer token function or a session CSRF token function.
+function parseCredential(credential: ClientCredential | undefined): ClientCredential | null {
+  if (credential === undefined) {
+    return null;
+  }
+  const value: unknown = credential;
+  if (typeof value === 'object' && value !== null) {
+    if (credential.kind === 'bearer' && typeof credential.token === 'function') {
+      return Object.freeze({ kind: 'bearer', token: credential.token });
+    }
+    if (credential.kind === 'session' && typeof credential.csrfToken === 'function') {
+      return Object.freeze({ kind: 'session', csrfToken: credential.csrfToken });
+    }
+  }
+  throw new TypeError("createClient: credential must be { kind: 'bearer', token } or { kind: 'session', csrfToken }");
+}
+
+// Does:  Refuses a non-public route whose headers schema declares a header the client's credential writes.
+function checkCredentialHeaders(name: string, route: RouteDefinition): void {
+  if (route.access === 'public' || route.headers === undefined) {
+    return;
+  }
+  const { properties } = route.headers;
+  const declared = CREDENTIAL_HEADERS.find((header) => Object.hasOwn(properties, header));
+  if (declared !== undefined) {
+    throw new TypeError(`createClient: route ${name}: headers declares ${declared}, which the credential writes`);
+  }
+}
+
+function credentialUnavailable(cause?: unknown): HttpError {
+  event('client.error', 'CREDENTIAL_UNAVAILABLE');
+  return new HttpError(null, 'CREDENTIAL_UNAVAILABLE', 'Credential unavailable', cause === undefined ? {} : { cause });
+}
+
+async function readToken(read: () => unknown): Promise<unknown> {
+  try {
+    return await read();
+  } catch (cause) {
+    throw credentialUnavailable(cause);
+  }
+}
+
+// Does:  Reads the credential's token for one call and returns the header it goes in, or null for none.
+// Holds: A token outside its grammar is never written to a header, and its value enters no error.
+async function credentialHeader(
+  credential: ClientCredential,
+  unsafe: boolean,
+): Promise<readonly [string, string] | null> {
+  if (credential.kind === 'bearer') {
+    const token = await readToken(credential.token);
+    if (typeof token !== 'string' || token.length > MAX_BEARER_TOKEN || !BEARER_TOKEN.test(token)) {
+      throw credentialUnavailable();
+    }
+    return ['authorization', `Bearer ${token}`];
+  }
+  if (!unsafe) {
+    return null;
+  }
+  const token = await readToken(credential.csrfToken);
+  if (token === null) {
+    return null;
+  }
+  if (typeof token !== 'string' || !CSRF_TOKEN.test(token)) {
+    throw credentialUnavailable();
+  }
+  return [CSRF_TOKEN_HEADER, token];
 }
 
 function failureText(error: unknown): string {
@@ -199,8 +283,17 @@ function createCall(
   base: string,
   fetch: typeof globalThis.fetch,
   maxResponseBytes: number | null,
+  credential: ClientCredential | null,
 ): (input?: CallParts) => Promise<ReceivedResult> {
   checkDepth(name, route);
+  if (credential !== null) {
+    checkCredentialHeaders(name, route);
+  }
+  // Why: A token goes only to a route that is not public, so a public call never acquires one.
+  const sendsToken = credential !== null && route.access !== 'public';
+  const unsafe = isUnsafeMethod(route.method);
+  const credentials: RequestInit['credentials'] =
+    credential === null ? undefined : credential.kind === 'bearer' ? 'omit' : 'include';
   const buildUrl = createUrlBuilder(base, name, route.path);
   const validators = compileResponseValidators(route);
   const limits = responseLimits(route, maxResponseBytes);
@@ -211,11 +304,18 @@ function createCall(
       // Why: Concrete parameters and queries may hold secrets; diagnostics use only the declared route.
       const target = `${route.method} ${url.origin}${route.path}`;
       const headers = buildHeaders(route, input?.headers);
+      const header = sendsToken && credential !== null ? await credentialHeader(credential, unsafe) : null;
+      if (header !== null) {
+        headers.set(header[0], header[1]);
+      }
       // Why: A followed redirect would be read against this route's responses and re-send a 307 or 308 body elsewhere.
-      const init: RequestInit =
-        route.body === undefined
-          ? { method: route.method, headers, redirect: 'manual' }
-          : { method: route.method, headers, redirect: 'manual', body: JSON.stringify(input?.body) };
+      const init: RequestInit = {
+        method: route.method,
+        headers,
+        redirect: 'manual',
+        ...(credentials === undefined ? {} : { credentials }),
+        ...(route.body === undefined ? {} : { body: JSON.stringify(input?.body) }),
+      };
       let response: Response;
       const wait = track('client.fetch');
       try {
@@ -276,7 +376,7 @@ function createCall(
 
 /**
  * Creates a typed client with one call per route of a contract.
- * A call never follows a redirect and rejects with HttpError `NETWORK`, `INVALID_RESPONSE`, `RESPONSE_TOO_LARGE` or `REDIRECT_NOT_SUPPORTED`; throws `TypeError` for a bad option or a schema nested past 64.
+ * A call never follows a redirect and rejects with HttpError `NETWORK`, `INVALID_RESPONSE`, `RESPONSE_TOO_LARGE`, `REDIRECT_NOT_SUPPORTED` or `CREDENTIAL_UNAVAILABLE`; throws `TypeError` for a bad option or a schema nested past 64.
  * @example createClient(defineContract({ health: { method: 'GET', path: '/health', responses: { 204: null } } }), { baseUrl: 'http://127.0.0.1:3000' })
  */
 export function createClient<const C extends ContractRoutes>(contract: C, options: ClientOptions): Client<C>;
@@ -288,7 +388,11 @@ export function createClient<const C extends ContractRoutes>(
   const base = parseBaseUrl(options.baseUrl);
   const fetch = options.fetch ?? globalThis.fetch;
   const maxResponseBytes = parseMaxResponseBytes(options.maxResponseBytes);
+  const credential = parseCredential(options.credential);
   return Object.fromEntries(
-    Object.entries(contract).map(([name, route]) => [name, createCall(name, route, base, fetch, maxResponseBytes)]),
+    Object.entries(contract).map(([name, route]) => [
+      name,
+      createCall(name, route, base, fetch, maxResponseBytes, credential),
+    ]),
   );
 }

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "typescript": "7.0.2",
-    "@skeld/core": "workspace:*"
+    "@skeld/auth": "workspace:*",
+    "@skeld/core": "workspace:*",
+    "typescript": "7.0.2"
   }
 }

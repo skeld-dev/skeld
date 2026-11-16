@@ -13,7 +13,7 @@ export type CallInput<R extends RouteDefinition> = (R extends { readonly params:
   (R extends { readonly body: infer S extends Schema } ? { readonly body: Wire<S> } : unknown);
 ```
 
-Source: `packages/core/src/client/types.ts:427`
+Source: `packages/core/src/client/types.ts:449`
 
 ## CallResult
 
@@ -43,7 +43,7 @@ export type CallResult<R extends RouteDefinition> =
 | `headers` | The response headers.                                                                          |
 | `body`    | The response body; for a status the contract does not declare, unchecked JSON, text or `null`. |
 
-Source: `packages/core/src/client/types.ts:438`
+Source: `packages/core/src/client/types.ts:460`
 
 ## Client
 
@@ -53,7 +53,33 @@ A typed client: one `RouteCall` per route name of the contract.
 export type Client<C extends ContractRoutes> = { readonly [K in keyof C]: RouteCall<C[K]> };
 ```
 
-Source: `packages/core/src/client/types.ts:468`
+Source: `packages/core/src/client/types.ts:490`
+
+## ClientCredential
+
+A bearer token, sent as `authorization`, or a session cookie the browser holds, with its CSRF token on unsafe methods.
+
+A bearer token is 1 to 4,096 `b64token` characters; a CSRF token 1 to 256 of `A-Z a-z 0-9 - _`, or `null` for none.
+
+```ts
+export type ClientCredential =
+  | {
+      readonly kind: 'bearer';
+      readonly token: () => string | Promise<string>;
+    }
+  | {
+      readonly kind: 'session';
+      readonly csrfToken: () => string | null | Promise<string | null>;
+    };
+```
+
+| Field       | Summary                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------- |
+| `kind`      | How the credential is sent: a bearer token, or the session cookie the browser holds.      |
+| `token`     | Gives the bearer token; called once for each call that sends it.                          |
+| `csrfToken` | Gives the CSRF token, or `null` for none; called once for each unsafe call that sends it. |
+
+Source: `packages/core/src/client/types.ts:32`
 
 ## ClientOptions
 
@@ -64,14 +90,16 @@ export interface ClientOptions {
   readonly baseUrl: string | URL;
   readonly fetch?: typeof globalThis.fetch;
   readonly maxResponseBytes?: number;
+  readonly credential?: ClientCredential;
 }
 ```
 
-| Field              | Summary                                                                                             |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| `baseUrl`          | The service's origin and base path: an absolute http or https URL with no query or fragment.        |
-| `fetch`            | The function that sends each request (default `globalThis.fetch`).                                  |
-| `maxResponseBytes` | The most decoded bytes a call reads from any response body, replacing the limit derived per status. |
+| Field              | Summary                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `baseUrl`          | The service's origin and base path: an absolute http or https URL with no query or fragment.                             |
+| `fetch`            | The function that sends each request (default `globalThis.fetch`).                                                       |
+| `maxResponseBytes` | The most decoded bytes a call reads from any response body, replacing the limit derived per status.                      |
+| `credential`       | The one credential the client sends to routes whose access is not `'public'`, only to `baseUrl`'s origin (default none). |
 
 Source: `packages/core/src/client/types.ts:8`
 
@@ -483,7 +511,7 @@ export type FetchStatus =
   | 599;
 ```
 
-Source: `packages/core/src/client/types.ts:24`
+Source: `packages/core/src/client/types.ts:46`
 
 ## RouteCall
 
@@ -501,13 +529,13 @@ export type RouteCall<R extends RouteDefinition> = R extends
   : (input?: Empty) => Promise<CallResult<R>>;
 ```
 
-Source: `packages/core/src/client/types.ts:459`
+Source: `packages/core/src/client/types.ts:481`
 
 ## createClient
 
 Creates a typed client with one call per route of a contract.
 
-A call never follows a redirect and rejects with HttpError `NETWORK`, `INVALID_RESPONSE`, `RESPONSE_TOO_LARGE` or `REDIRECT_NOT_SUPPORTED`; throws `TypeError` for a bad option or a schema nested past 64.
+A call never follows a redirect and rejects with HttpError `NETWORK`, `INVALID_RESPONSE`, `RESPONSE_TOO_LARGE`, `REDIRECT_NOT_SUPPORTED` or `CREDENTIAL_UNAVAILABLE`; throws `TypeError` for a bad option or a schema nested past 64.
 
 ```ts
 export function createClient<const C extends ContractRoutes>(contract: C, options: ClientOptions): Client<C>;
@@ -519,4 +547,4 @@ createClient(defineContract({ health: { method: 'GET', path: '/health', response
 });
 ```
 
-Source: `packages/core/src/client/client.ts:282`
+Source: `packages/core/src/client/client.ts:382`

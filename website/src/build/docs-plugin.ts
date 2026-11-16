@@ -17,20 +17,22 @@ const docsRoot = fileURLToPath(new URL('../../../docs/', import.meta.url));
 function pagePath(path: string): string {
   return path.replace(/index\.html$/, '');
 }
+// Holds: Page text is inserted through replacer functions, so a `$` pattern in it is never expanded.
 function renderPage(document: string, page: DocPage): string {
   const rendered = document
-    .replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(page.title)} | skeld docs</title>`)
+    .replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escapeHtml(page.title)} | skeld docs</title>`)
     .replace(
       /<meta name="description" content="[^"]*"\s*\/>/,
-      `<meta name="description" content="${escapeHtml(page.description)}" />`,
+      () => `<meta name="description" content="${escapeHtml(page.description)}" />`,
     )
     .replace(
       '<!-- markdown -->',
-      `<link rel="alternate" type="text/markdown" href="${page.markdownUrl}" /><link rel="describedby" href="/llms.txt" />`,
+      () =>
+        `<link rel="alternate" type="text/markdown" href="${page.markdownUrl}" /><link rel="describedby" href="/llms.txt" />`,
     )
     .replace(
       /<!-- docs-start -->[\s\S]*?<!-- docs-end -->/,
-      `<!-- docs-start -->${renderToString(docsPage(page, docDefinitions))}<!-- docs-end -->`,
+      () => `<!-- docs-start -->${renderToString(docsPage(page, docDefinitions))}<!-- docs-end -->`,
     );
   const parent = docDefinitions.find((entry) => entry.url === page.parent);
   return withSocialMetadata(rendered, page.url, {

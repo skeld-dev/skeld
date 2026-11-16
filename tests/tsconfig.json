@@ -15,11 +15,15 @@
     "lifecycle/**/*.ts",
     "contracts/**/*.ts",
     "logging/**/*.ts",
+    "auth/**/*.ts",
     "support/**/*.ts"
   ],
   "references": [
     {
       "path": "../packages/core"
+    },
+    {
+      "path": "../packages/auth"
     }
   ]
 }

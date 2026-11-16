@@ -486,7 +486,7 @@ async function hostileRun(report: ReturnType<typeof createReport>): Promise<void
 }
 
 async function ceilingRun(report: ReturnType<typeof createReport>): Promise<void> {
-  const silentMs = 9000;
+  const silentMs = 3000;
   const child = await startLogChild(fileURLToPath(import.meta.url), { reader: { mode: 'silent', ms: silentMs } });
   try {
     const preconditions: string[] = [];
@@ -547,7 +547,7 @@ async function ceilingRun(report: ReturnType<typeof createReport>): Promise<void
 }
 
 async function main(): Promise<void> {
-  const report = createReport('log-injection');
+  const report = createReport();
   await hostileRun(report);
   await ceilingRun(report);
   report.finish();

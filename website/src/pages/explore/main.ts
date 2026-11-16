@@ -1,4 +1,4 @@
-// Does: Plays catalog scenes and supports pointer dragging, search, replay and keyboard activation.
+// Does:  Plays catalog scenes and supports pointer dragging, search, replay and keyboard activation.
 // Holds: No fetch, file import, external drop data, code evaluation or framework runtime.
 import { configure, disposeTree, render } from '@lightstart/light/html';
 import { effect } from '@lightstart/light/signals';

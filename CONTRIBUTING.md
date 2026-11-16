@@ -38,6 +38,20 @@ For documentation-only changes, check links, formatting, and any examples or cla
 
 Performance measurements are separate from correctness tests and need a quiet host. Use the [benchmark guide](benchmarks/README.md) when the change calls for a measurement, and report the environment and workload with any performance claim.
 
+## Pass the pull request checks
+
+The pull request is the only gate. All testing and scanning happens there, and nothing is tested again after it merges. To merge, a pull request must be up to date with `main` and pass `Checks`, the final job of the CI workflow.
+
+Before you open one, run the static analysis that the pull request runs, with the same rules:
+
+```sh
+pnpm run sast
+```
+
+It runs the Semgrep rules in `.semgrep` over the core and auth sources, then CodeQL with `.github/codeql/codeql-config.yml`, and exits non-zero on any finding, printed as `path:line rule-id`. It needs Semgrep 1.182.1 and the CodeQL CLI 2.27.4 on your `PATH`; when either is missing or at another version, it says which and how to install it. CodeQL is free to use on this repository because it is open source. A CodeQL run takes about three minutes.
+
+Then run the test group your change affects, for example `pnpm test runtime`.
+
 ## Submit a pull request
 
 Describe the concrete problem and the resulting behavior. Include reproduction steps when they help, the checks you ran, and any checks you could not run. Call out changes to public contracts, defaults, resource limits, or disclosure behavior so reviewers can assess their effect on existing applications.

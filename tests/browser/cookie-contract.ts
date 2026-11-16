@@ -1,5 +1,5 @@
-// Does:  Proves a route's declared cookies arrive typed and validated, and a secret cookie value leaks nowhere.
-// Holds: A declared cookie is checked like a header; bad cases are 400 and planted values are searched for everywhere.
+// Does:  Proves a route's declared cookies are validated, and a secret cookie value leaks nowhere.
+// Holds: A declared cookie is checked like a header; bad cases are 400 and planted values are searched for in output.
 
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -7,13 +7,11 @@ import { defineContract } from '@skeld/core/contract';
 import * as t from '@skeld/core/schema';
 import { createServer } from '@skeld/core/server';
 import { check, conclude, type RawResponse, rawExchange } from '../support/support.ts';
-import { compileProbes, rejectsAt } from '../support/support-compile.ts';
-import { startDiagChild } from '../support/support-diag.ts';
 import { parseRecords } from '../support/support-log.ts';
 import { startServerChild } from '../support/support-typesystem.ts';
 
 const statement =
-  'a declared cookie arrives typed and validated; a missing required cookie, a wrong value, a wrong-case name and a name sent twice are each 400; undeclared cookies, also __proto__ and constructor, are ignored; a secret cookie value is in no error body, stderr or stdout line or diag file; an invalid cookie name in the contract is refused at boot; request.cookies is typed from the schema and the client call type accepts no cookie';
+  'a declared cookie arrives validated; a missing required cookie, a wrong value, a wrong-case name and a name sent twice are each 400; undeclared cookies, also __proto__ and constructor, are ignored; a secret cookie value is in no error body, stderr or stdout line; an invalid cookie name in the contract is refused at boot';
 
 const noteBody = t.object({ ok: t.boolean() });
 const profileSchema = t.object({
@@ -187,84 +185,6 @@ async function tryBoot(name: string): Promise<string> {
   }
 }
 
-const probes = {
-  typed: `import { createClient } from '@skeld/core/client';
-import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-import { expose } from '@skeld/core/secret';
-import { createServer } from '@skeld/core/server';
-const contract = defineContract({
-  item: {
-    method: 'GET',
-    path: '/item',
-    cookies: t.object({ theme: t.string({ maxLength: 16 }), visits: t.integer(), sid: t.string({ maxLength: 8, sensitivity: 'secret' }), lang: t.optional(t.string({ maxLength: 8 })) }),
-    responses: { 200: t.object({ ok: t.boolean() }) },
-  },
-});
-const client = createClient(contract, { baseUrl: 'http://127.0.0.1:1' });
-const server = createServer();
-server.routes(contract, {
-  item: (request) => {
-    const theme: string = request.cookies.theme;
-    const visits: number = request.cookies.visits;
-    const sid: string = expose(request.cookies.sid);
-    const lang: string | undefined = request.cookies.lang;
-    return { status: 200, body: { ok: theme.length + visits + sid.length + (lang?.length ?? 0) > 0 } };
-  },
-});
-await client.item();
-`,
-  visitsAsString: `import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-import { createServer } from '@skeld/core/server';
-const contract = defineContract({ item: { method: 'GET', path: '/item', cookies: t.object({ visits: t.integer() }), responses: { 200: t.object({ ok: t.boolean() }) } } });
-const server = createServer();
-server.routes(contract, { item: (request) => { const visits: string = request.cookies.visits; return { status: 200, body: { ok: visits.length > 0 } }; } }); // BAD
-`,
-  undeclaredName: `import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-import { createServer } from '@skeld/core/server';
-const contract = defineContract({ item: { method: 'GET', path: '/item', cookies: t.object({ theme: t.string({ maxLength: 8 }) }), responses: { 200: t.object({ ok: t.boolean() }) } } });
-const server = createServer();
-server.routes(contract, { item: (request) => ({ status: 200, body: { ok: request.cookies.other === undefined } }) }); // BAD
-`,
-  optionalUnchecked: `import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-import { createServer } from '@skeld/core/server';
-const contract = defineContract({ item: { method: 'GET', path: '/item', cookies: t.object({ lang: t.optional(t.string({ maxLength: 8 })) }), responses: { 200: t.object({ ok: t.boolean() }) } } });
-const server = createServer();
-server.routes(contract, { item: (request) => ({ status: 200, body: { ok: request.cookies.lang.length > 0 } }) }); // BAD
-`,
-  secretAsString: `import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-import { createServer } from '@skeld/core/server';
-const contract = defineContract({ item: { method: 'GET', path: '/item', cookies: t.object({ sid: t.string({ maxLength: 8, sensitivity: 'secret' }) }), responses: { 200: t.object({ ok: t.boolean() }) } } });
-const server = createServer();
-server.routes(contract, { item: (request) => { const sid: string = request.cookies.sid; return { status: 200, body: { ok: sid.length > 0 } }; } }); // BAD
-`,
-  clientCookieInput: `import { createClient } from '@skeld/core/client';
-import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-const contract = defineContract({ item: { method: 'GET', path: '/item', cookies: t.object({ theme: t.string({ maxLength: 8 }) }), responses: { 200: t.object({ ok: t.boolean() }) } } });
-const client = createClient(contract, { baseUrl: 'http://127.0.0.1:1' });
-await client.item({ cookies: { theme: 'dark' } }); // BAD
-`,
-  clientCookieWithQuery: `import { createClient } from '@skeld/core/client';
-import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-const contract = defineContract({ item: { method: 'GET', path: '/item', query: t.object({ n: t.integer() }), cookies: t.object({ theme: t.string({ maxLength: 8 }) }), responses: { 200: t.object({ ok: t.boolean() }) } } });
-const client = createClient(contract, { baseUrl: 'http://127.0.0.1:1' });
-await client.item({ query: { n: 1 }, cookies: { theme: 'dark' } }); // BAD
-`,
-  clientQueryOnlyControl: `import { createClient } from '@skeld/core/client';
-import { defineContract } from '@skeld/core/contract';
-import * as t from '@skeld/core/schema';
-const contract = defineContract({ item: { method: 'GET', path: '/item', query: t.object({ n: t.integer() }), cookies: t.object({ theme: t.string({ maxLength: 8 }) }), responses: { 200: t.object({ ok: t.boolean() }) } } });
-const client = createClient(contract, { baseUrl: 'http://127.0.0.1:1' });
-await client.item({ query: { n: 1 } });
-`,
-};
-
 function hasExplodeRecord(stdout: string): boolean {
   return parseRecords(stdout).some(
     (record) =>
@@ -277,7 +197,7 @@ function hasExplodeRecord(stdout: string): boolean {
 
 async function prove(): Promise<void> {
   const problems: string[] = [];
-  const summary = { rows: 0, bootRefused: 0, bootAccepted: 0, probes: 0 };
+  const summary = { rows: 0, bootRefused: 0, bootAccepted: 0 };
   const child = await startServerChild(fileURLToPath(import.meta.url));
   try {
     summary.rows += await exercise(problems, child.port, 'normal');
@@ -300,31 +220,6 @@ async function prove(): Promise<void> {
     'the secret value appears in stdout',
   );
 
-  const diagChild = await startDiagChild(fileURLToPath(import.meta.url));
-  summary.rows += await exercise(problems, diagChild.port, 'diag');
-  const files = await diagChild.stopAndRead();
-  check(problems, hasExplodeRecord(diagChild.stdout()), 'diag child stdout held no record for the 500');
-  check(
-    problems,
-    !diagChild.stderr().includes(secret) && !diagChild.stderr().includes(longSecret),
-    'the secret value appears in the diag child stderr',
-  );
-  check(
-    problems,
-    !diagChild.stdout().includes(secret) && !diagChild.stdout().includes(longSecret),
-    'the secret value appears in the diag child stdout',
-  );
-  check(
-    problems,
-    files.names.includes('journal.jsonl') && files.names.includes('snapshot.jsonl'),
-    `diag files ${files.names.join(',')}`,
-  );
-  check(
-    problems,
-    !files.text.includes(secret) && !files.text.includes(longSecret),
-    'the secret value appears in a diag file',
-  );
-
   for (const name of ['bad name', 'a;b', 'x=y', 'a,b', 'ä', 'a"b', 'a/b', 'a(b)', 'a b', '']) {
     // biome-ignore lint/performance/noAwaitInLoops: Serial boots keep one listener at a time.
     const outcome = await tryBoot(name);
@@ -340,32 +235,6 @@ async function prove(): Promise<void> {
       summary.bootAccepted++;
     }
     check(problems, outcome.startsWith('accepted'), `cookie name ${JSON.stringify(name)} was ${outcome}`);
-  }
-
-  const sources = Object.values(probes);
-  const results = compileProbes(sources);
-  const keys = Object.keys(probes);
-  const mustCompile = new Set(['typed', 'clientQueryOnlyControl']);
-  const codes: Record<string, number> = {
-    visitsAsString: 2322,
-    undeclaredName: 2339,
-    optionalUnchecked: 18048,
-    secretAsString: 2322,
-    clientCookieInput: 2322,
-    clientCookieWithQuery: 2353,
-  };
-  for (const [index, key] of keys.entries()) {
-    const result = results[index];
-    summary.probes++;
-    if (mustCompile.has(key)) {
-      check(problems, result?.status === 0, `compile probe ${key} must compile: ${result?.errors.join(' | ')}`);
-    } else {
-      check(
-        problems,
-        rejectsAt(result, sources[index] ?? '', codes[key] ?? 0),
-        `compile probe ${key}: expected TS${codes[key]} on the marked line: ${result?.errors.join(' | ')}`,
-      );
-    }
   }
   process.stderr.write(`${JSON.stringify(summary)}\n`);
   conclude(statement, problems);

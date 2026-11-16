@@ -17,7 +17,8 @@
     "api-check": "node tools/api-reference/check.ts",
     "api-docs": "node tools/api-reference/generate.ts",
     "consumer-check": "node tools/check-consumer-lib.ts",
-    "differential": "node --conditions=skeld-source tests/schema/differential.ts"
+    "differential": "node --conditions=skeld-source tests/schema/differential.ts",
+    "sast": "node tools/sast.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.7",

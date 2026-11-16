@@ -1,4 +1,4 @@
-// Does: Gives missing URLs a clear explanation and useful routes back into the site.
+// Does:  Gives missing URLs a clear explanation and useful routes back into the site.
 // Holds: Recovery links and site navigation are available in the initial HTML.
 
 import { html, unsafeHTML } from '@lightstart/light/html/core';

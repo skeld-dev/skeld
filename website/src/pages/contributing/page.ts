@@ -1,4 +1,4 @@
-// Does: Invites contributors to help grow the framework, its documentation and real-world feedback.
+// Does:  Invites contributors to help grow the framework, its documentation and real-world feedback.
 // Holds: GitHub owns contribution mechanics; this page stays a static invitation with native links.
 
 import { html, unsafeHTML } from '@lightstart/light/html/core';

@@ -1,4 +1,4 @@
-// Does: Enables the shared navigation on the static 404 page.
+// Does:  Enables the shared navigation on the static 404 page.
 // Holds: Missing-page recovery does not require client-side routing.
 
 import { configure, disposeTree, render } from '@lightstart/light/html';

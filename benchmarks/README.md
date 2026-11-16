@@ -83,5 +83,5 @@ node node_modules/typescript/bin/tsc -p benchmarks/type-cost/tsconfig.json --ext
 ```
 
 The neighboring `tsconfig.500.json`, `tsconfig.cookies.json`, `tsconfig.derived.json` and `tsconfig.unions.json`
-select the other fixtures. The combined logging destination correctness/latency check remains in
-`tests/logging/log-destination.ts` and runs explicitly through `pnpm test destination`.
+select the other fixtures. The combined logging destination correctness/latency check is
+`tests/logging/log-destination.ts`, part of the extended test group (`pnpm test extended`).

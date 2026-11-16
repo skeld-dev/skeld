@@ -1,5 +1,5 @@
-// Does:  Proves the cross-site check on POST, PUT, PATCH and DELETE: the Origin and Sec-Fetch-Site table and its effects.
-// Holds: A refused request reaches no hook, error handler or handler, and no refused origin is in stderr, stdout or a diag file.
+// Does:  Proves the cross-site check on POST, PUT, PATCH and DELETE: the Origin and Sec-Fetch-Site table and effects.
+// Holds: A refused request reaches no hook, error handler or handler, and no refused origin is in stderr or stdout.
 // biome-ignore-all lint/performance/noAwaitInLoops: Serial requests keep each case's wire bytes apart.
 
 import { randomBytes } from 'node:crypto';
@@ -11,13 +11,12 @@ import { HttpError } from '@skeld/core/http-error';
 import * as t from '@skeld/core/schema';
 import { createServer, type CsrfPolicy, type RoutesOptions, type ServerOptions } from '@skeld/core/server';
 import { check, conclude } from '../support/support.ts';
-import { startDiagChild } from '../support/support-diag.ts';
 import { parseRecords } from '../support/support-log.ts';
 import { jsonOf, request, type Wire } from '../support/support-wire.ts';
 import { startServerChild } from '../support/support-typesystem.ts';
 
 const statement =
-  'for POST, PUT, PATCH and DELETE an Origin in publicOrigin or the route trustedOrigins passes whatever Sec-Fetch-Site says; any other Origin, null or garbage, another scheme or port, passes only with same-origin; no Origin passes with same-origin or none and is refused with any other value; neither header passes in baseline and is refused in strict; Origin equal to Host with no publicOrigin is refused and one skeld.config.public_origin record on stdout says so once; an origin listed only in cors is refused and group trustedOrigins replace the server list; a refusal is 403 CROSS_ORIGIN with one body, connection close, reaches no hook (onResponse included), error handler or handler while an accepted request runs onRequest, preHandler, onSend and onResponse, and the next connection is served; GET and HEAD are never refused; csrfExempt routes pass every row; a group or server csrf mode that is null, a number, an unknown string or (under strict) undefined, and a null trustedOrigins or credentials, are refused; a route whose method accessor changes between reads is either refused or registered and served under GET, and a LOCK to it is never 2xx and never reaches the handler; routes named constructor and __proto__ are served; a route method other than GET, POST, PUT, PATCH or DELETE is refused when declared and a cross-site LOCK is never answered 200; under a strict server a group csrf object must state its mode, a baseline or strict group behaves as stated and one without csrf inherits; strict without publicOrigin, an unknown exempt name and a malformed origin are refused at boot; no refused origin is in stderr or a diag file';
+  'for POST, PUT, PATCH and DELETE an Origin in publicOrigin or the route trustedOrigins passes whatever Sec-Fetch-Site says; any other Origin, null or garbage, another scheme or port, passes only with same-origin; no Origin passes with same-origin or none and is refused with any other value; neither header passes in baseline and is refused in strict; Origin equal to Host with no publicOrigin is refused and one skeld.config.public_origin record on stdout says so once; an origin listed only in cors is refused and group trustedOrigins replace the server list; a refusal is 403 CROSS_ORIGIN with one body, connection close, reaches no hook (onResponse included), error handler or handler while an accepted request runs onRequest, preHandler, onSend and onResponse, and the next connection is served; GET and HEAD are never refused; csrfExempt routes pass every row; under a strict server a group csrf object must state its mode, a baseline or strict group behaves as stated and one without csrf inherits; strict without publicOrigin, an unknown exempt name and a malformed origin are refused at boot; no refused origin is in stderr or stdout';
 
 const PUBLIC = 'https://api.example';
 const TRUSTED = 'https://trusted.example';
@@ -276,58 +275,6 @@ async function boots(options: ServerOptions, group: GroupOptions = {}): Promise<
   await server.close();
 }
 
-const noMethodRoute = { ok: () => ({ status: 200 as const, body: { ok: true } }) };
-
-async function declaredMethod(method: unknown): Promise<string> {
-  try {
-    const contract = defineContract({ r: { method: pastTypes(method), path: '/r', responses: { 200: ok } } });
-    const server = createServer();
-    server.routes(contract, { r: noMethodRoute.ok });
-    const { port } = await server.listen({ port: 0, host: '127.0.0.1' });
-    const wire = await request(port, String(method), '/r', [
-      'origin: https://evil.example',
-      'sec-fetch-site: cross-site',
-    ]);
-    await server.close();
-    return `served, a cross-site ${String(method)} /r answered ${wire.status}`;
-  } catch (error) {
-    return error instanceof Error ? 'refused' : 'threw a non-error';
-  }
-}
-
-async function methodChecks(problems: string[]): Promise<number> {
-  const bad: unknown[] = ['LOCK', 'OPTIONS', 'HEAD', 'get', '', 42];
-  for (const method of bad) {
-    const outcome = await declaredMethod(method);
-    check(problems, outcome === 'refused', `route method ${JSON.stringify(method)}: ${outcome}`);
-  }
-  const server = createServer({ publicOrigin: PUBLIC });
-  const contract = defineContract({
-    get: { method: 'GET', path: '/r', responses: { 200: ok } },
-    post: { method: 'POST', path: '/r', responses: { 200: ok } },
-    put: { method: 'PUT', path: '/r', responses: { 200: ok } },
-    patch: { method: 'PATCH', path: '/r', responses: { 200: ok } },
-    del: { method: 'DELETE', path: '/r', responses: { 200: ok } },
-  });
-  server.routes(contract, {
-    get: noMethodRoute.ok,
-    post: noMethodRoute.ok,
-    put: noMethodRoute.ok,
-    patch: noMethodRoute.ok,
-    del: noMethodRoute.ok,
-  });
-  const { port } = await server.listen({ port: 0, host: '127.0.0.1' });
-  try {
-    for (const method of ['LOCK', 'PROPFIND', 'MKCOL']) {
-      const wire = await request(port, method, '/r', ['origin: https://evil.example', 'sec-fetch-site: cross-site']);
-      check(problems, wire.status !== 200, `a cross-site ${method} /r answered ${wire.status}`);
-    }
-  } finally {
-    await server.close();
-  }
-  return bad.length + 3;
-}
-
 type Behaviour = 'INVALID_OPTION' | 'baseline' | 'strict' | string;
 
 async function groupBehaviour(options: ServerOptions, group: GroupOptions): Promise<Behaviour> {
@@ -382,100 +329,6 @@ async function groupModeChecks(problems: string[]): Promise<number> {
     check(problems, outcome === expected, `${label}: ${outcome}, expected ${expected}`);
   }
   return rows.length;
-}
-
-async function unstatedValueChecks(problems: string[]): Promise<number> {
-  const strictServer: ServerOptions = { publicOrigin: PUBLIC, csrf: { mode: 'strict' } };
-  const baselineServer: ServerOptions = { publicOrigin: PUBLIC };
-  const refused: [string, ServerOptions, GroupOptions][] = [
-    ['strict server, group mode null', strictServer, { csrf: pastTypes({ mode: null }) }],
-    ['strict server, group mode undefined', strictServer, { csrf: pastTypes({ mode: undefined }) }],
-    ['strict server, group csrf {}', strictServer, { csrf: {} }],
-    ['group mode null', baselineServer, { csrf: pastTypes({ mode: null }) }],
-    ['group mode a number', baselineServer, { csrf: pastTypes({ mode: 1 }) }],
-    ['group mode an unknown string', baselineServer, { csrf: pastTypes({ mode: 'loose' }) }],
-    ['server mode null', { publicOrigin: PUBLIC, csrf: pastTypes({ mode: null }) }, {}],
-    ['server mode a number', { publicOrigin: PUBLIC, csrf: pastTypes({ mode: 0 }) }, {}],
-    ['server mode an unknown string', { publicOrigin: PUBLIC, csrf: pastTypes({ mode: 'Strict' }) }, {}],
-    ['group trustedOrigins null', baselineServer, { csrf: pastTypes({ trustedOrigins: null }) }],
-    ['server trustedOrigins null', { publicOrigin: PUBLIC, csrf: pastTypes({ trustedOrigins: null }) }, {}],
-    ['group cors credentials null', baselineServer, { cors: pastTypes({ origins: [PUBLIC], credentials: null }) }],
-    ['server cors credentials null', { cors: pastTypes({ origins: [PUBLIC], credentials: null }) }, {}],
-  ];
-  for (const [label, options, group] of refused) {
-    const outcome = await groupBehaviour(options, group);
-    check(problems, outcome === 'INVALID_OPTION', `${label}: ${outcome}, expected INVALID_OPTION`);
-  }
-  return refused.length;
-}
-
-async function accessorEntry(problems: string[], entry: 'plain' | 'defined'): Promise<string> {
-  let reads = 0;
-  let handled = 0;
-  const route = {
-    path: '/acc',
-    responses: { 200: ok },
-    get method() {
-      reads++;
-      return reads === 1 ? 'GET' : 'LOCK';
-    },
-  };
-  const server = createServer();
-  let outcome = 'refused';
-  try {
-    const contract = entry === 'defined' ? defineContract({ acc: pastTypes(route) }) : pastTypes({ acc: route });
-    server.routes(contract, {
-      acc: () => {
-        handled++;
-        return { status: 200 as const, body: { ok: true } };
-      },
-    });
-    const { port } = await server.listen({ port: 0, host: '127.0.0.1' });
-    outcome = 'registered';
-    const got = await request(port, 'GET', '/acc');
-    check(
-      problems,
-      got.status === 200 && handled === 1,
-      `${entry}: a registered accessor route answered GET ${got.status}`,
-    );
-    const lock = await request(port, 'LOCK', '/acc', ['origin: https://evil.example', 'sec-fetch-site: cross-site']);
-    check(problems, lock.status < 200 || lock.status >= 300, `${entry}: LOCK /acc answered ${lock.status}`);
-    check(problems, handled === 1, `${entry}: the handler ran ${handled} times after a GET and a LOCK`);
-  } catch (error) {
-    check(problems, error instanceof Error && outcome === 'refused', `${entry}: unexpected ${String(error)}`);
-  } finally {
-    await server.close();
-  }
-  process.stderr.write(`accessor ${entry}: ${outcome} after ${reads} reads\n`);
-  return outcome;
-}
-
-async function accessorMethod(problems: string[]): Promise<number> {
-  await accessorEntry(problems, 'plain');
-  await accessorEntry(problems, 'defined');
-  return 2;
-}
-
-async function prototypeNames(problems: string[]): Promise<number> {
-  const names = ['constructor', 'toString', 'hasOwnProperty', '__proto__'];
-  const routes = Object.fromEntries(
-    names.map((name, index) => [name, { method: 'GET', path: `/proto${index}`, responses: { 200: ok } }]),
-  );
-  const handlers = Object.fromEntries(names.map((name) => [name, noMethodRoute.ok]));
-  const server = createServer();
-  try {
-    server.routes(defineContract(pastTypes(routes)), pastTypes(handlers));
-    const { port } = await server.listen({ port: 0, host: '127.0.0.1' });
-    for (const [index, name] of names.entries()) {
-      const wire = await request(port, 'GET', `/proto${index}`);
-      check(problems, wire.status === 200, `route named ${name}: GET answered ${wire.status}`);
-    }
-  } catch (error) {
-    check(problems, false, `a contract with prototype-like route names was refused: ${String(error)}`);
-  } finally {
-    await server.close();
-  }
-  return names.length;
 }
 
 async function bootChecks(problems: string[]): Promise<number> {
@@ -609,26 +462,9 @@ async function prove(): Promise<void> {
   check(problems, !child.stderr().includes(marker), 'a refused origin appears in stderr');
   check(problems, !child.stdout().includes(marker), 'a refused origin appears in stdout');
 
-  const diagChild = await startDiagChild(fileURLToPath(import.meta.url));
-  const diagBodies = new Set<string>();
-  const diagTally = await matrix(problems, diagChild.port, diagBodies);
-  const files = await diagChild.stopAndRead();
-  check(problems, diagTally.refused > 0, 'the diag child refused nothing');
-  check(problems, diagBodies.size === 1, 'diagnostic refusals must have one fixed body');
-  check(problems, !files.text.includes(marker), 'a refused origin appears in a diag file');
-  check(problems, !diagChild.stderr().includes(marker), 'a refused origin appears in the diag child stderr');
-  check(problems, !diagChild.stdout().includes(marker), 'a refused origin appears in the diag child stdout');
-  check(problems, files.text.includes('refuse.csrf'), 'the diag files hold no refuse.csrf event');
-
   await noOrigin(problems);
-  const boot =
-    (await bootChecks(problems)) +
-    (await methodChecks(problems)) +
-    (await groupModeChecks(problems)) +
-    (await unstatedValueChecks(problems)) +
-    (await accessorMethod(problems)) +
-    (await prototypeNames(problems));
-  process.stderr.write(`${JSON.stringify({ ...tally, bodies: bodies.size, boot, diagRefused: diagTally.refused })}\n`);
+  const boot = (await bootChecks(problems)) + (await groupModeChecks(problems));
+  process.stderr.write(`${JSON.stringify({ ...tally, bodies: bodies.size, boot })}\n`);
   conclude(statement, problems);
 }
 

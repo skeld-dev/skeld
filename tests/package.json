@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@skeld/auth": "workspace:*",
     "@skeld/core": "workspace:*"
   },
   "devDependencies": {
-    "ajv": "8.20.0",
     "@types/node": "26.6.6",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "pg": "8.23.1",
+    "@types/pg": "8.23.1"
   }
 }

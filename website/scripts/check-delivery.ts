@@ -1,4 +1,4 @@
-// Does: Checks the actual build artifacts before they can be deployed.
+// Does:  Checks the actual build artifacts before they can be deployed.
 // Holds: Broken canonicals, discovery, structured data and CSP hashes fail the build.
 
 import assert from 'node:assert/strict';

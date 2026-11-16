@@ -1,5 +1,5 @@
-// Does:  Runs one request through its stages: pre-route, cross-site check, onRequest, body, validation, handler.
-// Holds: A body declared over its route's limit condemns the connection before any onRequest hook runs.
+// Does:  Runs one request through its stages: pre-route, cross-site check, gate, onRequest, body, validation, handler.
+// Holds: A body declared over its route's limit condemns the connection before any gate step or onRequest hook runs.
 
 import { authorResult } from './author-result.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -18,6 +18,8 @@ import { rawCookiesOf } from './cookies.ts';
 import { settle, signalOf } from './deadline.ts';
 import { fail, refuse, refuseCrossSite } from './error-path.ts';
 import type { Exchange } from './exchange.ts';
+import { authorizeStage, identifyStage } from './gate.ts';
+import { releaseGrant } from './grant.ts';
 import { RequestContextRecord, runStage, ValidatedContextRecord, watchCompletion } from './hooks.ts';
 import { loggerOf, pointHookFailed, pointRouted, pointStart } from './points.ts';
 import { preRoute } from './pre-route.ts';
@@ -87,6 +89,18 @@ class HandlerRequest implements RuntimeRequest {
   }
 }
 
+// Why: On a server with a gate every handler request has both members, undefined on a public route, never absent.
+class GatedHandlerRequest extends HandlerRequest {
+  readonly principal: unknown;
+  readonly grant: unknown;
+
+  constructor(exchange: Exchange, parts: ValidatedParts) {
+    super(exchange, parts);
+    this.principal = exchange.principal;
+    this.grant = exchange.grant;
+  }
+}
+
 function runHandler(exchange: Exchange, parts: ValidatedParts): void {
   if (exchange.state !== 'running') {
     return;
@@ -94,7 +108,7 @@ function runHandler(exchange: Exchange, parts: ValidatedParts): void {
   const { route } = exchange;
   exchange.stage = next(exchange.stage, 'req.handler');
   const arg = start('req.handler.arg');
-  const argument = new HandlerRequest(exchange, parts);
+  const argument = route.gated ? new GatedHandlerRequest(exchange, parts) : new HandlerRequest(exchange, parts);
   end(arg);
   contain('handler', argument);
   authorResult<RuntimeReply>(
@@ -104,6 +118,7 @@ function runHandler(exchange: Exchange, parts: ValidatedParts): void {
         resume(exchange.diag);
       }
       try {
+        releaseGrant(exchange);
         respond(exchange, value);
       } finally {
         if (asynchronous) {
@@ -134,6 +149,15 @@ function validateStage(exchange: Exchange, body: unknown): void {
     refuse(exchange, 'skeld.refuse.validation', parts);
     return;
   }
+  const authorize = exchange.route.gate?.authorize ?? null;
+  if (authorize === null) {
+    preHandlerStage(exchange, parts);
+    return;
+  }
+  authorizeStage(exchange, authorize, parts, () => preHandlerStage(exchange, parts));
+}
+
+function preHandlerStage(exchange: Exchange, parts: ValidatedParts): void {
   const hooks = exchange.route.hooks.preHandler;
   if (hooks.length === 0) {
     runHandler(exchange, parts);
@@ -230,26 +254,35 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
   if (hooks.onResponse.length > 0) {
     watchCompletion(exchange, hooks.onResponse);
   }
-  if (hooks.onRequest.length === 0) {
-    readStage(exchange);
-    leave(diag);
-    return;
-  }
   const { route } = exchange;
-  // Why: An asynchronous onRequest hook yields to Node, which would dispatch the next pipelined request meanwhile.
-  if (route.readsBody && declaresOverLimit(req, route.bodyLimit)) {
+  const { gate } = route;
+  // Why: An asynchronous gate step or onRequest hook yields to Node, which would dispatch the next pipelined request.
+  if ((gate !== null || hooks.onRequest.length > 0) && route.readsBody && declaresOverLimit(req, route.bodyLimit)) {
     exchange.closeConnection = true;
     stageBodyRefusal(req);
+  }
+  if (gate === null) {
+    requestStage(exchange);
+  } else {
+    identifyStage(exchange, gate, () => requestStage(exchange));
+  }
+  leave(diag);
+}
+
+function requestStage(exchange: Exchange): void {
+  const hooks = exchange.route.hooks.onRequest;
+  if (hooks.length === 0) {
+    readStage(exchange);
+    return;
   }
   exchange.stage = next(exchange.stage, 'req.hook.on_request');
   const context = new RequestContextRecord(exchange);
   contain('request', context);
   runStage(
     exchange,
-    hooks.onRequest,
+    hooks,
     (hook) => hook(context),
     () => readStage(exchange),
     (error) => fail(exchange, error),
   );
-  leave(diag);
 }

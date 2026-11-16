@@ -10,11 +10,13 @@ export type Token = number;
 export type StageName =
   | 'req.preroute'
   | 'req.route.find'
+  | 'req.gate.identify'
   | 'req.hook.on_request'
   | 'req.body'
   | 'req.body.read'
   | 'req.body.parse'
   | 'req.validate'
+  | 'req.gate.authorize'
   | 'req.hook.pre_handler'
   | 'req.handler'
   | 'req.respond'
@@ -39,6 +41,7 @@ export type BootSpanName =
   | 'boot.contract_check'
   | 'boot.plugins'
   | 'boot.plugin'
+  | 'boot.gate'
   | 'boot.runtime'
   | 'boot.schema_checks'
   | 'boot.compile_validators'
@@ -86,6 +89,7 @@ export type EventName =
   | 'refuse.redirect'
   | 'refuse.preflight'
   | 'refuse.csrf'
+  | 'refuse.gate'
   | 'err.internal'
   | 'err.undeclared_status'
   | 'err.serialize'
@@ -94,6 +98,7 @@ export type EventName =
   | 'err.reserved_header'
   | 'err.cookie'
   | 'err.send_status'
+  | 'err.gate'
   | 'close.forced'
   | 'client.error';
 export type LimitName =

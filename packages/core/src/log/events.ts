@@ -25,7 +25,16 @@ export type RefusalEvent =
   | 'skeld.refuse.validation'
   | 'skeld.refuse.not_found'
   | 'skeld.refuse.media_type'
-  | 'skeld.refuse.body_json';
+  | 'skeld.refuse.body_json'
+  | 'skeld.refuse.credential_missing'
+  | 'skeld.refuse.credential_invalid'
+  | 'skeld.refuse.credential_conflict'
+  | 'skeld.refuse.csrf_token'
+  | 'skeld.refuse.rate_limited'
+  | 'skeld.refuse.access_denied'
+  | 'skeld.refuse.access_hidden'
+  | 'skeld.refuse.resource_missing'
+  | 'skeld.refuse.unavailable';
 
 export type ErrorEvent = 'skeld.request.error' | 'skeld.hook.error';
 
@@ -39,7 +48,8 @@ export type RequestErrorReason =
   | 'invalid_cookie'
   | 'redirect_refused'
   | 'send_status'
-  | 'headers_sent';
+  | 'headers_sent'
+  | 'gate';
 
 export type HookErrorReason = 'on_response' | 'on_error' | 'late_send' | 'after_response' | 'internal';
 
@@ -84,6 +94,15 @@ export const EVENTS: { readonly [E in EventName]: EventSpec } = Object.freeze({
   'skeld.refuse.not_found': spec('security', 'info'),
   'skeld.refuse.media_type': spec('security', 'info'),
   'skeld.refuse.body_json': spec('security', 'info'),
+  'skeld.refuse.credential_missing': spec('security', 'info'),
+  'skeld.refuse.credential_invalid': spec('security', 'warn'),
+  'skeld.refuse.credential_conflict': spec('security', 'warn'),
+  'skeld.refuse.csrf_token': spec('security', 'warn'),
+  'skeld.refuse.rate_limited': spec('security', 'warn'),
+  'skeld.refuse.access_denied': spec('security', 'warn'),
+  'skeld.refuse.access_hidden': spec('security', 'warn'),
+  'skeld.refuse.resource_missing': spec('security', 'info'),
+  'skeld.refuse.unavailable': spec('security', 'error'),
   'skeld.request.closed': spec('access', 'info'),
   // Why: An author's record takes the severity of the method called.
   'skeld.app.message': spec('app', null),
