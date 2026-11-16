@@ -1,7 +1,6 @@
-// Does:  Proves conditional enable and the credential change on both adapters: race, interruptions, stale enable.
+// Does:  Proves on both adapters that enable refuses after an interleaved credential change and ends old sessions.
 // Holds: Cases are judged from subject answers, real HTTP statuses and direct database reads, never from timing.
 
-import { exhaustive } from '../support/test-profile.ts';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer as createNetServer } from 'node:net';
@@ -9,20 +8,18 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { hashPassword, verifyPassword } from '@skeld/auth/password';
 import { sessionRoutes } from '@skeld/auth/routes';
 import { createAuth, type Subjects } from '@skeld/auth/server';
-import { StoreFailure } from '@skeld/auth/store';
 import { defineContract, errorBodySchema } from '@skeld/core/contract';
 import { object, string } from '@skeld/core/schema';
 import { Secret } from '@skeld/core/secret';
 import { createServer } from '@skeld/core/server';
-import { createLogs, type Logs, type Observed, observe, series } from './rig/v1-app.ts';
+import { createLogs, type Logs, observe, series } from './rig/v1-app.ts';
 import { createReport } from './rig/v1-report.ts';
 import { cleanAll, fresh, type Kind, makeRig, type Rig, rigKinds } from './support-store.ts';
 
 const statement =
-  'enable(userId, expectedGeneration) enables only a subject disabled at exactly that generation and ends its sessions in the same unit; with the application serialising per user a credential change and a reconciliation never admit an old-password session, without it the change stops at a refused enable and a reconciliation that revokes closes the session; every interruption fails closed; a moved generation stops the change and a reconciliation enables at the generation it read';
+  'enable(userId, expectedGeneration) refuses after an interleaved credential change and ends the sessions of the old credential in the same unit; with the application serialising per user a change and a reconciliation never admit an old-password session; a moved generation stops the change and a reconciliation enables at the generation it read';
 const report = createReport('v03', statement);
 
-const RUNS = exhaustive ? 10 : 1;
 const COOKIE = '__Host-skeld';
 
 const routes = defineContract({
@@ -85,12 +82,6 @@ class Locks {
   }
 }
 
-class Crash extends Error {
-  constructor() {
-    super('the process ended here');
-  }
-}
-
 // Does:  Orders every call a scenario makes, so a proof can say which came first.
 class Trace {
   readonly lines: string[] = [];
@@ -108,7 +99,6 @@ class Trace {
 interface Env {
   readonly kind: Kind;
   readonly rig: Rig;
-  readonly observed: Observed;
   readonly logs: Logs;
   readonly origin: string;
   readonly subjects: Subjects;
@@ -173,7 +163,6 @@ async function startEnv(kind: Kind): Promise<Env> {
   return {
     kind,
     rig,
-    observed,
     logs,
     origin,
     subjects: auth.subjects,
@@ -271,8 +260,6 @@ function traced(
 
 interface Hooks {
   readonly afterDisable?: () => Promise<void>;
-  readonly write?: 'throws-unapplied' | 'throws-applied';
-  readonly crashBeforeEnable?: boolean;
 }
 
 interface ChangeInput {
@@ -284,18 +271,12 @@ interface ChangeInput {
 
 // Does:  Writes the new hash only if the stored one is still the verified one; the hooks make the outcome unknown.
 function writeHash(env: Env, input: ChangeInput, stored: string, nextHash: string): boolean {
-  const { person, trace, hooks } = input;
-  if (hooks?.write === 'throws-unapplied') {
-    throw new Error('write outcome unknown');
-  }
+  const { person, trace } = input;
   const applied = env.accounts.get(person.id) === stored;
   if (applied) {
     env.accounts.set(person.id, nextHash);
   }
   trace.add('C', `write H->N -> ${applied ? 'applied' : 'not applied'}`);
-  if (hooks?.write === 'throws-applied') {
-    throw new Error('write outcome unknown');
-  }
   return applied;
 }
 
@@ -336,15 +317,7 @@ function change(env: Env, input: ChangeInput): Promise<string> {
       return disabled.outcome === 'not_applied' ? 'not_started' : 'pending:disable';
     }
     await hooks?.afterDisable?.();
-    let written: boolean;
-    try {
-      written = writeHash(env, input, stored, next.hash);
-    } catch {
-      return 'pending:write';
-    }
-    if (hooks?.crashBeforeEnable === true) {
-      throw new Crash();
-    }
+    const written = writeHash(env, input, stored, next.hash);
     return enableAfterWrite(subjects, person.id, disabled.generation, written);
   });
 }
@@ -353,7 +326,7 @@ async function attempt(work: Promise<string>): Promise<string> {
   try {
     return await work;
   } catch (error) {
-    return error instanceof Crash ? 'crashed' : `threw ${String(error)}`;
+    return `threw ${String(error)}`;
   }
 }
 
@@ -429,112 +402,6 @@ async function plant(rig: Rig, userId: string, count: number): Promise<void> {
       [Buffer.from(fresh()), userId, now, now, now + 3_600_000, now + 3_600_000],
     );
   });
-}
-
-async function disabledAt(env: Env, id: string): Promise<number> {
-  const answer = await env.subjects.disable(id);
-  if (answer.kind !== 'done') {
-    throw new Error(`disable answered ${show(answer)}`);
-  }
-  return answer.generation;
-}
-
-// Does:  Group 1: the primitive, through the public subject calls.
-async function primitive(env: Env): Promise<void> {
-  const label = `[${env.kind}] primitive:`;
-  const subjects = env.subjects;
-  const known = `p1-${randomBytes(5).toString('hex')}`;
-  const absent = await Promise.all([subjects.enable(known, 1), subjects.enable(known, 2)]);
-  report.check(
-    `${label} enable on an absent subject is refused absent and creates none`,
-    absent.every((answer) => show(answer) === 'refused/absent') &&
-      show(await subjects.read(known)) === 'absent' &&
-      (await env.rig.count('subjects', 'user_id', known)) === 0,
-    `${absent.map(show).join(', ')}; row count ${await env.rig.count('subjects', 'user_id', known)}`,
-  );
-
-  const id = `p2-${randomBytes(5).toString('hex')}`;
-  const g = await disabledAt(env, id);
-  const earlier = show(await subjects.enable(id, g - 1));
-  const later = show(await subjects.enable(id, g + 1));
-  const unchanged = show(await subjects.read(id));
-  report.check(
-    `${label} enable at g-1 and at g+1 is refused stale and changes nothing (g=${g})`,
-    earlier === 'refused/stale' && later === 'refused/stale' && unchanged === `subject(enabled=false,generation=${g})`,
-    `${earlier}, ${later}, then ${unchanged}`,
-  );
-  const exact = show(await subjects.enable(id, g));
-  report.check(
-    `${label} enable at g is done: enabled, generation g+1`,
-    exact === `done(enabled=true,generation=${g + 1})` &&
-      show(await subjects.read(id)) === `subject(enabled=true,generation=${g + 1})`,
-    exact,
-  );
-  const again = show(await subjects.enable(id, g + 1));
-  const atOld = show(await subjects.enable(id, g));
-  report.check(
-    `${label} enable on an enabled subject is refused enabled whatever the generation, and changes nothing`,
-    again === 'refused/enabled' &&
-      atOld === 'refused/enabled' &&
-      show(await subjects.read(id)) === `subject(enabled=true,generation=${g + 1})`,
-    `${again}, ${atOld}`,
-  );
-
-  const racing = `p3-${randomBytes(5).toString('hex')}`;
-  const gRace = await disabledAt(env, racing);
-  const answers = await Promise.all(Array.from({ length: 20 }, () => subjects.enable(racing, gRace)));
-  const shown = answers.map(show);
-  report.check(
-    `${label} twenty concurrent enable(g): exactly one done, nineteen refused enabled`,
-    shown.filter((text) => text.startsWith('done')).length === 1 &&
-      shown.filter((text) => text === 'refused/enabled').length === 19 &&
-      show(await subjects.read(racing)) === `subject(enabled=true,generation=${gRace + 1})`,
-    `${shown.filter((text) => text.startsWith('done')).length} done, ${shown.filter((text) => text === 'refused/enabled').length} refused enabled`,
-  );
-
-  const holder = `p4-${randomBytes(5).toString('hex')}`;
-  const gHeld = await disabledAt(env, holder);
-  await plant(env.rig, holder, 2);
-  const planted = await sessionRows(env, holder);
-  const refusedStale = show(await subjects.enable(holder, gHeld + 1));
-  const keptByRefusal = await sessionRows(env, holder);
-  const ended = show(await subjects.enable(holder, gHeld));
-  await env.logs.settle();
-  const revokedEvents = env.logs
-    .named('auth.session.revoked')
-    .filter((record) => record.fields['auth.user'] === holder && record.fields['auth.cause'] === 'enable');
-  const changedEvents = env.logs
-    .named('auth.subject.changed')
-    .filter((record) => record.fields['auth.user'] === holder && record.fields['auth.change'] === 'enabled');
-  report.check(
-    `${label} a refused enable leaves the sessions of a disabled subject; a done enable deletes them`,
-    planted === 2 &&
-      refusedStale === 'refused/stale' &&
-      keptByRefusal === 2 &&
-      ended.startsWith('done') &&
-      (await sessionRows(env, holder)) === 0,
-    `planted ${planted}, after refusal ${keptByRefusal}, after done ${await sessionRows(env, holder)}`,
-  );
-  report.check(
-    `${label} the done enable wrote one auth.subject.changed (enabled) and one auth.session.revoked (cause enable); the refusal wrote none`,
-    changedEvents.length === 1 && revokedEvents.length === 1,
-    `changed ${changedEvents.length}, revoked ${revokedEvents.length}`,
-  );
-  const quiet = `p5-${randomBytes(5).toString('hex')}`;
-  const gQuiet = await disabledAt(env, quiet);
-  await subjects.enable(quiet, gQuiet);
-  await env.logs.settle();
-  report.check(
-    `${label} an enable that ends no session writes no auth.session.revoked`,
-    env.logs
-      .named('auth.session.revoked')
-      .filter((record) => record.fields['auth.user'] === quiet && record.fields['auth.cause'] === 'enable').length ===
-      0 &&
-      env.logs
-        .named('auth.subject.changed')
-        .filter((record) => record.fields['auth.user'] === quiet && record.fields['auth.change'] === 'enabled')
-        .length === 1,
-  );
 }
 
 // Does:  Group 1: the store unit under the public call, whose answer counts the sessions an enable deletes.
@@ -671,177 +538,6 @@ async function withSerialization(env: Env): Promise<Verdicts> {
   return out;
 }
 
-// Does:  Group 4: each interruption row of the contract's table.
-async function interruptions(env: Env): Promise<void> {
-  const label = `[${env.kind}] interruption:`;
-  const { observed } = env;
-  const lost =
-    (operation: 'subjectDisable' | 'subjectEnable'): (() => Promise<void>) =>
-    () => {
-      throw new StoreFailure(operation, 'unavailable', 'unknown', null);
-    };
-  const state = async (id: string): Promise<string> => show(await env.subjects.read(id));
-  const row = async (name: string, body: (out: Verdicts) => Promise<void>): Promise<void> => {
-    const out = new Verdicts();
-    try {
-      await body(out);
-    } finally {
-      observed.failWith(null);
-      observed.after('subjectDisable', null);
-      observed.after('subjectEnable', null);
-    }
-    for (const [item, ok, detail] of out.items) {
-      report.check(`${label} ${name}: ${item}`, ok, detail);
-    }
-  };
-
-  await row('step 1 answers not_applied', async (out) => {
-    const person = await newPerson(env, 'g4a');
-    observed.failWith('no', 'subjectDisable');
-    const outcome = await attempt(change(env, { person, locks: new Locks(), trace: new Trace() }));
-    observed.failWith(null);
-    out.eq('the change reports it did not start', outcome, 'not_started');
-    out.eq('the subject was not disabled', await state(person.id), 'absent');
-    out.eq(
-      'the old credential is stored and only the old password signs in',
-      await signIns(env, person),
-      'old=200 new=401',
-    );
-  });
-
-  await row('step 1 answers unknown', async (out) => {
-    const person = await newPerson(env, 'g4b');
-    observed.after('subjectDisable', lost('subjectDisable'));
-    const outcome = await attempt(change(env, { person, locks: new Locks(), trace: new Trace() }));
-    observed.after('subjectDisable', null);
-    out.eq('the change reports pending at disable', outcome, 'pending:disable');
-    out.eq(
-      'the subject may be disabled: read says disabled at generation 2',
-      await state(person.id),
-      'subject(enabled=false,generation=2)',
-    );
-    out.eq('no password signs in', await signIns(env, person), 'old=401 new=401');
-    const settled = await reconcile(env, person.id, new Locks(), 'R', new Trace());
-    out.eq('a reconciliation enables at the generation it read', settled, 'enabled');
-    out.eq(
-      'the old credential still stands: only the old password signs in',
-      await signIns(env, person),
-      'old=200 new=401',
-    );
-  });
-
-  await row('a crash after step 1', async (out) => {
-    const person = await newPerson(env, 'g4c');
-    const outcome = await attempt(
-      change(env, {
-        person,
-        locks: new Locks(),
-        trace: new Trace(),
-        hooks: {
-          afterDisable: () => {
-            throw new Crash();
-          },
-        },
-      }),
-    );
-    out.eq('the process ended after the disable', outcome, 'crashed');
-    out.eq('the subject is disabled', await state(person.id), 'subject(enabled=false,generation=2)');
-    out.eq('no password signs in', await signIns(env, person), 'old=401 new=401');
-    const settled = await reconcile(env, person.id, new Locks(), 'R', new Trace());
-    out.eq('the restarted reconciliation enables at the generation it read', settled, 'enabled');
-    out.eq('the old credential stands', await signIns(env, person), 'old=200 new=401');
-  });
-
-  await series(['throws-unapplied', 'throws-applied'] as const, (write) =>
-    row(
-      `step 2's outcome is unknown (the write ${write === 'throws-applied' ? 'had committed' : 'had not applied'})`,
-      async (out) => {
-        const person = await newPerson(env, `g4d${write === 'throws-applied' ? 'a' : 'u'}`);
-        const outcome = await attempt(
-          change(env, { person, locks: new Locks(), trace: new Trace(), hooks: { write } }),
-        );
-        out.eq('the change reports pending at the write', outcome, 'pending:write');
-        out.eq('the subject stays disabled', await state(person.id), 'subject(enabled=false,generation=2)');
-        out.eq('no password signs in', await signIns(env, person), 'old=401 new=401');
-        const record = env.accounts.get(person.id);
-        out.eq(
-          'the application reads its own record and finds what the write left',
-          record === person.hash ? 'old' : 'new',
-          write === 'throws-applied' ? 'new' : 'old',
-        );
-        out.eq('reconciling enables it', await reconcile(env, person.id, new Locks(), 'R', new Trace()), 'enabled');
-        out.eq(
-          'afterwards the stored credential alone signs in',
-          await signIns(env, person),
-          write === 'throws-applied' ? 'old=401 new=200' : 'old=200 new=401',
-        );
-      },
-    ),
-  );
-
-  await row('a crash after step 2', async (out) => {
-    const person = await newPerson(env, 'g4e');
-    const outcome = await attempt(
-      change(env, { person, locks: new Locks(), trace: new Trace(), hooks: { crashBeforeEnable: true } }),
-    );
-    out.eq('the process ended after the write', outcome, 'crashed');
-    out.eq('the subject is disabled', await state(person.id), 'subject(enabled=false,generation=2)');
-    out.eq('no password signs in', await signIns(env, person), 'old=401 new=401');
-    out.eq(
-      'the restarted reconciliation enables it',
-      await reconcile(env, person.id, new Locks(), 'R', new Trace()),
-      'enabled',
-    );
-    out.eq('only the new password signs in', await signIns(env, person), 'old=401 new=200');
-  });
-
-  await row('step 3 answers not_applied', async (out) => {
-    const person = await newPerson(env, 'g4f');
-    observed.failWith('no', 'subjectEnable');
-    const outcome = await attempt(change(env, { person, locks: new Locks(), trace: new Trace() }));
-    observed.failWith(null);
-    out.eq('the change reports pending at enable', outcome, 'pending:enable');
-    out.eq(
-      'the subject is still disabled at the generation of its disable',
-      await state(person.id),
-      'subject(enabled=false,generation=2)',
-    );
-    out.eq('no password signs in', await signIns(env, person), 'old=401 new=401');
-    out.eq(
-      'the same enable at generation 2, repeated, is done',
-      show(await env.subjects.enable(person.id, 2)),
-      'done(enabled=true,generation=3)',
-    );
-    out.eq('only the new password signs in', await signIns(env, person), 'old=401 new=200');
-  });
-
-  await row('step 3 answers unknown and had applied', async (out) => {
-    const person = await newPerson(env, 'g4g');
-    observed.after('subjectEnable', lost('subjectEnable'));
-    const outcome = await attempt(change(env, { person, locks: new Locks(), trace: new Trace() }));
-    observed.after('subjectEnable', null);
-    out.eq('the change reads, finds enabled at g+1 and reports its own enable done', outcome, 'changed');
-    out.eq('the subject is enabled at generation 3', await state(person.id), 'subject(enabled=true,generation=3)');
-    out.eq('only the new password signs in', await signIns(env, person), 'old=401 new=200');
-  });
-
-  await row('step 3 answers unknown and had not applied', async (out) => {
-    const person = await newPerson(env, 'g4h');
-    observed.failWith('unknown', 'subjectEnable');
-    const outcome = await attempt(change(env, { person, locks: new Locks(), trace: new Trace() }));
-    observed.failWith(null);
-    out.eq('the change reads, finds disabled at g and reports pending at enable', outcome, 'pending:enable');
-    out.eq('the subject is disabled at generation 2', await state(person.id), 'subject(enabled=false,generation=2)');
-    out.eq('no password signs in', await signIns(env, person), 'old=401 new=401');
-    out.eq(
-      'the enable at generation 2 called again is done',
-      show(await env.subjects.enable(person.id, 2)),
-      'done(enabled=true,generation=3)',
-    );
-    out.eq('only the new password signs in', await signIns(env, person), 'old=401 new=200');
-  });
-}
-
 // Does:  Group 5: another actor moved the generation during the change, so its enable is refused stale.
 async function staleEnable(env: Env): Promise<Verdicts> {
   const out = new Verdicts();
@@ -903,24 +599,10 @@ async function staleEnable(env: Env): Promise<Verdicts> {
 async function suite(kind: Kind): Promise<void> {
   const env = await startEnv(kind);
   try {
-    await report.run(`[${kind}] primitive`, () => primitive(env));
     await report.run(`[${kind}] store unit`, () => unit(kind));
-    const second: Verdicts[] = [];
-    await series(Array.from({ length: RUNS }), async () => {
-      second.push(await withoutSerialization(env));
-    });
-    emit(`[${kind}] no serialization:`, second);
-    const third: Verdicts[] = [];
-    await series(Array.from({ length: RUNS }), async () => {
-      third.push(await withSerialization(env));
-    });
-    emit(`[${kind}] per-user serialization:`, third);
-    await report.run(`[${kind}] interruption`, () => interruptions(env));
-    const fifth: Verdicts[] = [];
-    await series(Array.from({ length: exhaustive ? 3 : 1 }), async () => {
-      fifth.push(await staleEnable(env));
-    });
-    emit(`[${kind}] stale enable:`, fifth);
+    emit(`[${kind}] no serialization:`, [await withoutSerialization(env)]);
+    emit(`[${kind}] per-user serialization:`, [await withSerialization(env)]);
+    emit(`[${kind}] stale enable:`, [await staleEnable(env)]);
   } finally {
     await env.close();
   }

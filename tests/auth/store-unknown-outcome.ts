@@ -1,4 +1,4 @@
-// Does:  Proves an unanswered COMMIT is reported unknown, never as success or as not applied, and is never replayed.
+// Does:  Proves an unanswered COMMIT is reported unknown and never replayed, and an abandoned write applies once.
 // Holds: PostgreSQL's COMMIT is cut on a proxy, SQLite's fails under a file-size limit, and the database is read after.
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -19,9 +19,11 @@ import {
   fresh,
   hex,
   isFailure,
+  type Kind,
   makeRig,
   pgBase,
   type Rig,
+  rigKinds,
   scratchDir,
   settle,
   show,
@@ -156,59 +158,6 @@ const scenarios: readonly Scenario[] = [
     },
   },
   {
-    name: 'sessionRotate',
-    prepare: async (rig, store) => {
-      const userId = tag('rotate');
-      const old = fresh();
-      const next = fresh();
-      await rig.store.ops.subjectEnsure({ userId });
-      await rig.store.ops.sessionIssue({
-        userId,
-        generation: 1,
-        digest: old,
-        replaces: null,
-        idleMs: 60_000,
-        absoluteMs: 60_000,
-      });
-      return {
-        call: () => store.ops.sessionRotate({ userId, digest: old, next, idleMs: 60_000 }),
-        stands: async () => (await rig.exists('sessions', next)) && !(await rig.exists('sessions', old)),
-      };
-    },
-  },
-  {
-    name: 'subjectDisable',
-    prepare: async (rig, store) => {
-      const userId = tag('disable');
-      await rig.store.ops.subjectEnsure({ userId });
-      return {
-        call: () => store.ops.subjectDisable({ userId }),
-        stands: async () => (await rig.value('subjects', userId, 'generation')) === 2,
-      };
-    },
-  },
-  {
-    name: 'apiKeyIssue',
-    prepare: async (rig, store) => {
-      const userId = tag('key');
-      const keyId = tag('k');
-      await rig.store.ops.subjectEnsure({ userId });
-      return {
-        call: () =>
-          store.ops.apiKeyIssue({
-            userId,
-            keyId,
-            digest: fresh(),
-            name: 'n',
-            scopes: ['p:a'],
-            expiresInMs: null,
-            max: 3,
-          }),
-        stands: () => rig.exists('api_keys', keyId),
-      };
-    },
-  },
-  {
     name: 'limitCharge',
     prepare: (rig, store) => {
       const key = fresh();
@@ -324,6 +273,203 @@ async function endedBeforeCommit(rig: Rig, report: ReturnType<typeof createRepor
     '[postgres] no uncaught client error ended or disturbed the process through the cut connections and the killed backend',
     uncaught === 0,
     `${uncaught} uncaught exceptions`,
+  );
+  await store.close();
+  await pool.end();
+}
+
+const holdFor: Record<Kind, number> = { sqlite: 300, postgres: 1500 };
+
+async function issueSession(
+  rig: Rig,
+  userId: string,
+  idleMs: number,
+  absoluteMs: number,
+): Promise<{ digest: Uint8Array; expiresAt: number }> {
+  await rig.store.ops.subjectEnsure({ userId });
+  const digest = fresh();
+  const result = await rig.store.ops.sessionIssue({
+    userId,
+    generation: 1,
+    digest,
+    replaces: null,
+    idleMs,
+    absoluteMs,
+  });
+  if (result.kind !== 'done') {
+    throw new Error(`sessionIssue answered ${result.kind}`);
+  }
+  return { digest, expiresAt: result.expiresAt };
+}
+
+async function cancellation(rig: Rig, report: ReturnType<typeof createReport>): Promise<void> {
+  const { ops } = rig.store;
+  const label = `[${rig.kind}]`;
+
+  const before = await issueSession(rig, tag('cancel-before'), 60_000, 60_000);
+  const early = new AbortController();
+  early.abort();
+  const refusedEarly = await settle(ops.sessionRevoke({ digest: before.digest }, early.signal));
+  report.check(
+    `${label} a signal aborted before the call: rejected aborted, applied no, the row stands`,
+    isFailure(refusedEarly, 'aborted', 'no') && (await rig.exists('sessions', before.digest)),
+    `${show(refusedEarly)}; row ${(await rig.exists('sessions', before.digest)) ? 'stands' : 'deleted'}`,
+  );
+
+  let aborted = 0;
+  let completed = 0;
+  let inconsistent = 0;
+  for (let trial = 0; trial < 30; trial += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each trial is a separate session and abort timing
+    const target = await issueSession(rig, tag('cancel-race'), 60_000, 60_000);
+    const controller = new AbortController();
+    const call = settle(ops.sessionRevoke({ digest: target.digest }, controller.signal));
+    if (trial % 3 === 1) {
+      await Promise.resolve();
+    } else if (trial % 3 === 2) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    controller.abort();
+    const result = await call;
+    const stands = await rig.exists('sessions', target.digest);
+    if (isFailure(result, 'aborted', 'no') && stands) {
+      aborted += 1;
+    } else if (result.ok && result.value.kind === 'done' && result.value.revoked && !stands) {
+      completed += 1;
+    } else {
+      inconsistent += 1;
+    }
+  }
+  report.check(
+    `${label} a signal aborted at once after the call (30 trials): the report always agrees with the database`,
+    inconsistent === 0,
+    `${aborted} rejected aborted with the row standing, ${completed} done with the row deleted, ${inconsistent} inconsistent`,
+  );
+
+  const slow = await issueSession(rig, tag('cancel-after'), 60_000, 60_000);
+  const controller = new AbortController();
+  const hold = holdFor[rig.kind];
+  await rig.hold('sessions', slow.digest, hold);
+  const began = performance.now();
+  const call = settle(ops.sessionRevoke({ digest: slow.digest }, controller.signal));
+  await sleepMs(Math.min(150, hold / 2));
+  controller.abort();
+  const result = await call;
+  const elapsed = Math.round(performance.now() - began);
+  const stands = await rig.exists('sessions', slow.digest);
+  if (rig.kind === 'postgres') {
+    report.check(
+      '[postgres] a signal aborted while the statement waits on a row lock (sent, in flight) ends nothing: the unit finishes by its own rules and deletes the row',
+      result.ok && result.value.kind === 'done' && result.value.revoked && !stands && elapsed >= hold * 0.8,
+      `${show(result)} after ${elapsed} ms of a ${hold} ms lock; row ${stands ? 'stands' : 'deleted'}`,
+    );
+  } else {
+    report.check(
+      '[sqlite] a signal aborted while the unit waits out busy retries (BEGIN IMMEDIATE refused, nothing began): rejected aborted, applied no, the row stands',
+      isFailure(result, 'aborted', 'no') && stands,
+      `${show(result)} after ${elapsed} ms of a ${hold} ms lock; row ${stands ? 'stands' : 'deleted'}`,
+    );
+    const ran = await issueSession(rig, tag('cancel-after-sync'), 60_000, 60_000);
+    const late = new AbortController();
+    const call2 = settle(ops.sessionRevoke({ digest: ran.digest }, late.signal));
+    late.abort();
+    const result2 = await call2;
+    report.check(
+      '[sqlite] a signal aborted after the synchronous unit already ran ends nothing: done, the row is deleted',
+      result2.ok &&
+        result2.value.kind === 'done' &&
+        result2.value.revoked &&
+        !(await rig.exists('sessions', ran.digest)),
+      show(result2),
+    );
+  }
+}
+
+async function abandoned(rig: Rig, report: ReturnType<typeof createReport>): Promise<void> {
+  const { ops } = rig.store;
+  const label = `[${rig.kind}]`;
+  const hold = holdFor[rig.kind];
+
+  const walkUser = tag('walk');
+  await ops.subjectEnsure({ userId: walkUser });
+  const digest = fresh();
+  await rig.hold('subjects', walkUser, hold);
+  const tracked = settle(
+    ops.sessionIssue({ userId: walkUser, generation: 1, digest, replaces: null, idleMs: 60_000, absoluteMs: 60_000 }),
+  );
+  const rowsWhileBlocked = await rig.count('sessions', 'user_id', walkUser);
+  const answer = await tracked;
+  await sleepMs(hold / 2);
+  report.check(
+    `${label} a write whose caller walked away (nobody awaits it, no signal) is blocked while the lock is held, then applies exactly once`,
+    rowsWhileBlocked === 0 &&
+      answer.ok &&
+      answer.value.kind === 'done' &&
+      (await rig.count('sessions', 'user_id', walkUser)) === 1 &&
+      (await rig.exists('sessions', digest)),
+    `rows while blocked ${rowsWhileBlocked}; unit later answered ${show(answer)}; rows afterwards ${await rig.count('sessions', 'user_id', walkUser)}`,
+  );
+
+  if (rig.kind === 'sqlite') {
+    const target = await issueSession(rig, tag('outlast'), 60_000, 60_000);
+    await rig.hold('sessions', target.digest, 1500);
+    const began = performance.now();
+    const refused = await settle(ops.sessionRevoke({ digest: target.digest }));
+    const elapsed = Math.round(performance.now() - began);
+    await sleepMs(1500);
+    report.check(
+      '[sqlite] a write that outlasts the retry schedule is abandoned by the store: unavailable, applied no, and the row stands after the lock is gone',
+      isFailure(refused, 'unavailable', 'no') &&
+        (await rig.exists('sessions', target.digest)) &&
+        elapsed >= 501 &&
+        elapsed <= 661,
+      `${show(refused)} after ${elapsed} ms (schedule 511 ms, accepted 501 to 661 ms); row ${(await rig.exists('sessions', target.digest)) ? 'stands' : 'deleted'}`,
+    );
+    return;
+  }
+  await deadlineAbandon(rig, report);
+}
+
+async function activeBackends(rig: Rig): Promise<number> {
+  const rows = await rig.query(
+    "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND application_name = 'proof-abandon' AND state <> 'idle'",
+  );
+  return Number(rows[0]?.n);
+}
+
+// Does:  Makes a PostgreSQL unit hit its 5,000 ms deadline with its lock statement in flight and reads what remains.
+async function deadlineAbandon(rig: Rig, report: ReturnType<typeof createReport>): Promise<void> {
+  const database = rig.database;
+  if (database === null) {
+    throw new Error('PostgreSQL rig without a database');
+  }
+  const pool = database.pool({ max: 2, application: 'proof-abandon' });
+  const store = createPostgresStore({ pool, maxClients: 2, cleanupIntervalSeconds: 3600 });
+  await store.attach({ onFailure: () => undefined });
+  const target = await issueSession(rig, tag('deadline'), 60_000, 60_000);
+  await rig.hold('sessions', target.digest, 7500);
+  const taken = [await pool.connect(), await pool.connect()];
+  const began = performance.now();
+  const call = settle(store.ops.sessionRevoke({ digest: target.digest }));
+  await sleepMs(2500);
+  for (const client of taken) {
+    client.release();
+  }
+  const result = await call;
+  const elapsed = Math.round(performance.now() - began);
+  await sleepMs(250);
+  const interim = await activeBackends(rig);
+  await sleepMs(7500 - elapsed + 500);
+  const finalBackends = await activeBackends(rig);
+  report.check(
+    '[postgres] a write abandoned at the 5,000 ms deadline with its lock statement in flight (COMMIT never sent): unavailable, applied no, no backend left running it, and the row stands after the lock is released',
+    isFailure(result, 'unavailable', 'no') &&
+      failureCode(result) === null &&
+      elapsed >= 4990 &&
+      elapsed <= 5500 &&
+      finalBackends === 0 &&
+      (await rig.exists('sessions', target.digest)),
+    `${show(result)} after ${elapsed} ms (deadline 5,000 ms, accepted 4,990 to 5,500 ms); backends still running a statement: ${interim} at the failure (its lock_timeout was still counting), ${finalBackends} after it; row ${(await rig.exists('sessions', target.digest)) ? 'stands' : 'deleted'}`,
   );
   await store.close();
   await pool.end();
@@ -450,6 +596,21 @@ async function main(): Promise<void> {
     await report.run('[postgres] lost COMMIT', () => lostCommit(rig, report));
     await report.run('[postgres] backend ended before COMMIT', () => endedBeforeCommit(rig, report));
     await report.run('[sqlite] failed COMMIT', () => failedCommit(report));
+    for (const kind of rigKinds) {
+      // biome-ignore lint/performance/noAwaitInLoops: one adapter at a time; its locks never meet the other's
+      const racing = await makeRig(kind);
+      try {
+        await report.run(`[${kind}] cancellation`, () => cancellation(racing, report));
+        await report.run(`[${kind}] abandoned writes`, () => abandoned(racing, report));
+        report.check(
+          `[${kind}] no store failure reached onFailure for an operation its caller received`,
+          racing.events.every((event) => event.operation === 'pool'),
+          `${racing.events.length} events: ${racing.events.map((event) => event.operation).join(',')}`,
+        );
+      } finally {
+        await racing.dispose();
+      }
+    }
   } finally {
     await rig.dispose();
     await cleanAll();

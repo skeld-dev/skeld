@@ -5,7 +5,7 @@ import { setTimeout as pause } from 'node:timers/promises';
 
 export const sleep = pause;
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -16,18 +16,6 @@ export function parseRecord(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
-}
-
-export async function until(done: () => boolean, ms: number): Promise<boolean> {
-  const stop = Date.now() + ms;
-  while (Date.now() < stop) {
-    if (done()) {
-      return true;
-    }
-    // biome-ignore lint/performance/noAwaitInLoops: a poll waits for the condition one step at a time
-    await pause(10);
-  }
-  return done();
 }
 
 // Does:  Waits until the log sink has stopped receiving lines, so a count taken afterwards is final.

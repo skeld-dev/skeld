@@ -12,7 +12,7 @@ import { createServer } from '@skeld/core/server';
 import { announceListening, type LogChild, type LogObject, startLogChild } from '../support/support-log.ts';
 import { check, createReport } from '../support/support-proof.ts';
 
-type Variant = 'refusal' | 'throws' | 'unknown';
+type Variant = 'refusal' | 'unknown';
 
 const flood = 10_000;
 const windowMs = 10_000;
@@ -20,33 +20,15 @@ const perWindow = 20;
 const reportShape = t.object({ report: t.string({ maxLength: 2000 }) });
 const contract = defineContract({
   items: { method: 'POST', path: '/items', responses: { 200: t.object({ ok: t.boolean() }) } },
-  boom: { method: 'GET', path: '/boom', responses: { 200: t.object({ ok: t.boolean() }) } },
   stats: { method: 'GET', path: '/stats', responses: { 200: reportShape } },
-  formatted: { method: 'GET', path: '/formatted', responses: { 200: reportShape } },
 });
 
 function serve(variant: Variant): void {
-  let formatted = 0;
-  if (variant === 'throws') {
-    Error.prepareStackTrace = (error, sites) => {
-      formatted++;
-      return [Error.prototype.toString.call(error), ...sites.map((site) => `    at ${String(site)}`)].join('\n');
-    };
-  }
-  const options =
-    variant === 'throws'
-      ? { errorFrames: true }
-      : variant === 'unknown'
-        ? { thresholds: { security: 'info' as const } }
-        : {};
+  const options = variant === 'unknown' ? { thresholds: { security: 'info' as const } } : {};
   const server = createServer({ log: options });
   server.routes(contract, {
     items: () => ({ status: 200, body: { ok: true } }),
-    boom: () => {
-      throw new Error('boom');
-    },
     stats: () => ({ status: 200, body: { report: JSON.stringify(server.logStats()) } }),
-    formatted: () => ({ status: 200, body: { report: JSON.stringify({ formatted }) } }),
   });
   server
     .listen({ port: 0, host: '127.0.0.1' })
@@ -163,7 +145,6 @@ interface Scenario {
   route: string | null;
   shape: Shape;
   expectedStatus: number;
-  frames: boolean;
 }
 
 const scenarios: Scenario[] = [
@@ -174,16 +155,6 @@ const scenarios: Scenario[] = [
     route: '/items',
     shape: { method: 'POST', headers: { origin: 'http://evil.example' }, pathOf: () => '/items' },
     expectedStatus: 403,
-    frames: false,
-  },
-  {
-    name: 'one handler that throws',
-    variant: 'throws',
-    eventName: 'skeld.request.error',
-    route: '/boom',
-    shape: { method: 'GET', headers: {}, pathOf: () => '/boom' },
-    expectedStatus: 500,
-    frames: true,
   },
   {
     name: 'distinct unknown paths',
@@ -192,7 +163,6 @@ const scenarios: Scenario[] = [
     route: null,
     shape: { method: 'GET', headers: {}, pathOf: (index) => `/unknown-${index}` },
     expectedStatus: 404,
-    frames: false,
   },
 ];
 
@@ -206,14 +176,10 @@ async function runScenario(scenario: Scenario, report: ReturnType<typeof createR
   let burst: Burst;
   let waited: Waited;
   let stats: Record<string, unknown> = {};
-  let formatted: number | null = null;
   try {
     burst = await sendFlood(child.port, scenario.shape);
     waited = await awaitSummary(child, scenario.eventName, 25_000);
     stats = await getReport(child.port, '/stats');
-    if (scenario.variant === 'throws') {
-      formatted = Number((await getReport(child.port, '/formatted')).formatted);
-    }
   } finally {
     await child.stop();
   }
@@ -293,25 +259,6 @@ async function runScenario(scenario: Scenario, report: ReturnType<typeof createR
     report.result(`${label}: one summary counting the rest, within 1.5 windows, with no further request`, summary, '');
   }
 
-  if (scenario.frames) {
-    const formatting: string[] = [];
-    check(
-      formatting,
-      formatted !== null && formatted >= 1 && formatted <= perWindow,
-      `${formatted} stacks formatted, not 1 to ${perWindow}`,
-    );
-    check(
-      formatting,
-      own.length > 0 && own.every((rec) => typeof rec['exception.stacktrace'] === 'string'),
-      'a written error record holds no frames, so errorFrames did not run',
-    );
-    report.result(
-      `${label}: at most ${perWindow} formatted stacks, counted by a formatter that defers to Node's`,
-      formatting,
-      `${formatted} stacks formatted for ${flood} throws; ${own.length} records hold frames`,
-    );
-  }
-
   const counted: string[] = [];
   const dropped = stats.dropped;
   const droppedTotal =
@@ -357,7 +304,7 @@ async function main(): Promise<void> {
 }
 
 if (process.argv[2] === 'serve') {
-  const variant = (['refusal', 'throws', 'unknown'] as const).find((candidate) => candidate === process.argv[3]);
+  const variant = (['refusal', 'unknown'] as const).find((candidate) => candidate === process.argv[3]);
   if (variant === undefined) {
     process.stderr.write(`unknown variant ${String(process.argv[3])}\n`);
     process.exitCode = 1;

@@ -1,20 +1,22 @@
 # Tests
 
 These scripts check observable behavior: responses on a real connection, emitted log records, rejected inputs,
-cleanup after disconnects, and the types an application can use. Keep a test when it can explain the bug it catches.
+cleanup after disconnects, and the types an application can use. A script stays only when it would fail on a real
+defect in product behaviour that harms confidentiality, integrity or availability. One-time proofs, input matrices,
+repeated runs and machine-speed timing windows do not belong here.
 
 ## Layout
 
-| Folder       | What belongs here                                                                                   |
-| ------------ | --------------------------------------------------------------------------------------------------- |
-| `security/`  | Adversarial inputs, framing and size limits, disclosure, reserved headers and trust boundaries      |
-| `browser/`   | Cookies, CORS, CSRF and redirects, including their hostile cases                                    |
-| `lifecycle/` | Hooks, deadlines, disconnects, shutdown, resource ownership and races                               |
-| `contracts/` | Route and client contracts, response projection, derived classes and package exports                |
-| `schema/`    | Validation, serialization and JSON Schema agreement; shared schema corpora live beside these proofs |
-| `logging/`   | Redaction, injection, correlation, suppression, sinks and log shutdown                              |
-| `auth/`      | Gate, sessions, grants, credentials, JWT/OIDC, stores, races, bounds and package proofs             |
-| `support/`   | Shared compiler, wire, child-process, diagnostic and evidence helpers; no standalone tests          |
+| Folder       | What belongs here                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------- |
+| `security/`  | Adversarial inputs, framing and size limits, disclosure, reserved headers and trust boundaries |
+| `browser/`   | Cookies, CORS, CSRF and redirects, including their hostile cases                               |
+| `lifecycle/` | Hooks, deadlines, disconnects, shutdown, resource ownership and races                          |
+| `contracts/` | Route and client contracts, response projection and derived classes                            |
+| `schema/`    | Validation and serialization agreement; shared schema corpora live beside these proofs         |
+| `logging/`   | Redaction, injection, correlation, suppression, sinks and log shutdown                         |
+| `auth/`      | Gate, sessions, grants, credentials, JWT/OIDC, stores, races, bounds and package proofs        |
+| `support/`   | Shared compiler, wire, child-process and evidence helpers; no standalone tests                 |
 
 File a test under the behavior it protects. A CSRF attack belongs in `browser/`; a secret leaking through a
 logger belongs in `logging/`. Do not copy it into `security/` as well. Keep meaningful related cases in one script
@@ -31,11 +33,11 @@ pnpm test quick                # routine checks; SQLite only, no PostgreSQL or b
 pnpm test database             # store integrations on both adapters; requires SKELD_TEST_PG_URL
 pnpm test protocol             # JWT/OIDC/TLS, including Chromium; SQLite only
 pnpm test extended             # real deadlines, fault injection and password load; SQLite only
-pnpm test tooling              # package artifacts, Semgrep rules and benchmark-lock checks
+pnpm test tooling              # package artifacts and static invariants
 pnpm test full                 # all scripts, full schema corpora and both-store integrations
 pnpm test exhaustive           # full plus repeated races and both-store behavioral matrices
 pnpm test                      # remains an alias for full; it does NOT silently skip PostgreSQL
-pnpm test diag                 # seven core checks under diagnostic instrumentation
+pnpm test diag                 # five core checks under diagnostic instrumentation
 node tests/run.ts quick --list # inspect selection without building or running tests
 ```
 
@@ -44,7 +46,7 @@ Each script belongs to exactly one group. Discovery only checks that the catalog
 adding an unregistered script fails the runner. Every script runs in a separate process. The runner prints
 per-script elapsed time, total time and the ten slowest scripts. Missing scripts, timeouts and nonzero exits fail.
 
-Quick mode runs the three generated-schema proofs with their existing `--schemas 200` option. Full, exhaustive
+Quick mode runs the two generated-schema proofs with their existing `--schemas 200` option. Full, exhaustive
 and the standalone `schema` category keep 4,000 generated schemas. Password queue/load proofs live separately in
 `auth/password-load.ts`, in the extended group; functional password checks remain quick. These selections do not
 change product configuration or shorten product deadlines.
@@ -79,17 +81,9 @@ node --conditions=skeld-source tests/security/body-limit.ts
 node --conditions=skeld-source --disallow-code-generation-from-strings tests/schema/no-codegen.ts
 ```
 
-Two logging integrations are explicit:
-
-```sh
-pnpm test collector --collector /absolute/path/to/otelcol-contrib
-pnpm test destination
-```
-
-The Collector check requires the version pinned in `logging/log-collector.ts` and does not download it.
-The destination check includes a latency comparison and needs an exclusive performance window. Neither runs
-in the default suite. Some correctness checks exercise real deadlines; their waiting is part of the behavior
-being checked, not a throughput benchmark.
+`logging/log-destination.ts` drives the logging benchmark driver against six failing-sink and dead-reader fixtures and
+takes about two minutes; it runs in the extended group. Some correctness checks exercise real deadlines; their
+waiting is part of the behavior being checked, not a throughput benchmark.
 
 ## Keep the checks honest
 
@@ -104,8 +98,7 @@ being checked, not a throughput benchmark.
 - When repairing a check that passed incorrectly, show that a deliberate violation makes it fail. Keep such
   mutations temporary; do not add a permanent second implementation just to test the first.
 - Do not weaken an expectation to accommodate a failure. Investigate whether the implementation, fixture or
-  stated contract is wrong. Document genuine oracle limitations narrowly. The JSON Schema proof adjusts only
-  declared-key minimum counting for open objects; its existing Unicode and Ajv key exclusions are reported.
+  stated contract is wrong. Document genuine oracle limitations narrowly.
 - Reuse setup from `support/`. Add a test for a distinct failure mode, not to restate a function's implementation
   or increase an assertion count.
 

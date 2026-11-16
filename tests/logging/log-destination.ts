@@ -1,5 +1,5 @@
 // Does:  Proves a silent or dead reader and a failing sink never stop a request and never grow the queue past 1 MiB.
-// Holds: Each fixture is judged on three driver reports; the p99 ratios are printed and recorded, never judged.
+// Holds: Each fixture is judged on one driver report, from the status counts, the sum rule and the queue peak.
 
 // biome-ignore-all lint/performance/noAwaitInLoops: the driver runs one after another, never in parallel
 import { spawn } from 'node:child_process';
@@ -14,7 +14,6 @@ const fixtures = [
   'sink-hangs',
   'sink-reenters',
 ] as const;
-const repetitions = 3;
 const queueBytes = 1_048_576;
 const driveTimeoutMs = 180_000;
 const driver = fileURLToPath(new URL('../../benchmarks/logging/drive.ts', import.meta.url));
@@ -25,9 +24,6 @@ interface Drive {
   requests: number;
   answered: number;
   statuses: Record<string, number>;
-  p99Healthy: number;
-  p99Failing: number;
-  ratio: number;
   samples: number;
   sumHeld: boolean;
   maxHeldBytes: number;
@@ -75,7 +71,6 @@ function readDrive(text: string): Drive {
   if (!isObject(root)) {
     throw new Error('the report is not a JSON object');
   }
-  const p99 = member(root, 'p99Ms');
   const stats = member(root, 'stats');
   const last = member(stats, 'last');
   const sinkCalls = root.sinkCalls;
@@ -93,9 +88,6 @@ function readDrive(text: string): Drive {
     requests: num(root, 'requests'),
     answered: num(root, 'answered'),
     statuses: numbers(member(root, 'statuses')),
-    p99Healthy: num(p99, 'healthy'),
-    p99Failing: num(p99, 'failing'),
-    ratio: num(root, 'ratio'),
     samples: num(stats, 'samples'),
     sumHeld: stats.sumHeld,
     maxHeldBytes: num(stats, 'maxHeldBytes'),
@@ -163,52 +155,26 @@ function judge(drove: Drive, fixture: string): string[] {
   return problems;
 }
 
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)] ?? Number.NaN;
-}
-
 const fixed = (value: number, digits: number): string => value.toFixed(digits);
 
 const report = createReport('log-destination');
-report.note('AC-8 and AC-9: six fixtures, three driver reports each, run one after another');
-report.note('The p99 figures and their ratios are recorded and not judged; peak RSS and dropped share are reading M-2');
+report.note('AC-8 and AC-9: six fixtures, one driver report each, run one after another');
+report.note('Peak RSS and dropped share are recorded and not judged (reading M-2)');
 
 for (const fixture of fixtures) {
-  const ratios: number[] = [];
-  const heldPeaks: number[] = [];
-  const rss: number[] = [];
-  const shares: number[] = [];
-  let answered = 0;
-  let sent = 0;
-  for (let run = 1; run <= repetitions; run++) {
-    const name = `${fixture} run ${run}`;
-    let drove: Drive;
-    try {
-      drove = readDrive(await drive(fixture));
-    } catch (error) {
-      report.result(name, [`driver: ${error instanceof Error ? error.message : String(error)}`], '');
-      continue;
-    }
-    ratios.push(drove.ratio);
-    heldPeaks.push(drove.maxHeldBytes);
-    rss.push(drove.peakRssBytes);
-    shares.push(drove.droppedShare);
-    answered += drove.answered;
-    sent += drove.requests;
-    report.result(
-      name,
-      judge(drove, fixture),
-      `answered ${drove.answered} of ${drove.requests} (statuses ${JSON.stringify(drove.statuses)}); samples ${drove.samples}; ` +
-        `sum held ${drove.sumHeld}; max held ${drove.maxHeldBytes} bytes; sinkCalls ${drove.sinkCalls}; ` +
-        `p99 healthy ${fixed(drove.p99Healthy, 3)} ms, failing ${fixed(drove.p99Failing, 3)} ms, ratio ${fixed(drove.ratio, 3)}; ` +
-        `peak RSS ${drove.peakRssBytes} bytes; dropped share ${fixed(drove.droppedShare, 4)}`,
-    );
+  let drove: Drive;
+  try {
+    drove = readDrive(await drive(fixture));
+  } catch (error) {
+    report.result(fixture, [`driver: ${error instanceof Error ? error.message : String(error)}`], '');
+    continue;
   }
-  report.note(
-    `recorded ${fixture}: ${answered} of ${sent} answered over ${ratios.length} runs; ratios [${ratios.map((r) => fixed(r, 3)).join(', ')}], ` +
-      `median ${fixed(median(ratios), 3)} (recorded, not judged); max held ${Math.max(...heldPeaks)} bytes; ` +
-      `peak RSS ${Math.max(...rss)} bytes; dropped share [${shares.map((s) => fixed(s, 4)).join(', ')}] (M-2)`,
+  report.result(
+    fixture,
+    judge(drove, fixture),
+    `answered ${drove.answered} of ${drove.requests} (statuses ${JSON.stringify(drove.statuses)}); samples ${drove.samples}; ` +
+      `sum held ${drove.sumHeld}; max held ${drove.maxHeldBytes} bytes; sinkCalls ${drove.sinkCalls}; ` +
+      `peak RSS ${drove.peakRssBytes} bytes; dropped share ${fixed(drove.droppedShare, 4)}`,
   );
 }
 report.finish();

@@ -1,8 +1,7 @@
-// Does:  Reports each case of a V01 to V04 proof script on stdout and in the task's evidence file.
-// Holds: The file is written once, at finish, named for the script that ran; a failed case fails the exit code.
+// Does:  Reports each case of a V01 to V04 proof script on stdout, named for the script that ran.
+// Holds: A failed case fails the exit code.
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,15 +15,13 @@ export interface Report {
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 
 export function createReport(
-  task: 'v01' | 'v02' | 'v03' | 'v04' | 'v09' | 'v10/review-fixes',
+  _task: 'v01' | 'v02' | 'v03' | 'v04' | 'v09' | 'v10/review-fixes',
   statement: string,
 ): Report {
   const script = `${basename(process.argv[1] ?? 'script', '.ts')}${process.env.SKELD_REPORT_SUFFIX ?? ''}`;
-  const lines: string[] = [];
   let cases = 0;
   let failed = 0;
   const emit = (line: string): void => {
-    lines.push(line);
     process.stdout.write(`${line}\n`);
   };
   let commit = 'no git';
@@ -56,9 +53,6 @@ export function createReport(
     },
     finish: () => {
       emit(`${cases - failed} of ${cases} cases passed`);
-      const dir = `${root}.project/features/0.2.0-auth/evidence/${task}`;
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(`${dir}/${script}.txt`, `${lines.join('\n')}\n`);
       process.exitCode = failed === 0 ? 0 : 1;
     },
   };

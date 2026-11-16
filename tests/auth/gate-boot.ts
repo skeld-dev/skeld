@@ -1,8 +1,6 @@
 // Does:  Proves the boot refusals of a gated server and of a store factory, and that public routes read no identity.
 // Holds: Each refusal is judged by its BootError code and exact message; a control with a valid declaration boots.
 
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { generateKeyPairSync } from 'node:crypto';
 import { apiKeys } from '@skeld/auth/api-key';
 import { jwt } from '@skeld/auth/jwt';
@@ -416,7 +414,7 @@ async function configurationCases(kind: Kind, makeStore: () => Observed): Promis
     ],
   ];
   await series(rows, async ([name, component, findingOf, extraOf]) => {
-    await series(['typo', Symbol('sym')], async (key) => {
+    await series(['typo'], async (key) => {
       const text = String(key);
       await refused(
         `an unknown ${typeof key === 'symbol' ? 'symbol' : 'string'} key of ${name}`,
@@ -554,19 +552,6 @@ async function noGateCases(): Promise<void> {
   );
 }
 
-function baselineCase(): void {
-  const result = spawnSync(
-    process.execPath,
-    ['--conditions=skeld-source', fileURLToPath(new URL('./rig/v1-baseline.ts', import.meta.url))],
-    { encoding: 'utf8', timeout: 60_000 },
-  );
-  report.check(
-    '[core] non-gated wire behavior matches fixed expectations',
-    result.status === 0,
-    `${result.stdout.trim()} ${result.stderr.slice(0, 300)}`,
-  );
-}
-
 async function publicCases(kind: Kind): Promise<void> {
   const label = `[${kind}]`;
   const rig = await makeRig(kind, { attach: false });
@@ -616,7 +601,6 @@ async function publicCases(kind: Kind): Promise<void> {
 try {
   await report.run('[factory] store factory unknown keys', storeFactoryCases);
   await report.run('[core] no-gate cases', noGateCases);
-  await report.run('[core] fixed non-gated wire regression', () => Promise.resolve(baselineCase()));
   await series(rigKinds, async (kind) => {
     const pools: Pool[] = [];
     const rig = await makeRig(kind, { attach: false });

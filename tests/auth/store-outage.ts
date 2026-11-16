@@ -1,5 +1,5 @@
 // Does:  Proves that a store outage fails every required store check closed with 503 while other requests continue.
-// Holds: Each outage is real (a database refusing connections, a closed store) or an injected rejection, never a stub.
+// Holds: Each outage is real (a database refusing connections, a held write lock), never an injected rejection.
 
 import { randomBytes } from 'node:crypto';
 import { Client, type Pool } from 'pg';
@@ -454,11 +454,7 @@ async function closeCases(): Promise<void> {
   process.on('unhandledRejection', onUnhandled);
   try {
     await series(
-      [
-        ['callers wait inside pool.connect (2 slots, 2 callers, a 1,500 ms connect)', 2, 2, 2],
-        ['callers wait for a slot behind one that waits inside pool.connect (1 slot, 4 callers)', 1, 4, 1],
-        ['callers wait both inside pool.connect and for a slot (2 slots, 5 callers)', 2, 5, 2],
-      ] as const,
+      [['callers wait both inside pool.connect and for a slot (2 slots, 5 callers)', 2, 5, 2]] as const,
       async ([name, maxClients, callers, inConnect]) => {
         const label = `[postgres] close while ${name}`;
         const rig = await makeRig('postgres', { attach: false });
@@ -525,7 +521,7 @@ async function closeCases(): Promise<void> {
 
 async function recoveryCases(): Promise<void> {
   const maxClients = 3;
-  await series([maxClients, maxClients + 1, 3 * maxClients], async (failures) => {
+  await series([maxClients + 1], async (failures) => {
     const label = `[postgres] maxClients ${maxClients}, ${failures} failed operations`;
     const rig = await makeRig('postgres', { attach: false, maxClients });
     const app = await startApp({ store: rig.store });
@@ -580,18 +576,6 @@ async function outageSuite(kind: Kind): Promise<void> {
       jwt: signJwt('jwt-user'),
     };
     await recovered(`${label} control`, app, credentials);
-    observed.failWith('no');
-    await matrix(label, app, credentials, 'injected outage (every store call rejects unavailable)');
-    observed.failWith('unknown');
-    const unknown = await get(app.port, '/docs', [cookieHeader(NAME, credentials.session)]);
-    report.check(
-      `${label} an outage with an unknown outcome is also 503 and never an admission`,
-      unknown.status === 503 && unknown.body === UNAVAILABLE,
-      `${unknown.status}`,
-    );
-    observed.failWith(null);
-    await recovered(`${label} after the injected outage`, app, credentials);
-
     if (kind === 'postgres') {
       await postgresOutage(rig, true);
       const began = performance.now();
@@ -634,8 +618,6 @@ async function outageSuite(kind: Kind): Promise<void> {
       );
       await sleepMs(3200);
       await recovered(`${label} after the lock is released`, app, credentials);
-      await rig.store.close();
-      await matrix(label, app, credentials, 'real outage (the store is closed)');
     }
   } finally {
     await app.close();

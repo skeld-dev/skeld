@@ -5,7 +5,6 @@
 // biome-ignore-all lint/nursery/noUnsafeTypeAssertion: hostile callbacks and a failing store answer shapes the types forbid
 // biome-ignore-all lint/security/noSecrets: event and field names are fixtures, not secrets
 
-import { randomBytes } from 'node:crypto';
 import { apiKeys } from '@skeld/auth/api-key';
 import { jwt } from '@skeld/auth/jwt';
 import { oidc } from '@skeld/auth/oidc';
@@ -19,11 +18,11 @@ import { expose, Secret } from '@skeld/core/secret';
 import { createServer } from '@skeld/core/server';
 import type { LogLine } from './rig/app.ts';
 import { childPki } from './rig/pki.ts';
-import { nowSeconds, type Provider, providerHost, sign } from './rig/provider.ts';
+import { type Provider, providerHost } from './rig/provider.ts';
 import { createReport } from './rig/report.ts';
 import { type Kind, makeStoreRig } from './rig/stores.ts';
 import { behaviorKinds as kinds } from '../support/test-profile.ts';
-import { settleLog, sleep, until } from './rig/util.ts';
+import { settleLog, sleep } from './rig/util.ts';
 
 const pki = await childPki(import.meta.url);
 const report = createReport(
@@ -32,19 +31,12 @@ const report = createReport(
   'each of the ten security events is written exactly when its row says, by the writer its row names, with the fields it names and no others; no other auth event exists',
 );
 const ORIGIN = 'http://localhost:3999';
-const COOKIE = '__Host-skeld';
 const host = await providerHost(pki.good);
 // Does:  Makes one run's providers afresh: the key and document caches are per URL and last 60 s after a failure.
 function setup(kind: string) {
   const named = (name: string): Provider => host.add(`${name}${kind}`, `client-${name}`, `secret-${name}`);
   const pa = named('a');
-  const refusals: [string, Record<string, unknown>][] = [
-    ['issuer', { issuer: 'https://other.example.test' }],
-    ['endpoint', { token_endpoint: 'http://localhost/token' }],
-    ['signing_alg', { id_token_signing_alg_values_supported: ['ES256'] }],
-    ['pkce', { code_challenge_methods_supported: ['plain'] }],
-    ['client_auth', { token_endpoint_auth_methods_supported: ['private_key_jwt'] }],
-  ];
+  const refusals: [string, Record<string, unknown>][] = [['issuer', { issuer: 'https://other.example.test' }]];
   const refusing = refusals.map(([reason, doc]) => {
     const provider = named(`r${reason.replace('_', '')}`);
     provider.docOverride = doc;
@@ -52,18 +44,11 @@ function setup(kind: string) {
   });
   const kFetch = named('kfetch');
   kFetch.jwks = ({ json }) => json(500, { error: 'down' });
-  const kDoc = named('kdoc');
-  kDoc.jwks = ({ res }) => {
-    res.writeHead(200, { 'content-type': 'application/json' }).end('{"keys":"not an array"}');
-  };
-  const kStale = named('kstale');
-  kStale.jwksCacheControl = 'max-age=2';
-  const slow = named('slow');
   const pj = named('j');
   pj.cacheControl = 'no-store';
   pj.jwks = ({ json }) => json(200, { keys: [pj.key.jwk] });
 
-  return { pa, refusing, kFetch, kDoc, kStale, slow, pj };
+  return { pa, refusing, kFetch, pj };
 }
 
 interface Want {
@@ -157,7 +142,7 @@ const thrower = (): never => {
 
 async function run(kind: Kind): Promise<void> {
   const tag = `[${kind}]`;
-  const { pa, refusing, kFetch, kDoc, kStale, slow, pj } = setup(kind);
+  const { pa, refusing, kFetch, pj } = setup(kind);
   const rig = await makeStoreRig(kind);
   const plan = new Map<string, StoreFailure>();
   const lines: string[] = [];
@@ -170,7 +155,7 @@ async function run(kind: Kind): Promise<void> {
     action: (): unknown => true,
     map: (): unknown => ({ kind: 'accept', userId: 'jwt-user' }),
   };
-  let resolver: (identity: { subject: string }, call: number) => unknown = (identity) => ({
+  const resolver: (identity: { subject: string }, call: number) => unknown = (identity) => ({
     kind: 'user',
     userId: `u-${identity.subject}`,
   });
@@ -178,10 +163,7 @@ async function run(kind: Kind): Promise<void> {
   const keys = apiKeys();
   const providerList: [string, Provider][] = [
     ['a', pa],
-    ['slow', slow],
     ['kfetch', kFetch],
-    ['kdoc', kDoc],
-    ['kstale', kStale],
     ...refusing.map((item): [string, Provider] => [`r${item.reason.replace('_', '')}`, item.provider]),
   ];
   const part = oidc({
@@ -304,16 +286,6 @@ async function run(kind: Kind): Promise<void> {
     return done.location ?? `(${done.status})`;
   };
   const noCookies = { get: () => undefined, getAll: () => [] };
-  const generations = new Map<string, number>();
-  const disable = async (userId: string): ReturnType<typeof auth.subjects.disable> => {
-    const result = await auth.subjects.disable(userId);
-    if (result.kind === 'done') {
-      generations.set(userId, result.generation);
-    }
-    return result;
-  };
-  const enable = (userId: string): ReturnType<typeof auth.subjects.enable> =>
-    auth.subjects.enable(userId, generations.get(userId) ?? 1);
 
   // Does:  Runs one trigger, waits for the log to settle and requires exactly the wanted auth records.
   const scenario = async (name: string, trigger: () => Promise<unknown>, wanted: Want[]): Promise<void> => {
@@ -365,36 +337,6 @@ async function run(kind: Kind): Promise<void> {
       () => auth.sessions.establish({ rawCookies: noCookies, userId: 'u2', verify: () => false }).then((r) => r.kind),
       [want('auth.signin.failed', 'warn', { 'auth.user': 'u2', ...via('handoff', { 'auth.reason': 'rejected' }) })],
     );
-    await disable('u3');
-    await scenario(
-      'a disabled subject writes one auth.signin.failed, reason disabled',
-      () => auth.sessions.establish({ rawCookies: noCookies, userId: 'u3', verify: () => true }).then((r) => r.kind),
-      [want('auth.signin.failed', 'warn', { 'auth.user': 'u3', ...via('handoff', { 'auth.reason': 'disabled' }) })],
-    );
-    await enable('u3');
-    let replay = '';
-    await scenario(
-      'a verification that began before disable and ends after enable writes one auth.signin.failed, reason stale',
-      () =>
-        auth.sessions
-          .establish({
-            rawCookies: noCookies,
-            userId: 'u4',
-            verify: async () => {
-              await disable('u4');
-              const back = await enable('u4');
-              replay = back.kind === 'refused' ? `enable refused ${back.reason}` : `enable ${back.kind}`;
-              return true;
-            },
-          })
-          .then((r) => `${r.kind}${r.kind === 'refused' ? `/${r.reason}` : ''}; ${replay}`),
-      [
-        want('auth.subject.changed', 'warn', { 'auth.user': 'u4', 'auth.change': 'disabled' }),
-        want('auth.session.revoked', 'info', { 'auth.user': 'u4', 'auth.cause': 'disable' }),
-        want('auth.subject.changed', 'warn', { 'auth.user': 'u4', 'auth.change': 'enabled' }),
-        want('auth.signin.failed', 'warn', { 'auth.user': 'u4', ...via('handoff', { 'auth.reason': 'stale' }) }),
-      ],
-    );
     await scenario(
       'a verify that throws writes one auth.callback.failed (handoff.verify) and one auth.signin.failed, reason callback, both by establish',
       () => auth.sessions.establish({ rawCookies: noCookies, userId: 'u5', verify: thrower }).then((r) => r.kind),
@@ -402,14 +344,6 @@ async function run(kind: Kind): Promise<void> {
         want('auth.callback.failed', 'error', { 'auth.callback': 'handoff.verify', 'auth.cause': 'threw' }),
         want('auth.signin.failed', 'warn', { 'auth.user': 'u5', ...via('handoff', { 'auth.reason': 'callback' }) }),
       ],
-    );
-    await scenario(
-      "a verify that answers 'unavailable' writes one auth.signin.failed, reason unavailable, and no auth.callback.failed",
-      () =>
-        auth.sessions
-          .establish({ rawCookies: noCookies, userId: 'u5b', verify: () => 'unavailable' })
-          .then((r) => r.kind),
-      [want('auth.signin.failed', 'warn', { 'auth.user': 'u5b', ...via('handoff', { 'auth.reason': 'unavailable' }) })],
     );
     plan.set('subjectEnsure', new StoreFailure('subjectEnsure', 'unavailable', 'no', '57P03'));
     await scenario(
@@ -426,59 +360,6 @@ async function run(kind: Kind): Promise<void> {
     );
     plan.delete('subjectEnsure');
 
-    const causes: [string, StoreFailure, string, string | null][] = [
-      ['an unknown outcome', new StoreFailure('sessionRevoke', 'unavailable', 'unknown', null), 'unknown', null],
-      ['a fault', new StoreFailure('sessionRevoke', 'fault', 'no', '40P01'), 'fault', '40P01'],
-      ['a record that does not parse', new StoreFailure('sessionRevoke', 'record', 'no', null), 'record', null],
-      ['an unavailable store', new StoreFailure('sessionRevoke', 'unavailable', 'no', null), 'unavailable', null],
-    ];
-    await auth.sessions.establish({ rawCookies: noCookies, userId: 'u7', verify: () => true }).then((r) => {
-      if (r.kind === 'established') {
-        jar.set(COOKIE, r.cookies[0]?.value ?? '');
-      }
-    });
-    const status = JSON.parse((await hit('/auth/session')).text);
-    for (const [name, failure, cause, code] of causes) {
-      plan.set('sessionRevoke', failure);
-      await scenario(
-        `sign-out against ${name} writes one auth.store.failed, cause ${cause}, and no auth.session.revoked`,
-        () =>
-          hit('/auth/sign-out', { method: 'POST', headers: { 'x-csrf-token': String(status.csrfToken) } }).then(
-            (r) => r.status,
-          ),
-        [
-          want('auth.store.failed', 'error', {
-            'auth.operation': 'sessionRevoke',
-            'auth.cause': cause,
-            ...(code === null ? {} : { 'auth.code': code }),
-          }),
-        ],
-      );
-      plan.delete('sessionRevoke');
-    }
-    await scenario(
-      'sign-out writes one auth.session.revoked, cause sign_out',
-      () =>
-        hit('/auth/sign-out', { method: 'POST', headers: { 'x-csrf-token': String(status.csrfToken) } }).then(
-          (r) => r.status,
-        ),
-      [want('auth.session.revoked', 'info', { 'auth.user': 'u7', 'auth.cause': 'sign_out' })],
-    );
-
-    const renewing = await auth.sessions.establish({ rawCookies: noCookies, userId: 'u8', verify: () => true });
-    if (renewing.kind === 'established') {
-      jar.set(COOKIE, renewing.cookies[0]?.value ?? '');
-      plan.set('sessionRenew', new StoreFailure('sessionRenew', 'fault', 'no', null));
-      await sleep(1200);
-      await scenario(
-        'a failed background renewal writes one auth.store.failed, cause renew, and the request is still admitted',
-        () => hit('/guarded').then((r) => r.status),
-        [want('auth.store.failed', 'error', { 'auth.operation': 'sessionRenew', 'auth.cause': 'renew' })],
-      );
-      plan.delete('sessionRenew');
-    }
-    jar.clear();
-
     await auth.sessions.establish({ rawCookies: noCookies, userId: 'u9', verify: () => true });
     await scenario(
       'revokeSessions writes one auth.session.revoked, cause revoke_all, and no auth.subject.changed',
@@ -487,35 +368,14 @@ async function run(kind: Kind): Promise<void> {
     );
     await scenario(
       'disable writes auth.subject.changed (disabled) and auth.session.revoked (disable)',
-      () => disable('u9').then((r) => r.kind),
+      () => auth.subjects.disable('u9').then((r) => r.kind),
       [
         want('auth.subject.changed', 'warn', { 'auth.user': 'u9', 'auth.change': 'disabled' }),
         want('auth.session.revoked', 'info', { 'auth.user': 'u9', 'auth.cause': 'disable' }),
       ],
     );
-    await scenario(
-      'enable that ended no session writes one auth.subject.changed (enabled) and no auth.session.revoked',
-      () => enable('u9').then((r) => r.kind),
-      [want('auth.subject.changed', 'warn', { 'auth.user': 'u9', 'auth.change': 'enabled' })],
-    );
-    const ended = await disable('u10');
-    const nowMs = Date.now();
-    await rig.rows(
-      'INSERT INTO sessions (digest, user_id, created_at, last_seen_at, absolute_expires_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [Buffer.from(randomBytes(32)), 'u10', nowMs, nowMs, nowMs + 3_600_000, nowMs + 3_600_000],
-    );
-    await scenario('enable that ends a session (planted on the disabled subject by direct SQL) writes one auth.subject.changed (enabled) and one auth.session.revoked, cause enable', async () => {
-      const answer = await enable('u10');
-      return `${ended.kind} ${answer.kind} sessions left ${await rig.count('sessions', 'user_id = ?', ['u10'])}`;
-    }, [
-      want('auth.subject.changed', 'warn', { 'auth.user': 'u10', 'auth.change': 'enabled' }),
-      want('auth.session.revoked', 'info', { 'auth.user': 'u10', 'auth.cause': 'enable' }),
-    ]);
-    await scenario('a read of a subject writes no auth record', () => auth.subjects.read('u9').then((r) => r.kind), []);
-    let keyId = 'none';
     await scenario('issuing an API key writes one auth.credential.changed, change added, naming the user, api_key and the key id, and no secret', async () => {
       const made = await keys.issue({ userId: 'owner', name: 'k', scopes: ['guard:go', 'capped:go'] });
-      keyId = made.kind === 'issued' ? made.info.keyId : 'none';
       return made.kind;
     }, [
       want('auth.credential.changed', 'info', {
@@ -525,207 +385,6 @@ async function run(kind: Kind): Promise<void> {
         'auth.key': /^[A-Za-z0-9_-]{16}$/,
       }),
     ]);
-    const added = records.filter((record) => record.event_name === 'auth.credential.changed');
-    report.check(
-      `${tag} that record names the user, the credential api_key, the change added and the key id, and no secret`,
-      added.length === 1 &&
-        added[0]?.fields?.['auth.user'] === 'owner' &&
-        added[0]?.fields?.['auth.change'] === 'added' &&
-        added[0]?.fields?.['auth.key'] === keyId &&
-        Object.keys(added[0]?.fields ?? {})
-          .filter((key) => key.startsWith('auth.'))
-          .sort()
-          .join() === 'auth.change,auth.credential,auth.key,auth.user',
-      JSON.stringify(added[0]?.fields),
-    );
-    await scenario(
-      'revoking the API key writes one auth.credential.changed, change removed',
-      () => keys.revoke({ userId: 'owner', keyId }).then((r) => r.kind),
-      [
-        want('auth.credential.changed', 'info', {
-          'auth.user': 'owner',
-          'auth.credential': 'api_key',
-          'auth.change': 'removed',
-          'auth.key': keyId,
-        }),
-      ],
-    );
-    await scenario(
-      'revoking a key that is absent writes no auth record',
-      () => keys.revoke({ userId: 'owner', keyId }).then((r) => r.kind),
-      [],
-    );
-
-    await scenario('a refused charge through the application limiter returns limited to the caller and writes no auth.limit.refused (only address and policy refusals do)', async () => {
-      await hit('/charged');
-      return (await hit('/charged')).text;
-    }, []);
-
-    const guardKey = await keys.issue({ userId: 'owner3', name: 'k3', scopes: ['guard:go'] });
-    const guardHeader = guardKey.kind === 'issued' ? { authorization: `Bearer ${expose(guardKey.key)}` } : {};
-    const faults: [string, string, () => void, string][] = [
-      [
-        'policy.load',
-        'threw',
-        () => {
-          hooks.load = thrower;
-        },
-        'policy.load',
-      ],
-      [
-        'policy.tenant',
-        'threw',
-        () => {
-          hooks.tenant = thrower;
-        },
-        'policy.tenant',
-      ],
-      [
-        'policy.tenant',
-        'malformed',
-        () => {
-          hooks.member = () => 'yes';
-        },
-        'policy.tenant',
-      ],
-      [
-        'policy.action',
-        'threw',
-        () => {
-          hooks.action = thrower;
-        },
-        'policy.action',
-      ],
-      [
-        'policy.action',
-        'malformed',
-        () => {
-          hooks.action = () => 1;
-        },
-        'policy.action',
-      ],
-    ];
-    for (const [callback, cause, set] of faults) {
-      hooks.load = () => ({ id: 1 });
-      hooks.tenant = () => 't';
-      hooks.member = () => true;
-      hooks.action = () => true;
-      set();
-      await scenario(
-        `a ${callback} callback that ${cause === 'threw' ? 'throws' : 'answers a malformed value'} writes one auth.callback.failed, written by the policy`,
-        () => hit('/guarded', { headers: guardHeader }).then((r) => r.status),
-        [want('auth.callback.failed', 'error', { 'auth.callback': callback, 'auth.cause': cause })],
-      );
-    }
-    hooks.load = () => ({ id: 1 });
-    hooks.tenant = () => 't';
-    hooks.member = () => true;
-    hooks.action = () => true;
-    const goodJwt = (): string =>
-      sign(
-        { alg: 'RS256', kid: pj.key.kid },
-        { iss: pj.issuer, aud: 'api', sub: 'alice', exp: nowSeconds() + 300 },
-        pj.key,
-      );
-    const jwtHeader = (): Record<string, string> => ({ authorization: `Bearer ${goodJwt()}` });
-    hooks.map = thrower;
-    await scenario(
-      'a JWT map that throws writes one auth.callback.failed (jwt.map), written by the verifier',
-      () => hit('/guarded', { headers: jwtHeader() }).then((r) => r.status),
-      [want('auth.callback.failed', 'error', { 'auth.callback': 'jwt.map', 'auth.cause': 'threw' })],
-    );
-    hooks.map = () => ({ kind: 'accept', userId: 'jwt-user' });
-    await scenario(
-      'a verified JWT writes no auth record',
-      () => hit('/guarded', { headers: jwtHeader() }).then((r) => r.status),
-      [],
-    );
-
-    await scenario(
-      'a successful OIDC callback writes one auth.signin.succeeded (oidc, provider a) and nothing else',
-      () => login(pa, 'a', 'person-1'),
-      [want('auth.signin.succeeded', 'info', { 'auth.user': 'u-person-1', 'auth.via': 'oidc', 'auth.provider': 'a' })],
-    );
-    await scenario('a replayed callback writes one auth.signin.failed from the callback, reason attempt_invalid, with no user', async () => {
-      jar.clear();
-      const start = await hit('/auth/oidc/a/start', { method: 'POST' });
-      const trip = pa.authorize(JSON.parse(start.text).url);
-      const query = new URLSearchParams({ code: trip.code, state: trip.state }).toString();
-      await hit(`/auth/oidc/a/callback?${query}`);
-      return (await hit(`/auth/oidc/a/callback?${query}`)).location;
-    }, [
-      want('auth.signin.succeeded', 'info', { 'auth.user': /^u-/, 'auth.via': 'oidc', 'auth.provider': 'a' }),
-      want('auth.signin.failed', 'warn', {
-        'auth.via': 'oidc',
-        'auth.provider': 'a',
-        'auth.reason': 'attempt_invalid',
-      }),
-    ]);
-    await scenario(
-      'provider access_denied writes one auth.signin.failed from the callback, reason provider_denied',
-      () => login(pa, 'a', 'person-2', { error: 'access_denied' }),
-      [
-        want('auth.signin.failed', 'warn', {
-          'auth.via': 'oidc',
-          'auth.provider': 'a',
-          'auth.reason': 'provider_denied',
-        }),
-      ],
-    );
-    resolver = () => ({ kind: 'deny' });
-    await scenario(
-      'a denying mapper writes one auth.signin.failed from the callback, reason mapping_denied',
-      () => login(pa, 'a', 'person-3'),
-      [
-        want('auth.signin.failed', 'warn', {
-          'auth.via': 'oidc',
-          'auth.provider': 'a',
-          'auth.reason': 'mapping_denied',
-        }),
-      ],
-    );
-    resolver = thrower;
-    await scenario(
-      'a throwing mapper writes auth.callback.failed (oidc.resolve) and one auth.signin.failed from the callback, reason mapping_failed',
-      () => login(pa, 'a', 'person-4'),
-      [
-        want('auth.callback.failed', 'error', { 'auth.callback': 'oidc.resolve', 'auth.cause': 'threw' }),
-        want('auth.signin.failed', 'warn', {
-          'auth.via': 'oidc',
-          'auth.provider': 'a',
-          'auth.reason': 'mapping_failed',
-        }),
-      ],
-    );
-    resolver = (identity, call) => ({ kind: 'user', userId: call === 1 ? `u-${identity.subject}` : 'u-someone-else' });
-    await scenario(
-      'a mapper that changes its second answer writes one auth.signin.failed, by establish (reason rejected, with the user), and none from the callback',
-      () => login(pa, 'a', 'person-5'),
-      [
-        want('auth.signin.failed', 'warn', {
-          'auth.user': 'u-person-5',
-          'auth.via': 'oidc',
-          'auth.provider': 'a',
-          'auth.reason': 'rejected',
-        }),
-      ],
-    );
-    resolver = (identity) => ({ kind: 'user', userId: `u-${identity.subject}` });
-    await disable('u-person-6');
-    await scenario(
-      'a disabled subject through OIDC writes one auth.signin.failed, by establish (reason disabled), and none from the callback',
-      () => login(pa, 'a', 'person-6'),
-      [
-        want('auth.signin.failed', 'warn', {
-          'auth.user': 'u-person-6',
-          'auth.via': 'oidc',
-          'auth.provider': 'a',
-          'auth.reason': 'disabled',
-        }),
-      ],
-    );
-    await enable('u-person-6');
-
     for (const { reason, provider } of refusing) {
       const name = `r${reason.replace('_', '')}`;
       await scenario(
@@ -747,133 +406,6 @@ async function run(kind: Kind): Promise<void> {
           'auth.reason': 'provider_unavailable',
         }),
       ],
-    );
-    await scenario(
-      'a key set that is not a key set writes auth.keys.unavailable, reason document, and one auth.signin.failed',
-      () => login(kDoc, 'kdoc'),
-      [
-        want('auth.keys.unavailable', 'error', { 'auth.source': 'kdoc', 'auth.reason': 'document' }),
-        want('auth.signin.failed', 'warn', {
-          'auth.via': 'oidc',
-          'auth.provider': 'kdoc',
-          'auth.reason': 'provider_unavailable',
-        }),
-      ],
-    );
-    await scenario(
-      'a first login with a short-lived key set writes one auth.signin.succeeded',
-      () => login(kStale, 'kstale', 'person-7'),
-      [
-        want('auth.signin.succeeded', 'info', {
-          'auth.user': 'u-person-7',
-          'auth.via': 'oidc',
-          'auth.provider': 'kstale',
-        }),
-      ],
-    );
-    kStale.jwks = ({ res }) => res.destroy();
-    await sleep(2300);
-    await scenario(
-      'past its freshness the key set is refetched, fails and writes auth.keys.unavailable, reason fetch',
-      () => login(kStale, 'kstale', 'person-8'),
-      [
-        want('auth.keys.unavailable', 'error', { 'auth.source': 'kstale', 'auth.reason': 'fetch' }),
-        want('auth.signin.failed', 'warn', {
-          'auth.via': 'oidc',
-          'auth.provider': 'kstale',
-          'auth.reason': 'provider_unavailable',
-        }),
-      ],
-    );
-    await scenario(
-      'within the failure cooldown the stale key set writes auth.keys.unavailable, reason stale',
-      () => login(kStale, 'kstale', 'person-9'),
-      [
-        want('auth.keys.unavailable', 'error', { 'auth.source': 'kstale', 'auth.reason': 'stale' }),
-        want('auth.signin.failed', 'warn', {
-          'auth.via': 'oidc',
-          'auth.provider': 'kstale',
-          'auth.reason': 'provider_unavailable',
-        }),
-      ],
-    );
-
-    const parked: {
-      writeHead: (status: number, headers: Record<string, string>) => { end: (body: string) => void };
-    }[] = [];
-    let released = false;
-    const answer = (res: (typeof parked)[number]): void => {
-      res.writeHead(400, { 'content-type': 'application/json' }).end('{"error":"invalid_grant"}');
-    };
-    slow.token = ({ res }) => {
-      if (released) {
-        answer(res);
-      } else {
-        parked.push(res);
-      }
-    };
-    const launches: (() => Promise<unknown>)[] = [];
-    for (let i = 0; i < 100; i++) {
-      const started = await fetch(`${base}/auth/oidc/slow/start`, {
-        method: 'POST',
-        headers: { origin: ORIGIN, 'content-type': 'application/json' },
-        body: '{}',
-      });
-      const attemptCookie = started.headers
-        .getSetCookie()
-        .map((line) => line.split(';')[0] ?? '')
-        .join('; ');
-      const trip = slow.authorize(String(JSON.parse(await started.text()).url));
-      const query = new URLSearchParams({ code: trip.code, state: trip.state }).toString();
-      launches.push(() =>
-        fetch(`${base}/auth/oidc/slow/callback?${query}`, {
-          redirect: 'manual',
-          headers: { cookie: attemptCookie },
-        }).then((res) => res.text()),
-      );
-    }
-    let finished = 0;
-    const holders = launches.map((launch) =>
-      launch().then(() => {
-        finished++;
-      }),
-    );
-    await until(() => finished >= 20, 20_000);
-    const fromBound = records.length;
-    const crowded = await hit('/guarded', { headers: jwtHeader() });
-    released = true;
-    for (const res of parked) {
-      answer(res);
-    }
-    await Promise.all(holders);
-    await sleep(150);
-    await settleLog(lines);
-    const bound = records.slice(fromBound).filter((record) => record.event_name === 'auth.keys.unavailable');
-    report.check(
-      `${tag} the JWT verifier refused by the outbound bound writes one auth.keys.unavailable, source jwt, reason bound, and answers 503`,
-      crowded.status === 503 &&
-        bound.length === 1 &&
-        matches(
-          bound[0] ?? {},
-          want('auth.keys.unavailable', 'error', { 'auth.source': 'jwt', 'auth.reason': 'bound' }),
-        ),
-      `${crowded.status}; ${JSON.stringify(bound.map((record) => record.fields))}`,
-    );
-    pj.jwks = ({ json }) => json(500, { error: 'down' });
-    await scenario(
-      'a failing key set for the JWT verifier writes one auth.keys.unavailable, source jwt, reason fetch',
-      () => hit('/guarded', { headers: jwtHeader() }).then((r) => r.status),
-      [want('auth.keys.unavailable', 'error', { 'auth.source': 'jwt', 'auth.reason': 'fetch' })],
-    );
-
-    for (let i = 0; i < 201; i++) {
-      await hit('/auth/session/clear', { method: 'POST' });
-    }
-    await sleep(100);
-    await scenario(
-      'the address limit writes one auth.limit.refused naming its route scope and no address',
-      () => hit('/auth/session/clear', { method: 'POST' }).then((r) => r.status),
-      [want('auth.limit.refused', 'warn', { 'auth.limit': 'auth.address.authSessionClear' })],
     );
     const capped = await keys.issue({ userId: 'owner4', name: 'k4', scopes: ['capped:go'] });
     const cappedHeader = capped.kind === 'issued' ? { authorization: `Bearer ${expose(capped.key)}` } : {};

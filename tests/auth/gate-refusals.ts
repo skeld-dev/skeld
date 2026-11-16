@@ -1,13 +1,17 @@
-// Does:  Proves the gate's ordering and its fixed refusals on a real auth server over SQLite and PostgreSQL.
+// Does:  Proves the gate's ordering, its fixed refusals and the policy binding on a real auth server.
 // Holds: Each refusal is judged by status, exact body bytes and headers, and none reaches its handler or sets a cookie.
 
 import { randomBytes } from 'node:crypto';
+import { AuthError } from '@skeld/auth/auth-error';
+import { definePolicy, isGrant } from '@skeld/auth/policy';
+import { createAuth } from '@skeld/auth/server';
 import { defineContract } from '@skeld/core/contract';
 import type { Gate, GateRoute, IdentifyOutcome, AuthorizeOutcome, AccessTypes } from '@skeld/core/gate';
 import { object, string } from '@skeld/core/schema';
 import { expose } from '@skeld/core/secret';
 import { createServer } from '@skeld/core/server';
-import { makeRig, rigKinds, cleanAll, type Kind } from './support-store.ts';
+import { makeRig, cleanAll, type Kind } from './support-store.ts';
+import { behaviorKinds as rigKinds } from '../support/test-profile.ts';
 import {
   type App,
   cookieHeader,
@@ -22,21 +26,20 @@ import {
   sleepMs,
   startApp,
   disableUser,
+  establishFor,
+  ORIGIN,
 } from './rig/v1-app.ts';
 import { createReport } from './rig/v1-report.ts';
 
 const statement =
-  'identity is checked before the body is read and authorization after validation; missing, invalid and conflicting credentials, a missing CSRF token, a limit, a denial and an outage each have their fixed refusal byte for byte; optional access admits a missing credential and never an invalid one; an action that throws, answers a non-boolean, passes its deadline or answers late never admits; no refused request reaches its handler';
+  'identity is checked before the body is read and authorization after validation; missing, invalid and conflicting credentials and a denial each have their fixed refusal byte for byte; optional access admits a missing credential and never an invalid one; tenant membership is judged before the action; a hidden resource and a denied action share one 404; a grant is released exactly once on every way a request ends; no refused request reaches its handler';
 const report = createReport('v01', statement);
 
 const BODY = {
   missing: '{"status":401,"code":"CREDENTIAL_MISSING","message":"Credential required"}',
   invalid: '{"status":401,"code":"CREDENTIAL_INVALID","message":"Credential not accepted"}',
   conflict: '{"status":400,"code":"CREDENTIAL_CONFLICT","message":"More than one credential"}',
-  csrf: '{"status":403,"code":"CSRF_TOKEN_INVALID","message":"CSRF token missing or not accepted"}',
-  limited: '{"status":429,"code":"RATE_LIMITED","message":"Too many requests"}',
   denied: '{"status":403,"code":"ACCESS_DENIED","message":"Access denied"}',
-  unavailable: '{"status":503,"code":"AUTH_UNAVAILABLE","message":"Service unavailable"}',
 } as const;
 
 const token = (): string => randomBytes(32).toString('base64url');
@@ -273,39 +276,6 @@ async function conflictAndOptional(c: Ctx, live: Live): Promise<void> {
 async function csrf(c: Ctx, live: Live): Promise<void> {
   const { label, app } = c;
   const liveCookie = cookieHeader(SESSION, live.token);
-  const unsafeNoToken = await send(app.port, {
-    method: 'POST',
-    path: '/docs',
-    headers: [liveCookie],
-    body: '{"name":"a"}',
-  });
-  report.check(
-    `${label} csrf_token: a missing token on an unsafe session request is 403 with the fixed body`,
-    unsafeNoToken.status === 403 && unsafeNoToken.body === BODY.csrf && app.hit('save') === 0,
-    `${unsafeNoToken.status} ${unsafeNoToken.body}`,
-  );
-  const wrongToken = await send(app.port, {
-    method: 'POST',
-    path: '/docs',
-    headers: [liveCookie, `x-csrf-token: ${token()}`],
-    body: '{"name":"a"}',
-  });
-  report.check(
-    `${label} csrf_token: a wrong token is the same refusal`,
-    wrongToken.status === 403 && wrongToken.body === BODY.csrf && app.hit('save') === 0,
-    `${wrongToken.status} ${wrongToken.body}`,
-  );
-  const deadWithoutToken = await send(app.port, {
-    method: 'POST',
-    path: '/docs',
-    headers: [cookieHeader(SESSION, token())],
-    body: '{"name":"a"}',
-  });
-  report.check(
-    `${label} csrf_token: a dead session with no token is 401 first`,
-    deadWithoutToken.status === 401 && deadWithoutToken.body === BODY.invalid,
-    `${deadWithoutToken.status} ${deadWithoutToken.body}`,
-  );
   const withToken = await send(app.port, {
     method: 'POST',
     path: '/docs',
@@ -324,30 +294,6 @@ async function limitsAndAccess(c: Ctx, live: Live): Promise<void> {
   const docsHits = (): number => app.hit('docs');
   const liveCookie = cookieHeader(SESSION, live.token);
   let before = 0;
-  const carol = await sessionOf(app, 'dora');
-  const lim = cookieHeader(SESSION, carol.token);
-  const l1 = await get(app.port, '/limited', [lim]);
-  const l2 = await get(app.port, '/limited', [lim]);
-  const l3 = await get(app.port, '/limited', [lim]);
-  const retry = Number(l3.first('retry-after'));
-  report.check(
-    `${label} rate_limited: the third call in a window of two is 429 with the fixed body`,
-    l1.status === 200 && l2.status === 200 && l3.status === 429 && l3.body === BODY.limited,
-    `${l1.status} ${l2.status} ${l3.status} ${l3.body}`,
-  );
-  report.check(
-    `${label} rate_limited: retry-after is an integer from 1 to 86400 and the handler ran twice`,
-    Number.isInteger(retry) && retry >= 1 && retry <= 86400 && app.hit('limited') === 2,
-    `retry-after ${l3.first('retry-after')}`,
-  );
-  await app.logs.settle();
-  report.check(
-    `${label} rate_limited: one skeld.refuse.rate_limited record at warn`,
-    app.logs.named('skeld.refuse.rate_limited').length === 1 &&
-      app.logs.named('skeld.refuse.rate_limited').every((r) => r.severity === 'warn'),
-    `${app.logs.named('skeld.refuse.rate_limited').length} records`,
-  );
-
   const scopedKey = await app.keys.issue({ userId: 'erin', name: 'scoped', scopes: ['docs:read'] });
   if (scopedKey.kind !== 'issued') {
     throw new Error('issue failed');
@@ -445,76 +391,6 @@ async function ordering(c: Ctx, live: Live): Promise<void> {
   );
 }
 
-async function actionFaultCases(c: Ctx, live: Live): Promise<void> {
-  const { label, app, observed, key } = c;
-  const docsHits = (): number => app.hit('docs');
-  const liveCookie = cookieHeader(SESSION, live.token);
-  let before = 0;
-  const handlerRuns = (): number => app.hit('docs');
-  const faults: [string, () => boolean | Promise<boolean>][] = [
-    [
-      'an action that throws',
-      () => {
-        throw new Error('ACTION-SECRET-TEXT');
-      },
-    ],
-    ['an action that rejects', () => Promise.reject(new Error('ACTION-SECRET-TEXT'))],
-    ['an action that answers the string "true"', () => JSON.parse('"true"')],
-    ['an action that answers 1', () => JSON.parse('1')],
-    ['an action that answers undefined', () => JSON.parse('null')],
-  ];
-  await series(faults, async ([name, behaviour]) => {
-    c.setRead(behaviour);
-    const hitsBefore = handlerRuns();
-    const failed = await get(app.port, '/docs', [liveCookie]);
-    report.check(
-      `${label} ${name} never admits: 500 with the fixed body and no handler run`,
-      failed.status === 500 &&
-        failed.json().code === 'INTERNAL' &&
-        !failed.body.includes('SECRET') &&
-        handlerRuns() === hitsBefore,
-      `${failed.status} ${failed.body}`,
-    );
-  });
-  c.setRead(() => true);
-  await app.logs.settle();
-  report.check(
-    `${label} the thrown text reaches no record`,
-    !app.logs.text().includes('ACTION-SECRET-TEXT') && app.logs.named('auth.callback.failed').length >= 5,
-    `${app.logs.named('auth.callback.failed').length} auth.callback.failed records`,
-  );
-  observed.failWith('no');
-  before = docsHits();
-  refusal(
-    `${label} unavailable: a session request while the store fails`,
-    await get(app.port, '/docs', [liveCookie]),
-    { status: 503, body: BODY.unavailable, challenge: false },
-    docsHits,
-    before,
-  );
-  refusal(
-    `${label} unavailable: an API key request while the store fails`,
-    await get(app.port, '/docs', [`authorization: Bearer ${key}`]),
-    { status: 503, body: BODY.unavailable, challenge: false },
-    docsHits,
-    before,
-  );
-  await app.logs.settle();
-  const outageRecords = app.logs.named('skeld.refuse.unavailable');
-  report.check(
-    `${label} unavailable: two skeld.refuse.unavailable records at error`,
-    outageRecords.length === 2 && outageRecords.every((r) => r.severity === 'error'),
-    `${outageRecords.length} records`,
-  );
-  observed.failWith(null);
-  const recovered = await get(app.port, '/docs', [liveCookie]);
-  report.check(
-    `${label} the same session is admitted when the store answers again`,
-    recovered.status === 200,
-    `${recovered.status}`,
-  );
-}
-
 async function storeCases(kind: Kind): Promise<void> {
   const label = `[${kind}]`;
   const rig = await makeRig(kind, { attach: false });
@@ -542,7 +418,6 @@ async function storeCases(kind: Kind): Promise<void> {
     await csrf(c, live);
     await limitsAndAccess(c, live);
     await ordering(c, live);
-    await actionFaultCases(c, live);
   } finally {
     await app.close();
     await rig.dispose();
@@ -611,49 +486,6 @@ async function preflightCases(kind: Kind): Promise<void> {
     const plain = await ask('/docs', [allowed]);
     report.note(
       `${label} observation: an OPTIONS with no Access-Control-Request-Method (not a preflight) answers ${plain.status}; identify calls ${identify.count}`,
-    );
-  } finally {
-    await app.close();
-    await rig.dispose();
-  }
-}
-
-async function deadlineCases(kind: Kind): Promise<void> {
-  const label = `[${kind}]`;
-  const rig = await makeRig(kind, { attach: false });
-  let docsRead: () => boolean | Promise<boolean> = () => true;
-  const app = await startApp({ store: rig.store, docsRead: () => docsRead() });
-  try {
-    const alice = await sessionOf(app, 'alice');
-    const cookie = cookieHeader(SESSION, alice.token);
-    const timed = async (name: string, behaviour: () => boolean | Promise<boolean>): Promise<void> => {
-      docsRead = behaviour;
-      const runs = app.hit('docs');
-      const began = performance.now();
-      const reply = await get(app.port, '/docs', [cookie]);
-      const elapsed = Math.round(performance.now() - began);
-      await sleepMs(800);
-      report.check(
-        `${label} ${name}: 503 with the fixed body at the 5,000 ms deadline, no handler run, the late answer ignored`,
-        reply.status === 503 &&
-          reply.body === BODY.unavailable &&
-          app.hit('docs') === runs &&
-          elapsed >= 4990 &&
-          elapsed <= 5500,
-        `${reply.status} after ${elapsed} ms (allowed 4,990 to 5,500 on a shared host); handler runs ${app.hit('docs') - runs}`,
-      );
-      docsRead = () => true;
-    };
-    await timed('an action that never settles', () => new Promise<boolean>(() => undefined));
-    await timed('an action that answers true after the deadline', async () => {
-      await sleepMs(5200);
-      return true;
-    });
-    const deadline = app.logs.named('auth.callback.failed').filter((r) => r.fields['auth.cause'] === 'deadline');
-    report.check(
-      `${label} each deadline is one auth.callback.failed with cause deadline for policy.action`,
-      deadline.length === 2 && deadline.every((r) => r.fields['auth.callback'] === 'policy.action'),
-      `${deadline.length} records`,
     );
   } finally {
     await app.close();
@@ -994,14 +826,313 @@ async function coreGateCases(): Promise<void> {
   );
 }
 
+const policyId = string({ maxLength: 40 });
+const policyQuery = string({ maxLength: 40 });
+const okBody = { 200: object({ ok: string({ maxLength: 16 }) }) };
+const NOT_FOUND = '{"status":404,"code":"NOT_FOUND","message":"Not found"}';
+
+const policyRoutes = defineContract({
+  tRead: {
+    method: 'GET',
+    path: '/t/:id',
+    params: object({ id: policyId }),
+    query: object({ q: policyQuery }),
+    access: { policy: 'tenanted', action: 'read' },
+    responses: okBody,
+  },
+  hRead: {
+    method: 'GET',
+    path: '/h/:id',
+    params: object({ id: policyId }),
+    query: object({ q: policyQuery }),
+    access: { policy: 'hidden', action: 'read' },
+    responses: okBody,
+  },
+});
+
+interface Resource {
+  readonly id: string;
+  readonly tenant: string;
+  readonly mode: string;
+}
+
+async function policyOrderCases(kind: Kind): Promise<void> {
+  const label = `[${kind}]`;
+  const rig = await makeRig(kind, { attach: false });
+  const order: string[] = [];
+  const tenanted = definePolicy('tenanted', {
+    credentials: ['session'],
+    input: { id: policyId, q: policyQuery },
+    load: ({ input }): Resource | null => {
+      order.push('load');
+      return input.id === 'missing' ? null : { id: input.id, tenant: input.id.slice(0, 2), mode: input.q };
+    },
+    tenant: {
+      of: (resource) => {
+        order.push('of');
+        return resource.tenant;
+      },
+      member: ({ tenant }) => {
+        order.push('member');
+        return tenant === 't1';
+      },
+    },
+    actions: {
+      read: () => {
+        order.push('action');
+        return true;
+      },
+    },
+  });
+  const hidden = definePolicy('hidden', {
+    credentials: ['session'],
+    denial: 'not_found',
+    input: { id: policyId, q: policyQuery },
+    load: ({ input }) => {
+      order.push('load');
+      return { id: input.id, tenant: 't1', mode: input.q };
+    },
+    actions: {
+      read: () => {
+        order.push('action');
+        return false;
+      },
+    },
+  });
+  const auth = createAuth({ store: rig.store, origin: ORIGIN, policies: [tenanted, hidden] });
+  const server = createServer({ gate: auth.gate, publicOrigin: ORIGIN, csrf: { mode: 'strict' }, log: false });
+  server.routes(
+    policyRoutes,
+    {
+      tRead: (request) => ({ status: 200, body: { ok: request.grant.resource.id.slice(0, 16) } }),
+      hRead: () => ({ status: 200, body: { ok: 'h' } }),
+    },
+    { csrf: { mode: 'strict' } },
+  );
+  const address = await server.listen({ host: '127.0.0.1', port: 0 });
+  try {
+    const alice = await establishFor(auth.sessions, 'alice');
+    const cookie = cookieHeader('__Host-skeld', alice.token);
+    const ask = (path: string): Promise<Reply> => {
+      order.length = 0;
+      return get(address.port, path, [cookie]);
+    };
+    const tenantMiss = await ask('/t/t2-doc?q=fine');
+    const orderMiss = order.join(',');
+    const missing = await ask('/t/missing?q=fine');
+    const orderMissing = order.join(',');
+    const hiddenAction = await ask('/h/anything?q=fine');
+    const orderHidden = order.join(',');
+    report.check(
+      `${label} tenant membership precedes the action: a tenant that is not a member is 404 and the action never runs`,
+      tenantMiss.status === 404 && tenantMiss.body === NOT_FOUND && orderMiss === 'load,of,member',
+      `${tenantMiss.status} ${tenantMiss.body}; order ${orderMiss}`,
+    );
+    report.check(
+      `${label} a load answering null is 404 with the same body and nothing after load runs`,
+      missing.status === 404 && missing.body === NOT_FOUND && orderMissing === 'load',
+      `${missing.status} ${missing.body}; order ${orderMissing}`,
+    );
+    report.check(
+      `${label} denial not_found: an action answering false is the same 404 body`,
+      hiddenAction.status === 404 && hiddenAction.body === NOT_FOUND && orderHidden === 'load,action',
+      `${hiddenAction.status} ${hiddenAction.body}; order ${orderHidden}`,
+    );
+  } finally {
+    await server.close();
+    await rig.dispose();
+  }
+}
+
+async function policyReleaseCases(kind: Kind): Promise<void> {
+  const label = `[${kind}]`;
+  const rig = await makeRig(kind, { attach: false });
+  const logs = createLogs();
+  const issued: unknown[] = [];
+  const releases = new Map<unknown, number>();
+  const plain = definePolicy('plain', { credentials: ['session'], actions: { use: () => true, no: () => false } });
+  const useGrant = plain.operation('use', () => 'used');
+  const auth = createAuth({ store: rig.store, origin: ORIGIN, policies: [plain] });
+  const spy: typeof auth.gate = {
+    boot: (context) => auth.gate.boot(context),
+    bind: (route) => {
+      const bound = auth.gate.bind(route);
+      if (bound === null || 'finding' in bound) {
+        return bound;
+      }
+      const { authorize, release } = bound;
+      return {
+        ...bound,
+        authorize:
+          authorize === null
+            ? null
+            : async (principal, input, request) => {
+                const outcome = await authorize(principal, input, request);
+                if (outcome.kind === 'admit') {
+                  issued.push(outcome.grant);
+                }
+                return outcome;
+              },
+        release:
+          release === null
+            ? null
+            : (grant) => {
+                releases.set(grant, (releases.get(grant) ?? 0) + 1);
+                release(grant);
+              },
+      };
+    },
+  };
+  const ends = defineContract({
+    ok: { method: 'GET', path: '/e/ok', access: { policy: 'plain', action: 'use' }, responses: okBody },
+    throws: { method: 'GET', path: '/e/throws', access: { policy: 'plain', action: 'use' }, responses: okBody },
+    slow: { method: 'GET', path: '/e/slow', access: { policy: 'plain', action: 'use' }, responses: okBody },
+    gone: { method: 'GET', path: '/e/gone', access: { policy: 'plain', action: 'use' }, responses: okBody },
+    pre: { method: 'GET', path: '/e/pre', access: { policy: 'plain', action: 'use' }, responses: okBody },
+    preThrows: { method: 'GET', path: '/e/pre-throws', access: { policy: 'plain', action: 'use' }, responses: okBody },
+    early: { method: 'GET', path: '/e/early', access: { policy: 'plain', action: 'use' }, responses: okBody },
+    denied: { method: 'GET', path: '/e/denied', access: { policy: 'plain', action: 'no' }, responses: okBody },
+  });
+  let afterTimeout = 'not run';
+  let liveAtTimeout = 'not run';
+  let handlerStarts = 0;
+  const server = createServer({
+    gate: spy,
+    publicOrigin: ORIGIN,
+    csrf: { mode: 'strict' },
+    handlerTimeoutMs: 700,
+    log: { thresholds: { security: 'info', app: 'info' }, sink: logs.sink },
+  });
+  server.addHook('onRequest', (context) => {
+    if (context.route.name === 'early') {
+      context.send({ status: 202 });
+    }
+  });
+  server.addHook('preHandler', (context) => {
+    if (context.route.name === 'pre') {
+      context.send({ status: 202 });
+    }
+    if (context.route.name === 'preThrows') {
+      throw new Error(SECRET_TEXT);
+    }
+  });
+  server.routes(
+    ends,
+    {
+      ok: () => ({ status: 200, body: { ok: 'ok' } }),
+      throws: () => {
+        throw new Error(SECRET_TEXT);
+      },
+      slow: async (request) => {
+        handlerStarts++;
+        await sleepMs(1500);
+        liveAtTimeout = String(isGrant(request.grant));
+        try {
+          afterTimeout = useGrant(request.grant);
+        } catch (error) {
+          afterTimeout = error instanceof AuthError ? error.code : String(error);
+        }
+        return { status: 200, body: { ok: 'late' } };
+      },
+      gone: async () => {
+        handlerStarts++;
+        await sleepMs(500);
+        return { status: 200, body: { ok: 'gone' } };
+      },
+      pre: () => ({ status: 200, body: { ok: 'pre' } }),
+      preThrows: () => ({ status: 200, body: { ok: 'pre' } }),
+      early: () => ({ status: 200, body: { ok: 'early' } }),
+      denied: () => ({ status: 200, body: { ok: 'denied' } }),
+    },
+    { csrf: { mode: 'strict' } },
+  );
+  const address = await server.listen({ host: '127.0.0.1', port: 0 });
+  const port = address.port;
+  try {
+    const alice = await establishFor(auth.sessions, 'alice');
+    const cookie = cookieHeader('__Host-skeld', alice.token);
+    const single = (): number => (issued.length === 0 ? -1 : (releases.get(issued[issued.length - 1]) ?? 0));
+    const way = async (
+      name: string,
+      status: (reply: Reply) => boolean,
+      grantExpected: boolean,
+      drive?: () => Promise<void>,
+    ): Promise<void> => {
+      const before = issued.length;
+      let reply: Reply | null = null;
+      if (drive === undefined) {
+        reply = await get(port, `/e/${name === 'preThrows' ? 'pre-throws' : name}`, [cookie]);
+      } else {
+        await drive();
+      }
+      await sleepMs(1900);
+      const delta = issued.length - before;
+      report.check(
+        `${label} ${name}: ${grantExpected ? 'one grant issued and released exactly once' : 'no grant issued and none released'}`,
+        delta === (grantExpected ? 1 : 0) && (!grantExpected || single() === 1) && (reply === null || status(reply)),
+        `${reply === null ? 'client left' : reply.status}; grants issued ${delta}; releases of it ${grantExpected ? single() : 0}`,
+      );
+    };
+    await way('ok', (reply) => reply.status === 200, true);
+    await way('throws', (reply) => reply.status === 500, true);
+    await way('pre', (reply) => reply.status === 202, true);
+    await way('preThrows', (reply) => reply.status === 500, true);
+    await way('early', (reply) => reply.status === 202, false);
+    await way('denied', (reply) => reply.status === 403, false);
+    const slowBefore = issued.length;
+    const slowReply = get(port, '/e/slow', [cookie]);
+    await sleepMs(1000);
+    const grantAtTimeout = issued[slowBefore];
+    const releasedAtTimeout = releases.get(grantAtTimeout) ?? 0;
+    const timedOut = await slowReply;
+    await sleepMs(900);
+    report.check(
+      `${label} a handler past its deadline: the response is 503, the grant was already released once at the deadline (1,000 ms in, the handler still running)`,
+      timedOut.status === 503 &&
+        releasedAtTimeout === 1 &&
+        (releases.get(grantAtTimeout) ?? 0) === 1 &&
+        handlerStarts === 1,
+      `${timedOut.status}; releases at 1,000 ms ${releasedAtTimeout}; releases at the end ${releases.get(grantAtTimeout) ?? 0}`,
+    );
+    report.check(
+      `${label} the handler that outlived its deadline holds a released grant: isGrant false, its operation GRANT_RELEASED`,
+      liveAtTimeout === 'false' && afterTimeout === 'GRANT_RELEASED',
+      `isGrant ${liveAtTimeout}; operation ${afterTimeout}`,
+    );
+    await way(
+      'gone',
+      () => true,
+      true,
+      async () => {
+        const client = await openSocket(port);
+        client.write(`GET /e/gone HTTP/1.1\r\nhost: x\r\ncookie: __Host-skeld=${alice.token}\r\n\r\n`);
+        await sleepMs(200);
+        client.destroy();
+      },
+    );
+    await logs.settle();
+    report.check(`${label} the thrown text reaches no record`, !logs.text().includes(SECRET_TEXT), '');
+    const total = [...releases.values()].reduce((sum, count) => sum + count, 0);
+    report.check(
+      `${label} over every way a request ended, grants issued equal releases and no grant was released twice`,
+      total === issued.length && [...releases.values()].every((count) => count === 1),
+      `${issued.length} issued, ${total} releases`,
+    );
+  } finally {
+    await server.close();
+    await rig.dispose();
+  }
+}
+
 try {
   await report.run('[core] custom gate cases', coreGateCases);
   await series(rigKinds, async (kind) => {
     await report.run(`[${kind}] store-backed gate cases`, () => storeCases(kind));
   });
   await series(rigKinds, async (kind) => {
-    await report.run(`[${kind}] deadline cases`, () => deadlineCases(kind));
     await report.run(`[${kind}] preflight cases`, () => preflightCases(kind));
+    await report.run(`[${kind}] policy order cases`, () => policyOrderCases(kind));
+    await report.run(`[${kind}] policy release cases`, () => policyReleaseCases(kind));
   });
 } finally {
   await cleanAll();

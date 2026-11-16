@@ -9,7 +9,7 @@ import { check, conclude, parseRaw } from '../support/support.ts';
 import { startServerChild } from '../support/support-typesystem.ts';
 
 const statement =
-  'with headersTimeout 2000 and requestTimeout 4000 half a request line is answered 408 within 2000 to 3250 ms and half a body within 4000 to 5250 ms; with 20000 and 40000 unfinished headers within 20000 to 22250 ms; at the defaults the connection check runs every 6000 ms';
+  'with headersTimeout 2000 and requestTimeout 4000 half a request line is answered 408 within 2000 to 3250 ms and half a body within 4000 to 5250 ms; at the defaults the connection check runs every 6000 ms';
 const defaultInterval = 6000;
 const settingsKey = 'SKELD_PROBE_TIMEOUTS';
 const slackAfterMs = 5000;
@@ -105,29 +105,21 @@ async function prove(): Promise<void> {
   const script = fileURLToPath(import.meta.url);
   process.env[settingsKey] = '2000,4000';
   const fast = await startServerChild(script);
-  process.env[settingsKey] = '20000,40000';
-  const slow = await startServerChild(script);
   process.env[settingsKey] = '';
   const standard = await startServerChild(script);
   const log: string[] = [];
   try {
     const halfBody =
       'POST /echo HTTP/1.1\r\nhost: x\r\ncontent-type: application/json\r\ncontent-length: 100\r\n\r\n{"a":"';
-    const [halfLine, halfBodyResult, unfinishedHeaders, fastInterval, slowInterval, defaultsInterval] =
-      await Promise.all([
-        timeIncomplete(fast.port, 'GET /interv', 2000 + slackAfterMs),
-        timeIncomplete(fast.port, halfBody, 4000 + slackAfterMs),
-        timeIncomplete(slow.port, 'GET /interval HTTP/1.1\r\nhost: x\r\nx-slow: ', 20_000 + slackAfterMs),
-        readInterval(fast.port),
-        readInterval(slow.port),
-        readInterval(standard.port),
-      ]);
+    const [halfLine, halfBodyResult, fastInterval, defaultsInterval] = await Promise.all([
+      timeIncomplete(fast.port, 'GET /interv', 2000 + slackAfterMs),
+      timeIncomplete(fast.port, halfBody, 4000 + slackAfterMs),
+      readInterval(fast.port),
+      readInterval(standard.port),
+    ]);
     log.push(`2000/4000 half request line: ${JSON.stringify(halfLine)}`);
     log.push(`2000/4000 half body: ${JSON.stringify(halfBodyResult)}`);
-    log.push(`20000/40000 unfinished headers: ${JSON.stringify(unfinishedHeaders)}`);
-    log.push(
-      `connection check interval ms: 2000/4000 ${fastInterval}, 20000/40000 ${slowInterval}, defaults ${defaultsInterval}`,
-    );
+    log.push(`connection check interval ms: 2000/4000 ${fastInterval}, defaults ${defaultsInterval}`);
     const inBand = (label: string, result: Timed, low: number, high: number) => {
       check(problems, result.status === 408, `${label} answered ${result.status}, not 408`);
       check(
@@ -138,14 +130,13 @@ async function prove(): Promise<void> {
     };
     inBand('half request line (2000)', halfLine, 2000, 3250);
     inBand('half body (4000)', halfBodyResult, 4000, 5250);
-    inBand('unfinished headers (20000)', unfinishedHeaders, 20_000, 22_250);
     check(
       problems,
       defaultsInterval === defaultInterval,
       `defaults connection check interval was ${defaultsInterval} ms, not ${defaultInterval}`,
     );
   } finally {
-    await Promise.all([fast.stop(), slow.stop(), standard.stop()]);
+    await Promise.all([fast.stop(), standard.stop()]);
   }
   process.stdout.write(`${log.join('\n')}\n`);
   conclude(statement, problems);

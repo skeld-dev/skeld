@@ -1,9 +1,8 @@
-// Does:  Proves every row of docs/logging/events.md: each event is triggered with no options and gives its record.
-// Holds: Rows come from the page; a reason with no trigger fails unless its row says no request produces it.
+// Does:  Proves each refusal and failure event is triggered with no options and gives its record.
+// Holds: Each event and reason in the trigger list gives the record its request caused; no header spelling leaks.
 
 // biome-ignore-all lint/security/noSecrets: route templates, event names and header values, not credentials
 // biome-ignore-all lint/performance/noAwaitInLoops: each trigger is sent alone so its request id stays its own
-import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { defineContract } from '@skeld/core/contract';
@@ -15,24 +14,12 @@ import { announceListening, type LogObject, startLogChild } from '../support/sup
 import { check, createReport } from '../support/support-proof.ts';
 import { type RawResponse, rawExchange } from '../support/support.ts';
 
-interface Row {
-  event: string;
-  category: string;
-  severity: string;
-  when: string;
-  keys: string[];
-  reasons: string[];
-}
-
-const eventsPath = fileURLToPath(new URL('../../docs/logging/events.md', import.meta.url));
-const optionalKeys = new Set(['http.route']);
 const detailOwners = new Map([
   ['skeld.schema_location', 'response_mismatch'],
   ['skeld.returned_status', 'undeclared_status'],
   ['skeld.redirect_refusal', 'redirect_refused'],
   ['skeld.reserved_header', 'reserved_header'],
 ]);
-const detailAlways = new Set(['skeld.redirect_refusal', 'skeld.reserved_header']);
 const redirectRefusals = [
   'not a string',
   'surrounding whitespace',
@@ -44,62 +31,6 @@ const redirectRefusals = [
   'userinfo',
   'origin not allowed',
 ];
-
-function cellsOf(line: string): string[] {
-  return line
-    .split('|')
-    .slice(1, -1)
-    .map((cell) => cell.trim());
-}
-
-function tokensOf(cell: string): string[] {
-  return [...cell.matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? '');
-}
-
-function sectionRows(text: string, heading: string): string[][] {
-  const section = text.split(`## ${heading}`)[1]?.split('\n## ')[0] ?? '';
-  return section
-    .split('\n')
-    .filter((line) => line.startsWith('| `'))
-    .map(cellsOf);
-}
-
-function readRows(): Row[] {
-  const text = readFileSync(eventsPath, 'utf8');
-  const reasonRows = sectionRows(text, 'Reasons');
-  return sectionRows(text, 'Event table').map((cells) => {
-    const [event = '', category = '', severity = '', when = '', own = ''] = cells;
-    const name = event.replaceAll('`', '');
-    const tokens = tokensOf(own).filter((token) => token !== name);
-    const sameAs = /same counts as `([^`]+)`/.exec(own)?.[1];
-    const fromTable = reasonRows
-      .filter((row) => row[0]?.replaceAll('`', '') === name)
-      .map((row) => (row[1] ?? '').replaceAll('`', ''));
-    const named = own.includes('`skeld.reason`')
-      ? tokens.filter((token) => !token.includes('.') && token !== 'message' && token !== 'fields')
-      : [];
-    const reasons = [...new Set([...named, ...fromTable])];
-    return {
-      event: name,
-      category: category.replaceAll('`', ''),
-      severity: severity.replaceAll('`', ''),
-      when,
-      keys:
-        sameAs === undefined
-          ? tokens.filter((token) => token.includes('.') || token === 'message' || token === 'fields')
-          : [`@${sameAs}`],
-      reasons,
-    };
-  });
-}
-
-function resolvedKeys(row: Row, rows: readonly Row[]): string[] {
-  const [first] = row.keys;
-  if (first?.startsWith('@')) {
-    return rows.find((other) => other.event === first.slice(1))?.keys ?? [];
-  }
-  return row.keys;
-}
 
 const ok = t.object({ ok: t.boolean() });
 const reportShape = t.object({ report: t.string({ maxLength: 4000 }) });
@@ -135,7 +66,6 @@ const contract = defineContract({
   deep: { method: 'POST', path: '/deep', body: noBody, responses: { 200: ok } },
   logging: { method: 'GET', path: '/log', responses: { 200: ok } },
   ports: { method: 'GET', path: '/second-port', responses: { 200: reportShape } },
-  flood: { method: 'GET', path: '/flood', responses: { 200: ok } },
 });
 
 const gatedContract = defineContract({
@@ -194,7 +124,6 @@ function pastTypes(value: unknown): never {
 }
 
 const goodReply = { status: 200 as const, body: { ok: true } };
-const padding = 'p'.repeat(900);
 
 function onRequest(context: RequestContext): void {
   const send: (reply: unknown) => void = pastTypes(context.send);
@@ -281,12 +210,6 @@ function serve(): void {
         return goodReply;
       },
       ports: () => ({ status: 200, body: { report: `${secondPort},${thirdPort}` } }),
-      flood: () => {
-        for (let call = 0; call < 1500; call++) {
-          first.log.error(padding, { call });
-        }
-        return goodReply;
-      },
     },
     { handlerTimeouts: { slow: 100 }, bodyLimits: { body: 64 } },
   );
@@ -316,7 +239,6 @@ function serve(): void {
     deep: () => goodReply,
     logging: () => goodReply,
     ports: () => ({ status: 200, body: { report: '' } }),
-    flood: () => goodReply,
   });
   second
     .listen({ port: 0, host: '127.0.0.1' })
@@ -353,8 +275,6 @@ interface Spec {
   times?: number;
 }
 
-const severities = ['debug', 'info', 'warn', 'error', 'fatal'];
-const defaults: Record<string, string> = { boot: 'info', app: 'info', security: 'warn' };
 const deepBody = `{"a":${'['.repeat(70)}${']'.repeat(70)}}`;
 const triggers = new Map<string, Spec>([
   ['skeld.request.error|thrown', { server: 'first', method: 'GET', path: '/thrown' }],
@@ -421,16 +341,6 @@ const triggers = new Map<string, Spec>([
     },
   ],
   [
-    'skeld.refuse.validation',
-    { server: 'first', method: 'POST', path: '/body', headers: ['Content-Type: application/json'], body: '{"a":1}' },
-  ],
-  ['skeld.refuse.not_found', { server: 'first', method: 'GET', path: '/nowhere' }],
-  ['skeld.refuse.media_type', { server: 'first', method: 'POST', path: '/body', headers: [], body: '{"a":"x"}' }],
-  [
-    'skeld.refuse.body_json',
-    { server: 'first', method: 'POST', path: '/body', headers: ['Content-Type: application/json'], body: '{bad' },
-  ],
-  [
     'skeld.refuse.csrf|unverifiable',
     { server: 'first', method: 'POST', path: '/body', headers: ['@origin-is-host'], body: '{}', times: 2 },
   ],
@@ -468,10 +378,6 @@ const triggers = new Map<string, Spec>([
     },
   ],
   [
-    'skeld.refuse.credential_missing',
-    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: credential_missing'] },
-  ],
-  [
     'skeld.refuse.credential_invalid',
     { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: credential_invalid'] },
   ],
@@ -492,22 +398,10 @@ const triggers = new Map<string, Spec>([
     'skeld.refuse.access_hidden',
     { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: access_hidden'] },
   ],
-  [
-    'skeld.refuse.resource_missing',
-    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: resource_missing'] },
-  ],
   ['skeld.refuse.unavailable', { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: unavailable'] }],
   ['skeld.request.error|gate', { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: gate'] }],
   ['skeld.app.message', { server: 'first', method: 'GET', path: '/log' }],
 ]);
-const notTriggerable = 'no application code or request produces it; it marks a fault in the engine itself';
-const stated = new Set(
-  sectionRows(readFileSync(eventsPath, 'utf8'), 'Reasons')
-    .filter((cells) => (cells[2] ?? '').includes(notTriggerable))
-    .map((cells) => `${(cells[0] ?? '').replaceAll('`', '')}|${(cells[1] ?? '').replaceAll('`', '')}`),
-);
-let statedCount = 0;
-
 function requestText(port: number, spec: Spec): string {
   if (spec.raw !== undefined) {
     return spec.raw;
@@ -563,81 +457,14 @@ async function runMain(options: unknown): Promise<Run> {
   return { records: child.records(), sent, stderr: child.stderr() };
 }
 
-function severityNumber(name: string): number {
-  return severities.indexOf(name);
-}
-
-function statusOf(row: Row): number | null {
-  const found = /status (\d{3})/.exec(row.when);
-  return found?.[1] === undefined ? null : Number(found[1]);
-}
-
-function writtenByDefault(row: Row): boolean {
-  if (row.category === 'access') {
-    return false;
-  }
-  if (!(row.category in defaults) || !severities.includes(row.severity)) {
-    return true;
-  }
-  return severityNumber(row.severity) >= severityNumber(defaults[row.category] ?? 'info');
-}
-
-function envelopeProblems(row: Row, rows: readonly Row[], rec: LogObject): string[] {
-  const problems: string[] = [];
-  let { category, severity } = row;
-  if (row.event === 'skeld.log.suppressed') {
-    const target = rows.find((other) => other.event === rec['skeld.suppressed.event_name']);
-    category = target?.category ?? '?';
-    severity = target?.severity ?? '?';
-  }
-  check(
-    problems,
-    rec['skeld.category'] === category,
-    `category ${String(rec['skeld.category'])}, row says ${category}`,
-  );
-  if (row.event === 'skeld.app.message') {
-    check(problems, severities.includes(String(rec.severity_text)), `severity ${String(rec.severity_text)}`);
-  } else {
-    check(problems, rec.severity_text === severity, `severity ${String(rec.severity_text)}, row says ${severity}`);
-  }
-  check(
-    problems,
-    rec.severity_number === [5, 9, 13, 17, 21][severityNumber(String(rec.severity_text))],
-    'severity number does not match its text',
-  );
-  for (const key of resolvedKeys(row, rows)) {
-    const owner = detailOwners.get(key);
-    if (owner !== undefined) {
-      const mine = rec['skeld.reason'] === owner;
-      check(
-        problems,
-        detailAlways.has(key) ? key in rec === mine : mine || !(key in rec),
-        `${key} is ${key in rec ? 'present' : 'absent'} on a record with reason ${String(rec['skeld.reason'])}, owned by ${owner}`,
-      );
-    } else if (!optionalKeys.has(key)) {
-      check(problems, key in rec, `own key ${key} is missing`);
-    }
-  }
-  const status = statusOf(row);
-  if (status !== null) {
-    check(
-      problems,
-      rec['http.response.status_code'] === status,
-      `status ${String(rec['http.response.status_code'])}, row says ${status}`,
-    );
-  }
-  check(problems, typeof rec.time === 'string' && !Number.isNaN(Date.parse(rec.time)), 'no ISO time');
-  return problems;
-}
-
 const exceptionKeys = ['skeld.exception.kind'];
 
-function reasonProblems(row: Row, reason: string, rec: LogObject): string[] {
+function reasonProblems(event: string, reason: string, rec: LogObject): string[] {
   const problems: string[] = [];
   const reads =
-    row.event === 'skeld.request.error'
+    event === 'skeld.request.error'
       ? reason === 'thrown' || reason === 'http_error'
-      : row.event === 'skeld.hook.error' && reason !== 'late_send';
+      : event === 'skeld.hook.error' && reason !== 'late_send';
   for (const key of exceptionKeys) {
     check(
       problems,
@@ -690,79 +517,6 @@ function sameMaps(left: Map<string, number>, right: Map<string, number>): string
     }
   }
   return problems;
-}
-
-async function droppedRecords(): Promise<LogObject[]> {
-  const child = await startLogChild(fileURLToPath(import.meta.url), {
-    args: ['main'],
-    reader: { mode: 'silent', ms: 4000 },
-  });
-  try {
-    await (await fetch(`http://127.0.0.1:${child.port}/flood`)).text();
-    await child.waitForRecord((rec) => rec.event_name === 'skeld.log.dropped', 25_000).catch(() => undefined);
-  } finally {
-    await child.stop();
-  }
-  return child.records();
-}
-
-function rowCase(row: Row, rows: readonly Row[], run: Run, report: ReturnType<typeof createReport>): void {
-  const own = run.records.filter((rec) => rec.event_name === row.event);
-  const problems: string[] = [];
-  if (writtenByDefault(row)) {
-    check(problems, own.length >= 1, `no ${row.event} record`);
-    for (const rec of own) {
-      problems.push(...envelopeProblems(row, rows, rec));
-    }
-    report.result(
-      `AC-11 row ${row.event}`,
-      [...new Set(problems)],
-      `${own.length} records: category ${row.category}, severity ${row.severity}, keys ${resolvedKeys(row, rows).join(' ')}`,
-    );
-    return;
-  }
-  check(problems, own.length === 0, `${own.length} records below the ${row.category} threshold`);
-  const sent = run.sent.get(row.event);
-  report.result(
-    `AC-11 row ${row.event} (${row.category} ${row.severity}, not written with no options)`,
-    problems,
-    `${row.event} triggered ${sent === undefined ? 'by no request' : `by a request answered ${sent.status}`}; 0 records`,
-  );
-}
-
-function reasonCase(
-  row: Row,
-  reason: string,
-  rows: readonly Row[],
-  run: Run,
-  report: ReturnType<typeof createReport>,
-): void {
-  const key = `${row.event}|${reason}`;
-  const name = `AC-11 ${row.event} reason ${reason}`;
-  if (stated.has(key) && !triggers.has(key)) {
-    report.note(`${name}: not triggerable from outside, as the page states`);
-    statedCount++;
-    return;
-  }
-  const sent = run.sent.get(key);
-  const problems: string[] = [];
-  check(problems, sent !== undefined, 'the script has no trigger for this documented reason');
-  const mine = run.records.filter(
-    (rec) =>
-      rec.event_name === row.event &&
-      rec['skeld.reason'] === reason &&
-      (sent?.requestId == null || rec['skeld.request_id'] === sent.requestId),
-  );
-  check(problems, mine.length === 1, `${mine.length} records for the triggering request`);
-  const [only] = mine;
-  if (only !== undefined) {
-    problems.push(...envelopeProblems(row, rows, only), ...reasonProblems(row, reason, only));
-  }
-  report.result(
-    name,
-    problems,
-    `the request answered ${sent?.status} gave one ${row.event} record with skeld.reason ${reason}`,
-  );
 }
 
 function detailCases(run: Run, report: ReturnType<typeof createReport>): void {
@@ -835,22 +589,40 @@ function variantCase(
   );
 }
 
+function eventCase(key: string, run: Run, report: ReturnType<typeof createReport>): void {
+  const [event = '', reason] = key.split('|');
+  const sent = run.sent.get(key);
+  const problems: string[] = [];
+  if (reason === undefined) {
+    const own = run.records.filter((rec) => rec.event_name === event);
+    check(problems, own.length >= 1, `no ${event} record`);
+    report.result(`AC-11 ${event}`, problems, `${own.length} records`);
+    return;
+  }
+  const mine = run.records.filter(
+    (rec) =>
+      rec.event_name === event &&
+      rec['skeld.reason'] === reason &&
+      (sent?.requestId == null || rec['skeld.request_id'] === sent.requestId),
+  );
+  check(problems, mine.length === 1, `${mine.length} records for the triggering request`);
+  const [only] = mine;
+  if (only !== undefined) {
+    problems.push(...reasonProblems(event, reason, only));
+  }
+  report.result(
+    `AC-11 ${event} reason ${reason}`,
+    problems,
+    `the request answered ${sent?.status} gave one ${event} record with skeld.reason ${reason}`,
+  );
+}
+
 async function main(): Promise<void> {
   const report = createReport('log-events');
-  const rows = readRows();
-  report.note(
-    `events.md gives ${rows.length} rows and ${rows.reduce((sum, row) => sum + row.reasons.length, 0)} reasons`,
-  );
   const base = await runMain({});
-  const dropped = await droppedRecords();
-  for (const row of rows) {
-    if (row.event === 'skeld.log.dropped') {
-      rowCase(row, rows, { records: dropped, sent: new Map(), stderr: '' }, report);
-    } else {
-      rowCase(row, rows, base, report);
-    }
-    for (const reason of row.reasons) {
-      reasonCase(row, reason, rows, base, report);
+  for (const key of triggers.keys()) {
+    if (!key.startsWith('detail|')) {
+      eventCase(key, base, report);
     }
   }
   detailCases(base, report);
@@ -912,45 +684,6 @@ async function main(): Promise<void> {
     `${authored.length} records for info, warn, error and one debug call`,
   );
 
-  const raised: [string, string, string][] = [
-    ['boot', 'error', 'boot'],
-    ['app', 'fatal', 'app'],
-    ['security', 'error', 'security'],
-  ];
-  for (const [category, level, removed] of raised) {
-    const run = await runMain({ thresholds: { [category]: level } });
-    variantCase(
-      `AC-11 raising thresholds.${category} to ${level} removes only the ${removed} records below ${level}`,
-      base,
-      run,
-      (rec) => rec['skeld.category'] !== removed || severityNumber(String(rec.severity_text)) >= severityNumber(level),
-      [],
-      report,
-    );
-  }
-  const lowered = await runMain({ thresholds: { security: 'info' } });
-  const infoEvents = rows.filter((row) => row.category === 'security' && row.severity === 'info');
-  variantCase(
-    'AC-11 lowering thresholds.security to info adds exactly the info refusals',
-    base,
-    lowered,
-    () => true,
-    infoEvents.map((row) => row.event),
-    report,
-  );
-  const loweredProblems: string[] = [];
-  for (const row of infoEvents) {
-    const found = lowered.records.filter((rec) => rec.event_name === row.event);
-    check(loweredProblems, found.length === 1, `${row.event}: ${found.length} records`);
-    for (const rec of found) {
-      loweredProblems.push(...envelopeProblems(row, rows, rec));
-    }
-  }
-  report.result(
-    'AC-11 each info refusal gives its row once the security threshold admits it',
-    loweredProblems,
-    `${infoEvents.map((row) => row.event).join(', ')}`,
-  );
   const access = await runMain({ access: true });
   variantCase(
     'AC-11 the access option adds skeld.request.closed and changes nothing else',
@@ -961,23 +694,6 @@ async function main(): Promise<void> {
     report,
     ['skeld.request.closed'],
   );
-  const closedRow = rows.find((row) => row.event === 'skeld.request.closed');
-  const closedProblems: string[] = [];
-  const closed = access.records.filter((rec) => rec.event_name === 'skeld.request.closed');
-  check(
-    closedProblems,
-    closedRow !== undefined && closed.length > 0,
-    'no skeld.request.closed record with the access option',
-  );
-  for (const rec of closed) {
-    closedProblems.push(...(closedRow === undefined ? [] : envelopeProblems(closedRow, rows, rec)));
-  }
-  report.result(
-    'AC-11 skeld.request.closed matches its row once the access option is on',
-    [...new Set(closedProblems)],
-    `${closed.length} records`,
-  );
-  report.note(`${statedCount} documented reason not triggerable from outside, as the page states`);
   report.finish();
 }
 

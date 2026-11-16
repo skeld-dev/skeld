@@ -16,20 +16,6 @@ export interface Compiled {
   diagnostics: { file: string; line: number; code: number }[];
 }
 
-export function rejectsAt(result: Compiled | undefined, source: string, code: number): boolean {
-  const lines = source.split('\n').flatMap((line, index) => (line.includes('// BAD') ? [index + 1] : []));
-  return (
-    result !== undefined &&
-    (result.status === 1 || result.status === 2) &&
-    lines.length > 0 &&
-    result.errors.length === result.diagnostics.length &&
-    lines.every((line) =>
-      result.diagnostics.some((entry) => entry.file === 'probe.ts' && entry.line === line && entry.code === code),
-    ) &&
-    result.diagnostics.every((entry) => entry.file === 'probe.ts' && lines.includes(entry.line) && entry.code === code)
-  );
-}
-
 export function compileProbes(sources: readonly string[]): Compiled[] {
   const folder = mkdtempSync(join(tmpdir(), 'skeld-probe-'));
   try {

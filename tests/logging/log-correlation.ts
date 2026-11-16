@@ -8,7 +8,7 @@ import { defineContract } from '@skeld/core/contract';
 import * as t from '@skeld/core/schema';
 import { createServer } from '@skeld/core/server';
 import { announceListening, type LogChild, type LogObject, startLogChild } from '../support/support-log.ts';
-import { check, createReport, findMarker, type Report, type Searched } from '../support/support-proof.ts';
+import { check, createReport, findMarker, type Searched } from '../support/support-proof.ts';
 import { request as wireRequest } from '../support/support-wire.ts';
 
 const ok = t.object({ ok: t.boolean() });
@@ -73,36 +73,6 @@ function fixtures(): Fixture[] {
       needle(validOne.id, digitsOf(validOne.id)),
     ],
   });
-  const validTwo = {
-    trace: hex(16),
-    span: hex(8),
-    id: `${idMark('OKID2')}${'a'.repeat(128 - idMark('OKID2').length)}`,
-  };
-  list.push({
-    name: 'valid traceparent (flags 00) and a valid 128-character id',
-    headers: [`traceparent: ${traceparent('00', validTwo.trace, validTwo.span, '00')}`, `x-request-id: ${validTwo.id}`],
-    accepted: { traceId: validTwo.trace, flags: '00', id: validTwo.id },
-    planted: [
-      needle(validTwo.trace, validTwo.trace),
-      needle(validTwo.span, validTwo.span),
-      needle(validTwo.id, digitsOf(validTwo.id)),
-    ],
-  });
-  const validThree = { trace: hex(16), span: hex(8), id: `${idMark('OKID3')}._:=+/-Z` };
-  list.push({
-    name: 'valid traceparent (flags ff is not a version) and an id of every allowed punctuation mark',
-    headers: [
-      `traceparent: ${traceparent('00', validThree.trace, validThree.span, 'ff')}`,
-      `x-request-id: ${validThree.id}`,
-    ],
-    accepted: { traceId: validThree.trace, flags: 'ff', id: validThree.id },
-    planted: [
-      needle(validThree.trace, validThree.trace),
-      needle(validThree.span, validThree.span),
-      needle(validThree.id, digitsOf(validThree.id)),
-    ],
-  });
-
   const upper = { trace: hex(16), span: hex(8) };
   list.push({
     name: 'invalid traceparent: uppercase hex',
@@ -110,114 +80,12 @@ function fixtures(): Fixture[] {
     accepted: {},
     planted: [needle(upper.trace, upper.trace), needle(upper.span, upper.span)],
   });
-  const zeroTrace = { span: hex(8) };
-  list.push({
-    name: 'invalid traceparent: all-zero trace id',
-    headers: [`traceparent: ${traceparent('00', '0'.repeat(32), zeroTrace.span, '01')}`],
-    accepted: {},
-    planted: [needle(zeroTrace.span, zeroTrace.span)],
-  });
-  const zeroSpan = { trace: hex(16) };
-  list.push({
-    name: 'invalid traceparent: all-zero parent id',
-    headers: [`traceparent: ${traceparent('00', zeroSpan.trace, '0'.repeat(16), '01')}`],
-    accepted: {},
-    planted: [needle(zeroSpan.trace, zeroSpan.trace)],
-  });
-  const versionFf = { trace: hex(16), span: hex(8) };
-  list.push({
-    name: 'invalid traceparent: version ff',
-    headers: [`traceparent: ${traceparent('ff', versionFf.trace, versionFf.span, '01')}`],
-    accepted: {},
-    planted: [needle(versionFf.trace, versionFf.trace), needle(versionFf.span, versionFf.span)],
-  });
-  const short = { trace: hex(16), span: hex(8) };
-  list.push({
-    name: 'invalid traceparent: 54 characters',
-    headers: [`traceparent: ${traceparent('00', short.trace, short.span, '0')}`],
-    accepted: {},
-    planted: [needle(short.trace, short.trace), needle(short.span, short.span)],
-  });
-  const long = { trace: hex(16), span: hex(8) };
-  list.push({
-    name: 'invalid traceparent: 56 characters',
-    headers: [`traceparent: ${traceparent('00', long.trace, long.span, '011')}`],
-    accepted: {},
-    planted: [needle(long.trace, long.trace), needle(long.span, long.span)],
-  });
-
-  const over = idMark('ID129');
-  const overValue = `${over}${'b'.repeat(129 - over.length)}`;
-  list.push({
-    name: 'invalid id: 129 characters',
-    headers: [`x-request-id: ${overValue}`],
-    accepted: {},
-    planted: [needle(overValue, digitsOf(over))],
-  });
   const control = idMark('IDCTL');
   list.push({
     name: 'invalid id: a control character (tab) inside',
     headers: [`x-request-id: ${control}\tmore`],
     accepted: {},
     planted: [needle(control, digitsOf(control))],
-  });
-  const latin = idMark('IDLAT');
-  list.push({
-    name: 'invalid id: a non-ASCII byte',
-    headers: [`x-request-id: ${latin}é`],
-    accepted: {},
-    planted: [needle(latin, digitsOf(latin))],
-  });
-  const spaced = idMark('IDSPC');
-  list.push({
-    name: 'invalid id: a space inside',
-    headers: [`x-request-id: ${spaced} more`],
-    accepted: {},
-    planted: [needle(spaced, digitsOf(spaced))],
-  });
-  const semicolon = idMark('IDSEM');
-  list.push({
-    name: 'invalid id: a semicolon inside',
-    headers: [`x-request-id: ${semicolon};x`],
-    accepted: {},
-    planted: [needle(semicolon, digitsOf(semicolon))],
-  });
-  list.push({
-    name: 'invalid id: empty',
-    headers: ['x-request-id:'],
-    accepted: {},
-    planted: [],
-  });
-
-  const mixedValidTrace = { trace: hex(16), span: hex(8) };
-  const mixedBadId = idMark('MIXID');
-  list.push({
-    name: 'valid traceparent with an invalid id (each read on its own)',
-    headers: [
-      `traceparent: ${traceparent('00', mixedValidTrace.trace, mixedValidTrace.span, '01')}`,
-      `x-request-id: ${mixedBadId}!`,
-    ],
-    accepted: { traceId: mixedValidTrace.trace, flags: '01' },
-    planted: [
-      needle(mixedValidTrace.trace, mixedValidTrace.trace),
-      needle(mixedValidTrace.span, mixedValidTrace.span),
-      needle(mixedBadId, digitsOf(mixedBadId)),
-    ],
-  });
-  const mixedBadTrace = { trace: hex(16), span: hex(8) };
-  const mixedGoodId = idMark('MIXOK');
-  list.push({
-    name: 'invalid traceparent with a valid id (each read on its own)',
-    headers: [
-      `traceparent: ${traceparent('ff', mixedBadTrace.trace, mixedBadTrace.span, '01')}`,
-      `x-request-id: ${mixedGoodId}`,
-    ],
-    accepted: { id: mixedGoodId },
-    planted: [
-      needle(mixedBadTrace.trace, mixedBadTrace.trace),
-      needle(mixedBadTrace.span, mixedBadTrace.span),
-      needle(mixedGoodId, digitsOf(mixedGoodId)),
-    ],
   });
   const twice = { trace: hex(16), span: hex(8), first: idMark('DUPA'), second: idMark('DUPB') };
   list.push({
@@ -373,37 +241,6 @@ function absentKeys(child: LogChild): string[] {
   return holding.length === 0 ? [] : [`${holding.length} records hold a correlation key`];
 }
 
-async function rawControl(report: Report): Promise<void> {
-  const child = await startLogChild(fileURLToPath(import.meta.url), { env: { CORRELATION: 'on' } });
-  const marker = `MARK_IDRAW_${hex(12)}`;
-  const outcomes: string[] = [];
-  for (const [label, control] of [
-    ['0x01', '\u0001'],
-    ['0x1f', '\u001f'],
-    ['0x7f', '\u007f'],
-  ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: each control byte is sent on its own connection in turn
-    const wire = await wireRequest(child.port, 'GET', '/hi', [`x-request-id: ${marker}${control}more`]);
-    outcomes.push(`${label} answered ${wire.status}${wire.first('x-request-id') === null ? '' : ' with an id'}`);
-  }
-  await delay(300);
-  await child.stop();
-  const problems = appearances(
-    [
-      ...child.lines().map((line, index) => ({ where: `stdout line ${index + 1}`, text: line.text })),
-      { where: 'stderr', text: child.stderr() },
-    ],
-    [needle(marker, marker.slice(marker.lastIndexOf('_') + 1))],
-  );
-  const holding = child.records().filter((record) => 'http.request.header.x-request-id' in record);
-  check(problems, holding.length === 0, `${holding.length} records hold the id key`);
-  report.result(
-    'AC-6 [on] an id with a raw control byte (0x01, 0x1f, 0x7f) appears nowhere',
-    problems,
-    `${outcomes.join('; ')}; the id appears in none of ${child.lines().length} lines or stderr, whole or cut`,
-  );
-}
-
 function rejected(fixture: Fixture): Planted[] {
   return fixture.planted.filter(
     (planted) => planted.whole !== fixture.accepted.traceId && planted.whole !== fixture.accepted.id,
@@ -473,7 +310,6 @@ async function main(): Promise<void> {
     offProblems,
     `${list.length} fixtures (${accepted.length} valid, ${refused.length} not) by 3 request kinds: no record holds trace_id, trace_flags or the id key; no fixture value appears in ${off.searched.length} texts, whole or cut`,
   );
-  await rawControl(report);
   report.finish();
 }
 

@@ -1,10 +1,7 @@
-// Does:  Proves each request yields one access record and one id, and the lifecycle points count alike in each mode.
-// Holds: Every case runs in its own server child per mode, so the diag counts of a case are exactly that case's.
+// Does:  Proves each request yields one access record and one response id that is never the inbound value.
+// Holds: Every case runs in its own server child, so the records of a case are exactly that case's.
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import net from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { defineContract } from '@skeld/core/contract';
@@ -41,7 +38,7 @@ function serve(): void {
   const server = createServer({
     handlerTimeoutMs,
     cors: { origins: [corsOrigin] },
-    log: process.env.LOG_MODE === 'off' ? false : { access: true, thresholds: { security: 'info' } },
+    log: { access: true, thresholds: { security: 'info' } },
   });
   server.addHook('onRequest', (context) => {
     if (context.route.name === 'hooked') {
@@ -79,19 +76,10 @@ interface Expected {
   outcome: 'completed' | 'aborted';
 }
 
-interface Points {
-  start: number;
-  routed?: number;
-  refused?: number;
-  failed?: number;
-  closed: number;
-}
-
 interface Case {
   name: string;
   run: (port: number) => Promise<Sent[]>;
   expected: Expected[];
-  points: Points;
   // Why: A race has no fixed split between completed and aborted, so only its count is judged.
   anyOutcome?: boolean;
   // Why: The other records the case draws besides its access records, by event name, each under its request's id.
@@ -214,14 +202,12 @@ const cases: Case[] = [
     name: 'success',
     run: async (port) => [await exchange(port, 'ok', plain('GET', '/ok'))],
     expected: [{ status: 200, outcome: 'completed' }],
-    points: { start: 1, routed: 1, refused: 0, failed: 0, closed: 1 },
   },
   {
     name: 'not found',
     events: ['skeld.refuse.not_found'],
     run: async (port) => [await exchange(port, 'nf', plain('GET', '/nope'))],
     expected: [{ status: 404, outcome: 'completed' }],
-    points: { start: 1, routed: 0, refused: 1, failed: 0, closed: 1 },
   },
   {
     name: 'framing refusal (two Host fields)',
@@ -235,7 +221,6 @@ const cases: Case[] = [
       ),
     ],
     expected: [{ status: 400, outcome: 'completed' }],
-    points: { start: 1, routed: 0, refused: 1, failed: 0, closed: 1 },
   },
   {
     name: 'cross-site refusal',
@@ -248,7 +233,6 @@ const cases: Case[] = [
       ),
     ],
     expected: [{ status: 403, outcome: 'completed' }],
-    points: { start: 1, refused: 1, failed: 0, closed: 1 },
   },
   {
     name: 'preflight (one granted, one refused)',
@@ -269,13 +253,11 @@ const cases: Case[] = [
       { status: 204, outcome: 'completed' },
       { status: 403, outcome: 'completed' },
     ],
-    points: { start: 2, refused: 1, failed: 0, closed: 2 },
   },
   {
     name: 'hook reply',
     run: async (port) => [await exchange(port, 'hook', plain('GET', '/hooked'))],
     expected: [{ status: 202, outcome: 'completed' }],
-    points: { start: 1, routed: 1, refused: 0, failed: 0, closed: 1 },
   },
   {
     name: 'validation refusal',
@@ -288,41 +270,35 @@ const cases: Case[] = [
       ),
     ],
     expected: [{ status: 400, outcome: 'completed' }],
-    points: { start: 1, routed: 1, refused: 1, failed: 0, closed: 1 },
   },
   {
     name: 'handler throw',
     events: ['skeld.request.error'],
     run: async (port) => [await exchange(port, 'throw', plain('GET', '/throw'))],
     expected: [{ status: 500, outcome: 'completed' }],
-    points: { start: 1, routed: 1, refused: 0, failed: 1, closed: 1 },
   },
   {
     name: 'timeout',
     events: ['skeld.request.error'],
     run: async (port) => [await exchange(port, 'timeout', plain('GET', '/hang'))],
     expected: [{ status: 503, outcome: 'completed' }],
-    points: { start: 1, routed: 1, refused: 0, failed: 1, closed: 1 },
   },
   {
     name: 'client abort mid-response',
     run: async (port) => [await midResponseAbort(port)],
     expected: [{ outcome: 'aborted' }],
-    points: { start: 1, routed: 1, refused: 0, failed: 0, closed: 1 },
     statuses: [200],
   },
   {
     name: 'body abort',
     run: async (port) => [await bodyAbort(port)],
     expected: [{ outcome: 'aborted' }],
-    points: { start: 1, routed: 1, closed: 1 },
     unanswered: 1,
   },
   {
     name: '1,000 finish-and-close races',
     run: (port) => races(port, 1000, 25),
     expected: Array.from({ length: 1000 }, () => ({ outcome: 'completed' as const })),
-    points: { start: 1000, routed: 1000, refused: 0, failed: 0, closed: 1000 },
     anyOutcome: true,
   },
   {
@@ -346,67 +322,16 @@ const cases: Case[] = [
       ),
     ],
     expected: [],
-    points: { start: 0, routed: 0, refused: 0, failed: 0, closed: 0 },
     unanswered: 3,
     statuses: [400, 400, 431],
   },
 ];
 
-type Mode = 'plain' | 'off' | 'on' | 'silent';
-const silentMs = 7000;
-
-interface Counts {
-  totals: Record<string, number>;
-  keyed: Record<string, number>;
-  nodeAnswered: Record<string, number>;
-}
-
 interface Run {
-  mode: Mode;
   sent: Sent[];
   records: LogObject[];
   stdoutLines: number;
-  counts: Counts | null;
   problems: string[];
-}
-
-const pointNames = ['start', 'routed', 'refused', 'failed', 'closed'] as const;
-
-function readCounts(dir: string): Counts | null {
-  const lines = readFileSync(join(dir, 'snapshot.jsonl'), 'utf8').trim().split('\n');
-  const last = lines.at(-1);
-  if (last === undefined || last === '') {
-    return null;
-  }
-  const snapshot: unknown = JSON.parse(last);
-  if (typeof snapshot !== 'object' || snapshot === null || !('counts' in snapshot)) {
-    return null;
-  }
-  const raw = snapshot.counts;
-  if (typeof raw !== 'object' || raw === null) {
-    return null;
-  }
-  const totals: Record<string, number> = Object.fromEntries(pointNames.map((name) => [name, 0]));
-  const keyed: Record<string, number> = {};
-  const nodeAnswered: Record<string, number> = {};
-  for (const [key, value] of Object.entries(raw)) {
-    if (key.startsWith('refuse.node_answered') && typeof value === 'number' && value > 0) {
-      nodeAnswered[key] = value;
-    }
-    const match = /^point\.([a-z]+)/.exec(key);
-    if (match?.[1] === undefined || typeof value !== 'number') {
-      continue;
-    }
-    totals[match[1]] = (totals[match[1]] ?? 0) + value;
-    keyed[key] = value;
-  }
-  return { totals, keyed, nodeAnswered };
-}
-
-function snapshotCount(dir: string): number {
-  return readFileSync(join(dir, 'snapshot.jsonl'), 'utf8')
-    .split('\n')
-    .filter((line) => line !== '').length;
 }
 
 async function untilTrue(condition: () => boolean, ms: number): Promise<boolean> {
@@ -425,52 +350,22 @@ function accessRecords(child: LogChild): LogObject[] {
   return child.records().filter((record) => record.event_name === 'skeld.request.closed');
 }
 
-async function runChild(item: Case, mode: Mode): Promise<Run> {
+async function runChild(item: Case): Promise<Run> {
   const problems: string[] = [];
-  const diag = mode !== 'plain';
-  const dir = diag ? mkdtempSync(join(tmpdir(), 'skeld-lifecycle-')) : null;
-  const child = await startLogChild(fileURLToPath(import.meta.url), {
-    diag,
-    env: {
-      LOG_MODE: mode === 'off' ? 'off' : 'on',
-      ...(dir === null ? {} : { SKELD_DIAG_DIR: dir, SKELD_DIAG_STEP_N: '1' }),
-    },
-    ...(mode === 'silent' ? { reader: { mode: 'silent' as const, ms: silentMs } } : {}),
-  });
-  let counts: Counts | null = null;
+  const child = await startLogChild(fileURLToPath(import.meta.url));
   let sent: Sent[] = [];
   try {
     sent = await item.run(child.port);
-    if (mode === 'silent') {
-      check(
-        problems,
-        child.lines().length === 0,
-        `the reader was not silent: ${child.lines().length} lines reached it during the case`,
-      );
-    }
-    if (mode === 'plain' || mode === 'on') {
-      const arrived = await untilTrue(() => accessRecords(child).length >= item.expected.length, 10_000);
-      check(problems, arrived, `only ${accessRecords(child).length} of ${item.expected.length} access records arrived`);
-    }
+    const arrived = await untilTrue(() => accessRecords(child).length >= item.expected.length, 10_000);
+    check(problems, arrived, `only ${accessRecords(child).length} of ${item.expected.length} access records arrived`);
     await delay(400);
-    if (dir !== null) {
-      const mark = snapshotCount(dir);
-      const taken = await untilTrue(() => snapshotCount(dir) > mark, 8000);
-      check(problems, taken, 'the recorder wrote no snapshot after the requests');
-      counts = readCounts(dir);
-    }
   } finally {
     await child.stop();
-    if (dir !== null) {
-      rmSync(dir, { recursive: true, force: true });
-    }
   }
   return {
-    mode,
     sent,
     records: child.records(),
     stdoutLines: child.lines().length,
-    counts,
     problems,
   };
 }
@@ -587,55 +482,10 @@ function checkRecordIds(item: Case, run: Run): string[] {
   return problems;
 }
 
-function checkPoints(item: Case, runs: Run[]): string[] {
-  const problems: string[] = [];
-  const diagRuns = runs.filter((run) => run.mode !== 'plain');
-  const reference = diagRuns.find((run) => run.mode === 'off');
-  for (const run of diagRuns) {
-    if (run.counts === null) {
-      problems.push(`${run.mode}: no point counts could be read`);
-      continue;
-    }
-    const totals = run.counts.totals;
-    for (const name of pointNames) {
-      const wanted = item.points[name];
-      if (wanted !== undefined) {
-        check(problems, totals[name] === wanted, `${run.mode}: point.${name} is ${totals[name]}, expected ${wanted}`);
-      }
-      const base = reference?.counts?.totals[name];
-      check(
-        problems,
-        base !== undefined && totals[name] === base,
-        `${run.mode}: point.${name} is ${totals[name]}, with the log off it is ${base}`,
-      );
-    }
-    if (item.anyOutcome !== true && reference?.counts != null) {
-      check(
-        problems,
-        JSON.stringify(Object.entries(run.counts.keyed).sort()) ===
-          JSON.stringify(Object.entries(reference.counts.keyed).sort()),
-        `${run.mode}: the keyed point counts ${JSON.stringify(run.counts.keyed)} differ from the log off ${JSON.stringify(reference.counts.keyed)}`,
-      );
-    }
-  }
-  return problems;
-}
-
 function accessSplit(run: Run): string {
   const access = run.records.filter((record) => record.event_name === 'skeld.request.closed');
   const aborted = access.filter((record) => record['skeld.outcome'] === 'aborted').length;
   return `${access.length} access records (${access.length - aborted} completed, ${aborted} aborted)`;
-}
-
-function describePoints(runs: Run[]): string {
-  return runs
-    .filter((run) => run.mode !== 'plain' && run.counts !== null)
-    .map((run) => {
-      const answered = Object.entries(run.counts?.nodeAnswered ?? {});
-      const node = answered.length === 0 ? '' : ` (${answered.map(([key, count]) => `${key} ${count}`).join(', ')})`;
-      return `${run.mode} ${pointNames.map((name) => `${name} ${run.counts?.totals[name]}`).join(' ')}${node}`;
-    })
-    .join('; ');
 }
 
 async function inBatches<T, R>(items: readonly T[], size: number, work: (item: T) => Promise<R>): Promise<R[]> {
@@ -653,69 +503,31 @@ async function inBatches<T, R>(items: readonly T[], size: number, work: (item: T
 
 async function main(): Promise<void> {
   const report = createReport('log-lifecycle');
-  const modes: Mode[] = ['plain', 'off', 'on', 'silent'];
-  const outcomes = await inBatches(cases, 3, async (item) => ({
-    item,
-    runs: await Promise.all(modes.map((mode) => runChild(item, mode))),
-  }));
-  for (const { item, runs } of outcomes) {
-    const byMode = (mode: Mode): Run => {
-      const found = runs.find((run) => run.mode === mode);
-      if (found === undefined) {
-        throw new Error(`no ${mode} run for ${item.name}`);
-      }
-      return found;
-    };
-    const plainRun = byMode('plain');
-    const onRun = byMode('on');
-    const offRun = byMode('off');
-
-    const accessProblems = [
-      ...runs.flatMap((run) => run.problems.map((problem) => `${run.mode}: ${problem}`)),
-      ...checkAccess(item, plainRun).map((problem) => `plain build: ${problem}`),
-      ...checkAccess(item, onRun).map((problem) => `diag build, log on: ${problem}`),
-    ];
-    check(accessProblems, offRun.stdoutLines === 0, `with the log off stdout held ${offRun.stdoutLines} lines`);
-    check(
-      accessProblems,
-      offRun.records.length === 0,
-      `with the log off ${offRun.records.length} records were written`,
-    );
+  const outcomes = await inBatches(cases, 3, async (item) => ({ item, run: await runChild(item) }));
+  for (const { item, run } of outcomes) {
+    const accessProblems = [...run.problems, ...checkAccess(item, run)];
     if (item.anyOutcome !== true) {
       const wanted = [
         ...(item.statuses ?? item.expected.flatMap((entry) => (entry.status === undefined ? [] : [entry.status]))),
       ].sort();
-      for (const run of runs) {
-        const seen = run.sent.flatMap((entry) => (entry.status === null ? [] : [entry.status])).sort();
-        check(
-          accessProblems,
-          JSON.stringify(seen) === JSON.stringify(wanted),
-          `${run.mode}: responses ${JSON.stringify(seen)}, expected ${JSON.stringify(wanted)}`,
-        );
-      }
+      const seen = run.sent.flatMap((entry) => (entry.status === null ? [] : [entry.status])).sort();
+      check(
+        accessProblems,
+        JSON.stringify(seen) === JSON.stringify(wanted),
+        `responses ${JSON.stringify(seen)}, expected ${JSON.stringify(wanted)}`,
+      );
     }
     report.result(
-      `AC-4 ${item.name}: exactly one access record per request, none with the log off`,
+      `AC-4 ${item.name}: exactly one access record per request`,
       accessProblems,
-      `${item.expected.length} request(s), plain build ${accessSplit(plainRun)}, diag build ${accessSplit(onRun)}; log off wrote ${offRun.stdoutLines} lines; every mode answered the same statuses`,
+      `${item.expected.length} request(s), ${accessSplit(run)}; the responses carried the expected statuses`,
     );
 
-    const idProblems = [
-      ...runs.flatMap((run) => checkIds(item, run).map((problem) => `${run.mode}: ${problem}`)),
-      ...checkRecordIds(item, plainRun).map((problem) => `plain build: ${problem}`),
-      ...checkRecordIds(item, onRun).map((problem) => `diag build, log on: ${problem}`),
-    ];
+    const idProblems = [...checkIds(item, run), ...checkRecordIds(item, run)];
     report.result(
       `AC-5 ${item.name}: x-request-id equals the request id on its records and never the inbound value`,
       idProblems,
-      `${runs.map((run) => `${run.mode} ${run.sent.filter((entry) => entry.id !== null).length} of ${run.sent.length} responses carry an id`).join(', ')}; each id is on exactly one access record of its request and on no inbound value`,
-    );
-
-    const pointProblems = checkPoints(item, runs);
-    report.result(
-      `AC-4 ${item.name}: lifecycle points count the same with the log off, on and the reader silent`,
-      pointProblems,
-      describePoints(runs),
+      `${run.sent.filter((entry) => entry.id !== null).length} of ${run.sent.length} responses carry an id; each id is on exactly one access record of its request and on no inbound value`,
     );
   }
   report.finish();

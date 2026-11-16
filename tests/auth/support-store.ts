@@ -3,7 +3,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // biome-ignore lint/correctness/noUnresolvedImports: Biome's Node module list lacks node:sqlite, which Node 26 ships
@@ -99,13 +99,11 @@ export interface Report {
   finish: () => void;
 }
 
-// Does:  Reports each case on stdout and in the task's evidence file; the exit code is non-zero when a case failed.
-export function createReport(task: 's05' | 's06', script: string, statement: string): Report {
-  const lines: string[] = [];
+// Does:  Reports each case on stdout; the exit code is non-zero when a case failed.
+export function createReport(_task: 's05' | 's06', script: string, statement: string): Report {
   let cases = 0;
   let failed = 0;
   const emit = (line: string): void => {
-    lines.push(line);
     process.stdout.write(`${line}\n`);
   };
   let commit = 'unknown';
@@ -140,9 +138,6 @@ export function createReport(task: 's05' | 's06', script: string, statement: str
     },
     finish: () => {
       emit(`${cases - failed} of ${cases} cases passed`);
-      const dir = join(sourceRoot, '.project/features/0.2.0-auth/evidence', task);
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, `${script}.txt`), `${lines.join('\n')}\n`);
       process.exitCode = failed === 0 ? 0 : 1;
     },
   };

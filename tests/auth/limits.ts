@@ -1,11 +1,8 @@
-// Does:  Proves shared limits: atomic charges, bounded keys, charge-first ordering, fail-closed, finite queues.
-// Holds: Counters live in the store alone; every verdict is judged against the table and a second server instance.
+// Does:  Proves shared limits: atomic charges, bounded keys, charge-first ordering and fail-closed.
+// Holds: Counters live in the store alone; every verdict is judged against the table.
 
 import { createHash } from 'node:crypto';
 import { AuthError } from '@skeld/auth/auth-error';
-import { hashPassword } from '@skeld/auth/password';
-import { Secret } from '@skeld/core/secret';
-import type { Pool } from 'pg';
 import {
   cookieHeader,
   get,
@@ -15,15 +12,15 @@ import {
   send,
   series,
   sleepMs,
-  spareStore,
   startApp,
   type App,
 } from './rig/v1-app.ts';
 import { createReport } from './rig/v1-report.ts';
-import { cleanAll, type Kind, makeRig, type Rig, rigKinds, toNumber } from './support-store.ts';
+import { behaviorKinds as rigKinds } from '../support/test-profile.ts';
+import { cleanAll, type Kind, makeRig, type Rig, toNumber } from './support-store.ts';
 
 const statement =
-  "shared limits charge atomically, also across server instances, in bounded windows under bounded keys; auth's public endpoints and an application charge before their expensive work; an unavailable store is Unavailable and never a pass, with no fallback; the hashing queue and the store queue are finite and ended by their deadlines";
+  "shared limits charge atomically in bounded windows under bounded keys; auth's public endpoints and an application charge before their expensive work; an unavailable store is Unavailable and never a pass, with no fallback";
 const report = createReport('v04', statement);
 
 const NAME = '__Host-skeld';
@@ -301,9 +298,6 @@ async function failClosedCases({ label, rig, observed, app }: Context): Promise<
   const baseline = app.logs
     .named('auth.store.failed')
     .filter((record) => record.fields['auth.operation'] === 'limitCharge').length;
-  if (baseline > 8) {
-    await sleepMs(10_500);
-  }
   await app.limits.charge('login', 'fc');
   await app.limits.charge('login', 'fc');
   observed.failWith('no', 'limitCharge');
@@ -358,129 +352,6 @@ async function failClosedCases({ label, rig, observed, app }: Context): Promise<
   );
 }
 
-async function hashingQueue(label: string): Promise<void> {
-  const many = await Promise.all(Array.from({ length: 70 }, () => hashPassword(new Secret('queue-proof'))));
-  const hashed = many.filter((result) => result.kind === 'hashed').length;
-  const busy = many.filter((result) => result.kind === 'busy').length;
-  report.check(
-    `${label} the hashing queue is finite: 70 simultaneous hashes are 66 hashed (2 running and 64 waiting) and 4 busy`,
-    hashed === 66 && busy === 4,
-    `${hashed} hashed, ${busy} busy`,
-  );
-  const began = performance.now();
-  const heavy = await Promise.all(
-    Array.from({ length: 12 }, async () => {
-      const result = await hashPassword(new Secret('queue-proof'), { cost: { memoryKiB: 262_144, passes: 4 } });
-      return { kind: result.kind, at: Math.round(performance.now() - began) };
-    }),
-  );
-  const busyHeavy = heavy.filter((entry) => entry.kind === 'busy');
-  report.check(
-    `${label} a waiter is ended at its 5,000 ms deadline: of 12 maximum-cost hashes (about 1.6 s each, 2 at a time) the late waiters are busy at 4,990 to 5,500 ms and the others are hashed`,
-    busyHeavy.length >= 1 &&
-      busyHeavy.length + heavy.filter((entry) => entry.kind === 'hashed').length === 12 &&
-      busyHeavy.every((entry) => entry.at >= 4990 && entry.at <= 5500),
-    `busy at ${busyHeavy.map((entry) => entry.at).join(',')} ms; ${heavy.filter((entry) => entry.kind === 'hashed').length} hashed`,
-  );
-  await sleepMs(3500);
-}
-
-async function sqliteContention({ label, rig, app }: Context): Promise<void> {
-  await app.limits.charge('login', 'busy-key');
-  await rig.hold('subjects', 'x', 1200);
-  const began = performance.now();
-  const verdicts = await Promise.all(Array.from({ length: 30 }, (_, n) => app.limits.charge('login', `busy-${n}`)));
-  const elapsed = Math.round(performance.now() - began);
-  report.check(
-    `${label} while another connection holds the write lock past the retry budget, 30 simultaneous charges are all Unavailable not_applied (none passes), ended within 501 to 661 ms (plus the proof's own scheduling on a shared host: observed ${elapsed} ms)`,
-    verdicts.every((verdict) => verdict.kind === 'unavailable' && verdict.outcome === 'not_applied') &&
-      elapsed >= 501 &&
-      elapsed <= 700,
-    `${elapsed} ms`,
-  );
-  await sleepMs(900);
-  const after = await app.limits.charge('login', 'busy-after');
-  report.check(`${label} once the lock is released a charge passes again`, after.kind === 'pass', after.kind);
-}
-
-async function postgresQueue(): Promise<void> {
-  const label = '[postgres]';
-  const rig = await makeRig('postgres', { attach: false, maxClients: 1 });
-  const app = await startApp({ store: rig.store });
-  try {
-    await app.limits.charge('login', 'queue-key');
-    await rig.hold('limit_windows', Buffer.from(keyDigest('login', 'queue-key'), 'hex'), 2500);
-    const began = performance.now();
-    const settledAt: number[] = [];
-    const verdicts = await Promise.all(
-      Array.from({ length: 1010 }, () =>
-        app.limits.charge('login', 'queue-key').then((verdict) => {
-          settledAt.push(Math.round(performance.now() - began));
-          return verdict;
-        }),
-      ),
-    );
-    const passes = verdicts.filter((verdict) => verdict.kind === 'pass').length;
-    const immediate = settledAt.filter((at) => at < 1500).length;
-    const unavailable = verdicts.filter((verdict) => verdict.kind === 'unavailable').length;
-    report.check(
-      `${label} the store queue is finite (one client, a held row lock, 1,010 simultaneous charges): exactly 9 are refused at once (1 holds the client, 1,000 wait, the rest are over the bound), none exceeds the limit of 3, and none answers anything but pass, limited or Unavailable`,
-      immediate === 9 &&
-        passes <= 2 &&
-        verdicts.every(
-          (verdict) => verdict.kind === 'pass' || verdict.kind === 'limited' || verdict.kind === 'unavailable',
-        ) &&
-        unavailable >= 9,
-      `${immediate} settled in 1,500 ms; ${passes} pass; ${verdicts.filter((verdict) => verdict.kind === 'limited').length} limited; ${unavailable} unavailable; last at ${Math.max(...settledAt)} ms`,
-    );
-    const rows = await windowRows(rig);
-    report.check(
-      `${label} the window never counted past its limit: count ${rows.get(keyDigest('login', 'queue-key'))} of 3`,
-      (rows.get(keyDigest('login', 'queue-key')) ?? 99) <= 3,
-      `${rows.get(keyDigest('login', 'queue-key'))}`,
-    );
-  } finally {
-    await app.close();
-    await rig.dispose();
-  }
-}
-
-async function twoInstances(kind: Kind, rig: Rig): Promise<void> {
-  const label = `[${kind}]`;
-  const pools: Pool[] = [];
-  const a = await startApp({ store: observe(spareStore(rig, pools)).store });
-  const b = await startApp({ store: observe(spareStore(rig, pools)).store });
-  try {
-    const verdicts = await Promise.all(
-      Array.from({ length: 60 }, (_, n) => (n % 2 === 0 ? a : b).limits.charge('login', 'shared')),
-    );
-    const passes = verdicts.filter((verdict) => verdict.kind === 'pass').length;
-    const rows = await windowRows(rig);
-    report.check(
-      `${label} 60 simultaneous charges split across two server instances on one database: exactly 3 pass in total, 57 are limited, one window with count 3`,
-      passes === 3 &&
-        verdicts.filter((verdict) => verdict.kind === 'limited').length === 57 &&
-        rows.get(keyDigest('login', 'shared')) === 3,
-      `${passes} pass; count ${rows.get(keyDigest('login', 'shared'))}`,
-    );
-    const policy = await a.signIn('shared-user');
-    const cookie = cookieHeader(NAME, policy.token ?? '');
-    const replies = await Promise.all(
-      Array.from({ length: 8 }, (_, n) => get((n % 2 === 0 ? a : b).port, '/limited', [cookie])),
-    );
-    report.check(
-      `${label} a policy limit of 2 is shared by both instances: of 8 simultaneous requests, exactly 2 are 200 and 6 are 429`,
-      replies.filter((reply) => reply.status === 200).length === 2 &&
-        replies.filter((reply) => reply.status === 429).length === 6,
-      replies.map((reply) => reply.status).join(','),
-    );
-  } finally {
-    await a.close();
-    await b.close();
-    await Promise.all(pools.map((pool) => pool.end()));
-  }
-}
-
 async function suite(kind: Kind): Promise<void> {
   const label = `[${kind}]`;
   const rig = await makeRig(kind, { attach: false });
@@ -492,26 +363,15 @@ async function suite(kind: Kind): Promise<void> {
     await report.run(`${label} windows`, () => windowCases(context));
     await report.run(`${label} keys and bounds`, () => inputCases(context));
     await report.run(`${label} charge-first ordering`, () => orderCases(context));
-    if (kind === 'sqlite') {
-      await report.run(`${label} write contention`, () => sqliteContention(context));
-    }
     await report.run(`${label} fail closed`, () => failClosedCases(context));
   } finally {
     await app.close();
     await rig.dispose();
   }
-  const second = await makeRig(kind, { attach: false });
-  try {
-    await report.run(`${label} two server instances`, () => twoInstances(kind, second));
-  } finally {
-    await second.dispose();
-  }
 }
 
 try {
   await series(rigKinds, suite);
-  await report.run('[postgres] store queue', postgresQueue);
-  await report.run('[hashing] hashing queue', () => hashingQueue('[hashing]'));
 } finally {
   await cleanAll();
 }

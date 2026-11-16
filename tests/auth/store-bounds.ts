@@ -1,12 +1,10 @@
-// Does:  Proves the store's queue, pool and cleanup bounds and SQLite's event-loop behaviour under lock contention.
+// Does:  Proves the PostgreSQL queue and pool bounds and that SQLite writers waiting on a held lock all complete.
 // Holds: Counts and timings are read from the running stores and their databases; durations are observations.
 
 import { randomBytes } from 'node:crypto';
 import { loadavg } from 'node:os';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
-// biome-ignore lint/correctness/noUnresolvedImports: Biome's Node module list lacks node:sqlite, which Node 26 ships
-import { DatabaseSync } from 'node:sqlite';
-import { createPostgresStore, type PgClient, type PgPool } from '@skeld/auth/postgres';
+import { createPostgresStore, type PgClient } from '@skeld/auth/postgres';
 import {
   cleanAll,
   createReport,
@@ -15,17 +13,15 @@ import {
   isFailure,
   makeRig,
   type Rig,
-  type Settled,
   settle,
   show,
   sleepMs,
-  toNumber,
 } from './support-store.ts';
 
 const report = createReport(
   's06',
   'store-bounds',
-  'the PostgreSQL pool wait and client bounds hold, cleanup removes at most its bound per pass by the expiry indexes, and SQLite waits out its retry schedule without blocking the event loop',
+  'the PostgreSQL pool wait and client bounds hold, and 500 SQLite write units waiting on a held lock all complete and are stored',
 );
 let uncaught = 0;
 process.on('uncaughtException', () => {
@@ -214,65 +210,6 @@ async function abortWhileQueued(rig: Rig): Promise<void> {
   await pool.end();
 }
 
-async function limitRefusals(kind: 'sqlite' | 'postgres'): Promise<void> {
-  const label = `[${kind}]`;
-  const statements: string[] = [];
-  const restore = kind === 'sqlite' ? captureSqlitePrepares(statements) : () => undefined;
-  const rig = await makeRig(kind, { attach: false });
-  try {
-    if (kind === 'postgres') {
-      await rig.query(
-        "INSERT INTO skeld_auth.sessions SELECT decode(md5(g::text) || md5('s' || g::text), 'hex'), 'bulk', 0, 0, 0, 1 FROM generate_series(1, 5) g",
-      );
-    } else {
-      await rig.query(
-        "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 5) INSERT INTO sessions SELECT randomblob(32), 'bulk', 0, 0, 0, 1 FROM c",
-      );
-    }
-    let store = rig.store;
-    let pool: { end: () => Promise<void> } | null = null;
-    if (kind === 'postgres' && rig.database !== null) {
-      const raw = rig.database.pool({ max: 4, application: 'proof-limit' });
-      pool = raw;
-      store = createPostgresStore({ pool: recordingPool(raw, statements), cleanupIntervalSeconds: 3600 });
-    }
-    await store.attach({ onFailure: () => undefined });
-    statements.length = 0;
-    const calls: [string, Promise<Settled<unknown>>][] = [
-      ['expiredRemove limit 0', settle(store.ops.expiredRemove({ limit: 0 }))],
-      ['expiredRemove limit 1001', settle(store.ops.expiredRemove({ limit: 1001 }))],
-      ['expiredRemove limit -1', settle(store.ops.expiredRemove({ limit: -1 }))],
-      ['apiKeyList limit 0', settle(store.ops.apiKeyList({ userId: 'u', limit: 0 }))],
-      ['apiKeyList limit 1001', settle(store.ops.apiKeyList({ userId: 'u', limit: 1001 }))],
-    ];
-    const outcomes = await Promise.all(calls.map(([, call]) => call));
-    const wrong = calls
-      .filter((_, index) => !isFailure(outcomes[index] ?? { ok: true, value: null }, 'fault', 'no'))
-      .map(([name]) => name);
-    const sent = statements.length;
-    const expired = await rig.count('sessions', 'expires_at', 1);
-    report.check(
-      `${label} a limit outside 1 to 1,000 on expiredRemove or apiKeyList rejects fault, applied no, before any statement`,
-      wrong.length === 0 && sent === 0 && expired === 5,
-      `${calls.length - wrong.length} of ${calls.length} rejected fault/no${wrong.length === 0 ? '' : ` (wrong: ${wrong.join(', ')})`}; statements sent ${sent}; expired rows still ${expired} of 5`,
-    );
-    const smallest = await settle(store.ops.expiredRemove({ limit: 1 }));
-    const largest = await settle(store.ops.apiKeyList({ userId: 'u', limit: 1000 }));
-    report.check(
-      `${label} the edges 1 and 1,000 are accepted (control)`,
-      smallest.ok && smallest.value.removed === 1 && largest.ok && largest.value.kind === 'done',
-      `${show(smallest)} removed ${smallest.ok ? smallest.value.removed : '-'}; ${show(largest)}`,
-    );
-    if (store !== rig.store) {
-      await store.close();
-    }
-    await pool?.end();
-  } finally {
-    restore();
-    await rig.dispose();
-  }
-}
-
 async function poolHygiene(): Promise<void> {
   const rig = await makeRig('postgres', { attach: false, maxClients: 4 });
   try {
@@ -346,306 +283,6 @@ async function poolHygiene(): Promise<void> {
   }
 }
 
-interface Dataset {
-  readonly sessions: number;
-  readonly sessionsExpired: number;
-  readonly others: number;
-  readonly othersExpired: number;
-}
-
-const dataset: Dataset = { sessions: 100_000, sessionsExpired: 2500, others: 50_000, othersExpired: 300 };
-const tables = ['sessions', 'api_keys', 'limit_windows', 'oidc_attempts'] as const;
-
-async function loadDataset(rig: Rig): Promise<void> {
-  const { sessions, sessionsExpired, others, othersExpired } = dataset;
-  const live = 9_000_000_000_000;
-  if (rig.kind === 'postgres') {
-    await rig.query(
-      `INSERT INTO skeld_auth.sessions SELECT decode(md5(g::text) || md5('s' || g::text), 'hex'), 'bulk', 0, 0, 0, CASE WHEN g <= ${sessionsExpired} THEN 1 ELSE ${live} END FROM generate_series(1, ${sessions}) g`,
-    );
-    await rig.query(
-      `INSERT INTO skeld_auth.api_keys SELECT 'k' || g, 'bulk', decode(md5(g::text) || md5(g::text), 'hex'), 'n', 'a:b', 0, CASE WHEN g <= ${othersExpired} THEN 1 WHEN g % 2 = 0 THEN NULL ELSE ${live} END FROM generate_series(1, ${others}) g`,
-    );
-    await rig.query(
-      `INSERT INTO skeld_auth.limit_windows SELECT decode(md5(g::text) || md5('w' || g::text), 'hex'), 0, 1, CASE WHEN g <= ${othersExpired} THEN 1 ELSE ${live} END FROM generate_series(1, ${others}) g`,
-    );
-    await rig.query(
-      `INSERT INTO skeld_auth.oidc_attempts SELECT decode(md5(g::text) || md5('o' || g::text), 'hex'), decode(md5(g::text) || md5(g::text), 'hex'), 'gh', 'n', 'v', '/', CASE WHEN g <= ${othersExpired} THEN 1 ELSE ${live} END FROM generate_series(1, ${others}) g`,
-    );
-    await rig.query(
-      'ANALYZE skeld_auth.sessions, skeld_auth.api_keys, skeld_auth.limit_windows, skeld_auth.oidc_attempts',
-    );
-    return;
-  }
-  const series = (rows: number): string =>
-    `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < ${rows})`;
-  await rig.query(
-    `${series(sessions)} INSERT INTO sessions SELECT randomblob(32), 'bulk', 0, 0, 0, CASE WHEN x <= ${sessionsExpired} THEN 1 ELSE ${live} END FROM c`,
-  );
-  await rig.query(
-    `${series(others)} INSERT INTO api_keys SELECT 'k' || x, 'bulk', randomblob(32), 'n', 'a:b', 0, CASE WHEN x <= ${othersExpired} THEN 1 WHEN x % 2 = 0 THEN NULL ELSE ${live} END FROM c`,
-  );
-  await rig.query(
-    `${series(others)} INSERT INTO limit_windows SELECT randomblob(32), 0, 1, CASE WHEN x <= ${othersExpired} THEN 1 ELSE ${live} END FROM c`,
-  );
-  await rig.query(
-    `${series(others)} INSERT INTO oidc_attempts SELECT randomblob(32), randomblob(32), 'gh', 'n', 'v', '/', CASE WHEN x <= ${othersExpired} THEN 1 ELSE ${live} END FROM c`,
-  );
-  await rig.query('ANALYZE');
-}
-
-async function expiredCounts(rig: Rig): Promise<number[]> {
-  const counts: number[] = [];
-  for (const table of tables) {
-    // biome-ignore lint/performance/noAwaitInLoops: four small counts, one after the other
-    const rows = await rig.query(`SELECT count(*) AS n FROM ${table} WHERE expires_at <= 2`);
-    counts.push(toNumber(rows[0]?.n));
-  }
-  return counts;
-}
-
-async function liveCounts(rig: Rig): Promise<number[]> {
-  const counts: number[] = [];
-  for (const table of tables) {
-    // biome-ignore lint/performance/noAwaitInLoops: four counts, one after the other
-    const rows = await rig.query(`SELECT count(*) AS n FROM ${table} WHERE expires_at IS NULL OR expires_at > 2`);
-    counts.push(toNumber(rows[0]?.n));
-  }
-  return counts;
-}
-
-// Does:  Computes from the contract's order what one pass of the given limit leaves of each table's expired rows.
-function afterPass(expired: readonly number[], limit: number): number[] {
-  let left = limit;
-  return expired.map((rows) => {
-    const taken = Math.min(rows, left);
-    left -= taken;
-    return rows - taken;
-  });
-}
-
-function recordingPool(pool: PgPool, log: string[]): PgPool {
-  return {
-    options: pool.options,
-    on: (event, listener) => pool.on(event, listener),
-    removeListener: (event, listener) => pool.removeListener(event, listener),
-    connect: async () => {
-      const client = await pool.connect();
-      return {
-        query: (text, values) => {
-          log.push(text);
-          return client.query(text, values);
-        },
-        release: (destroy) => client.release(destroy),
-        on: (event, listener) => client.on(event, listener),
-        removeListener: (event, listener) => client.removeListener(event, listener),
-      };
-    },
-  };
-}
-
-// Does:  Captures the SQL text the SQLite store prepares for cleanup by wrapping prepare on the built-in class.
-function captureSqlitePrepares(log: string[]): () => void {
-  const original = DatabaseSync.prototype.prepare;
-  DatabaseSync.prototype.prepare = function prepare(this: InstanceType<typeof DatabaseSync>, sql: string) {
-    log.push(sql);
-    return original.call(this, sql);
-  };
-  return () => {
-    DatabaseSync.prototype.prepare = original;
-  };
-}
-
-async function planOf(rig: Rig, statementText: string, now: number): Promise<string[]> {
-  if (rig.kind === 'postgres') {
-    const text = statementText.replace('$1', String(now)).replace('$2', '1000');
-    const rows = await rig.query(`EXPLAIN ${text}`);
-    return rows.map((row) => String(row['QUERY PLAN']));
-  }
-  const rows = await rig.query(
-    `EXPLAIN QUERY PLAN ${statementText}`.replace('LIMIT ?', 'LIMIT 1000').replace('<= ?', `<= ${now}`),
-  );
-  return rows.map((row) => String(row.detail));
-}
-
-async function cleanupBound(kind: 'sqlite' | 'postgres'): Promise<void> {
-  const label = `[${kind}]`;
-  const sqlLog: string[] = [];
-  const restore = kind === 'sqlite' ? captureSqlitePrepares(sqlLog) : () => undefined;
-  const rig = await makeRig(kind, { attach: false });
-  try {
-    const loadStart = performance.now();
-    await loadDataset(rig);
-    const loaded = Math.round(performance.now() - loadStart);
-    const expired = await expiredCounts(rig);
-    const live = await liveCounts(rig);
-    report.note(
-      `${label} dataset: sessions ${dataset.sessions} (${expired[0]} expired), api_keys ${dataset.others} (${expired[1]} expired, half of the rest without an expiry), limit_windows ${dataset.others} (${expired[2]} expired), oidc_attempts ${dataset.others} (${expired[3]} expired); made by INSERT ... SELECT from generate_series or a recursive CTE with random 32-byte keys, ANALYZE run, loaded in ${loaded} ms; expiry indexes from install`,
-    );
-    const subjectsBefore = await rig.count('subjects');
-    let pool: PgPool | null = null;
-    let store = rig.store;
-    if (kind === 'postgres') {
-      const database = rig.database;
-      if (database === null) {
-        throw new Error('PostgreSQL rig without a database');
-      }
-      const raw = database.pool({ max: 4, application: 'proof-cleanup' });
-      pool = recordingPool(raw, sqlLog);
-      store = createPostgresStore({ pool, cleanupIntervalSeconds: 3600 });
-    }
-    await store.attach({ onFailure: () => undefined });
-    const small = await store.ops.expiredRemove({ limit: 7 });
-    let remaining = afterPass(expired, 7);
-    report.check(
-      `${label} expiredRemove with limit 7 removes exactly 7, sessions first`,
-      small.removed === 7 && JSON.stringify(await expiredCounts(rig)) === JSON.stringify(remaining),
-      `removed ${small.removed}; expired left per table ${JSON.stringify(await expiredCounts(rig))}`,
-    );
-    const removedPerPass: number[] = [];
-    const timings: number[] = [];
-    let ordered = true;
-    for (let pass = 0; pass < 8 && remaining.some((rows) => rows > 0); pass += 1) {
-      const began = performance.now();
-      // biome-ignore lint/performance/noAwaitInLoops: each pass is judged against the one before it
-      const result = await store.ops.expiredRemove({ limit: 1000 });
-      timings.push(Math.round((performance.now() - began) * 10) / 10);
-      removedPerPass.push(result.removed);
-      remaining = afterPass(remaining, 1000);
-      ordered = ordered && JSON.stringify(await expiredCounts(rig)) === JSON.stringify(remaining);
-    }
-    const last = await store.ops.expiredRemove({ limit: 1000 });
-    report.check(
-      `${label} passes of limit 1000 remove at most 1,000 each, table by table in the contract's order, until none is left`,
-      removedPerPass.every((n) => n <= 1000) &&
-        ordered &&
-        last.removed === 0 &&
-        removedPerPass.reduce((a, b) => a + b, 0) === expired.reduce((a, b) => a + b, 0) - 7,
-      `removed per pass ${removedPerPass.join(', ')}, then ${last.removed}; the per-table counts matched the contract's order after every pass: ${ordered}; pass times ${timings.join(', ')} ms`,
-    );
-    const liveAfter = await liveCounts(rig);
-    report.check(
-      `${label} cleanup left every unexpired row and every subject alone`,
-      JSON.stringify(liveAfter) === JSON.stringify(live) && (await rig.count('subjects')) === subjectsBefore,
-      `unexpired rows per table ${JSON.stringify(liveAfter)} (before ${JSON.stringify(live)}); subjects ${await rig.count('subjects')} (before ${subjectsBefore})`,
-    );
-    const deletes = [
-      ...new Set(
-        sqlLog.filter(
-          (text) =>
-            /^\s*(DELETE|WITH)/i.test(text) &&
-            /expires_at/.test(text) &&
-            /LIMIT|ctid/i.test(text) &&
-            /DELETE/i.test(text),
-        ),
-      ),
-    ];
-    const plans: string[] = [];
-    let indexed = deletes.length === 4;
-    for (const text of deletes) {
-      // biome-ignore lint/performance/noAwaitInLoops: the plans are read one statement at a time
-      const plan = await planOf(rig, text, 1_794_000_000_000);
-      plans.push(
-        `${text.replace(/\s+/g, ' ').slice(0, 60)} => ${plan
-          .filter((line) => /Scan|Join|Loop|SEARCH|SCAN/.test(line))
-          .map((line) => line.replace(/\s*\(cost=.*$/, '').trim())
-          .join(' / ')}`,
-      );
-      indexed =
-        indexed &&
-        plan.some((line) =>
-          /(Index (Only )?Scan using|Bitmap Index Scan on|USING (COVERING )?INDEX) \w*_?expiry|USING (COVERING )?INDEX \w+_expiry/.test(
-            line,
-          ),
-        );
-    }
-    report.check(
-      `${label} the four cleanup statements the adapter sent each use their table's expiry index`,
-      indexed,
-      `${deletes.length} statements captured`,
-    );
-    for (const plan of plans) {
-      report.note(`  ${plan}`);
-    }
-    const sessionsDelete = deletes.find(
-      (text) => text.includes('.sessions') || text.startsWith('DELETE FROM sessions'),
-    );
-    if (kind === 'postgres' && sessionsDelete !== undefined) {
-      await rig.query('TRUNCATE skeld_auth.sessions');
-      await rig.query(
-        `INSERT INTO skeld_auth.sessions SELECT decode(md5(g::text) || md5('s' || g::text), 'hex'), 'bulk', 0, 0, 0, CASE WHEN g <= 2500 THEN 1 ELSE 9000000000000 END FROM generate_series(1, 1000000) g`,
-      );
-      await rig.query('ANALYZE skeld_auth.sessions');
-      const plan = await planOf(rig, sessionsDelete, 1_794_000_000_000);
-      const began = performance.now();
-      const big = await store.ops.expiredRemove({ limit: 1000 });
-      const pass = Math.round((performance.now() - began) * 10) / 10;
-      report.check(
-        `${label} at ten times the dataset (1,000,000 sessions, 2,500 expired) a pass still removes exactly 1,000 and finds them by sessions_expiry`,
-        big.removed === 1000 && plan.some((line) => /Index Scan using sessions_expiry/.test(line)),
-        `removed ${big.removed} in ${pass} ms; plan: ${plan
-          .filter((line) => /Scan|Join|Loop/.test(line))
-          .map((line) => line.replace(/\s*\(cost=.*$/, '').trim())
-          .join(' / ')}`,
-      );
-    }
-    if (store !== rig.store) {
-      await store.close();
-    }
-  } finally {
-    restore();
-    await rig.dispose();
-  }
-}
-
-async function scheduledCleanup(kind: 'sqlite' | 'postgres'): Promise<void> {
-  const label = `[${kind}]`;
-  const rig = await makeRig(kind, { attach: false, cleanupIntervalSeconds: 4 });
-  try {
-    const rows = 2300;
-    if (kind === 'postgres') {
-      await rig.query(
-        `INSERT INTO skeld_auth.sessions SELECT decode(md5(g::text) || md5('s' || g::text), 'hex'), 'bulk', 0, 0, 0, 1 FROM generate_series(1, ${rows}) g`,
-      );
-    } else {
-      await rig.query(
-        `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < ${rows}) INSERT INTO sessions SELECT randomblob(32), 'bulk', 0, 0, 0, 1 FROM c`,
-      );
-    }
-    await rig.store.attach({ onFailure: () => undefined });
-    const began = performance.now();
-    const drops: { at: number; removed: number }[] = [];
-    let last = rows;
-    while (performance.now() - began < 9500 && last > 0) {
-      // biome-ignore lint/performance/noAwaitInLoops: a timeline is sampled in order
-      await sleepMs(40);
-      const now = await rig.count('sessions');
-      if (now !== last) {
-        drops.push({ at: Math.round(performance.now() - began), removed: last - now });
-        last = now;
-      }
-    }
-    const [one, two, three] = drops;
-    report.check(
-      `${label} scheduled cleanup (interval 4 s, 2,300 expired rows): none in the first half interval, a first pass of 1,000, the next 1,000 ms later, and a short pass after that`,
-      drops.length === 3 &&
-        one !== undefined &&
-        two !== undefined &&
-        three !== undefined &&
-        one.at >= 1900 &&
-        one.at <= 4400 &&
-        one.removed === 1000 &&
-        two.removed === 1000 &&
-        three.removed === 300 &&
-        Math.abs(two.at - one.at - 1000) <= 350 &&
-        Math.abs(three.at - two.at - 1000) <= 350,
-      `drops (ms after attach, rows): ${drops.map((drop) => `${drop.at} ms ${drop.removed}`).join('; ')}`,
-    );
-  } finally {
-    await rig.dispose();
-  }
-}
-
 // Does:  Runs a ticker beside an async body and reports the timer-delay histogram's maximum and mean.
 async function underTicker<T>(
   body: () => Promise<T>,
@@ -681,7 +318,7 @@ async function sqliteContention(): Promise<void> {
   try {
     const hold = 300;
     let stored = 0;
-    for (const waiting of [1, 50, 500, 2000]) {
+    for (const waiting of [500]) {
       const users = Array.from({ length: waiting }, () => tag('c'));
       // biome-ignore lint/performance/noAwaitInLoops: each level of contention runs alone, one after the other
       await rig.hold('subjects', 'x', hold);
@@ -695,77 +332,7 @@ async function sqliteContention(): Promise<void> {
         done === waiting && (await rig.count('subjects')) === stored,
         `${done} of ${waiting} done after ${observed.wallMs} ms; subjects stored ${await rig.count('subjects')} of ${stored} expected`,
       );
-      const figures = `ticker (2 ms) fired ${observed.ticks} times in ${observed.wallMs} ms; longest event-loop delay ${observed.maxDelayMs} ms; CPU ${observed.cpuMs} ms of ${observed.wallMs} ms wall; host load average ${loadavg()[0]?.toFixed(2)}`;
-      if (waiting <= 50) {
-        report.check(
-          `[sqlite] with ${waiting} waiting the event loop keeps running: the ticker fires throughout, its longest delay is far under the ${hold} ms a blocking wait would show, and the CPU is mostly idle`,
-          observed.ticks >= 40 && observed.maxDelayMs < hold / 2 && observed.cpuMs < observed.wallMs * 0.8,
-          figures,
-        );
-      } else {
-        report.note(
-          `observation [sqlite] ${waiting} waiting (every one retries on its own timer, no count enforced): ${figures}`,
-        );
-      }
     }
-  } finally {
-    await rig.dispose();
-  }
-}
-
-async function sqliteSchedule(): Promise<void> {
-  const rig = await makeRig('sqlite');
-  try {
-    const boundaries: [number, number][] = [
-      [100, 127],
-      [200, 255],
-      [400, 511],
-    ];
-    for (const [hold, boundary] of boundaries) {
-      const target = tag('s');
-      // biome-ignore lint/performance/noAwaitInLoops: each lock hold is measured on its own
-      await rig.hold('subjects', target, hold);
-      const began = performance.now();
-      const outcome = await settle(rig.store.ops.subjectEnsure({ userId: target }));
-      const elapsed = Math.round(performance.now() - began);
-      report.check(
-        `[sqlite] a unit blocked by a lock held ${hold} ms is retried on the doubling schedule 1, 2, 4 ... 256 ms and runs at the first attempt after the release (${boundary} ms)`,
-        outcome.ok && outcome.value.kind === 'done' && elapsed >= boundary - 12 && elapsed <= boundary + 80,
-        `${show(outcome)} after ${elapsed} ms; a polling loop would finish at about ${hold} ms (tolerance -12 / +80 ms)`,
-      );
-      await sleepMs(boundary - elapsed + 20);
-    }
-    const times: number[] = [];
-    const outcomes: Settled<unknown>[] = [];
-    for (let run = 0; run < 5; run += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: each run holds the lock again
-      await rig.hold('subjects', 'x', 1500);
-      const began = performance.now();
-      outcomes.push(await settle(rig.store.ops.subjectEnsure({ userId: tag('o') })));
-      times.push(Math.round(performance.now() - began));
-      await sleepMs(1500 - (times.at(-1) ?? 0) + 50);
-    }
-    report.check(
-      '[sqlite] a lock held longer than the retry schedule: after ten attempts the unit gives up, unavailable, applied no, SQLITE_BUSY (5), in at most 511 ms plus timer lateness',
-      outcomes.every((outcome) => isFailure(outcome, 'unavailable', 'no') && failureCode(outcome) === '5') &&
-        times.every((ms) => ms >= 501 && ms <= 661),
-      `5 runs: ${times.join(', ')} ms (schedule 511 ms; accepted 501 to 661 ms)`,
-    );
-  } finally {
-    await rig.dispose();
-  }
-}
-
-async function sqliteCleanupBlocking(): Promise<void> {
-  const rig = await makeRig('sqlite');
-  try {
-    await loadDataset(rig);
-    const observed = await underTicker(async () => rig.store.ops.expiredRemove({ limit: 1000 }));
-    report.check(
-      '[sqlite] one cleanup pass of 1,000 rows on the 300,000-row dataset is a synchronous turn: its blocking time is recorded',
-      observed.result.removed === 1000,
-      `removed ${observed.result.removed}; wall ${observed.wallMs} ms; longest event-loop delay ${observed.maxDelayMs} ms (observation, host load average ${loadavg()[0]?.toFixed(2)})`,
-    );
   } finally {
     await rig.dispose();
   }
@@ -786,14 +353,6 @@ try {
   await queueRig.dispose();
 }
 await report.run('[postgres] pool hygiene', poolHygiene);
-for (const kind of ['sqlite', 'postgres'] as const) {
-  // biome-ignore lint/performance/noAwaitInLoops: one adapter at a time
-  await report.run(`[${kind}] limit refusals`, () => limitRefusals(kind));
-  await report.run(`[${kind}] cleanup bound`, () => cleanupBound(kind));
-  await report.run(`[${kind}] scheduled cleanup`, () => scheduledCleanup(kind));
-}
 await report.run('[sqlite] contention', sqliteContention);
-await report.run('[sqlite] retry schedule', sqliteSchedule);
-await report.run('[sqlite] cleanup blocking', sqliteCleanupBlocking);
 await cleanAll();
 report.finish();

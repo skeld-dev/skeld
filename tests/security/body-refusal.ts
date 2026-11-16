@@ -5,18 +5,21 @@ import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { defineContract } from '@skeld/core/contract';
+import { HttpError } from '@skeld/core/http-error';
 import { createServer } from '@skeld/core/server';
 import * as t from '@skeld/core/schema';
 import { check, conclude, parseRaw, rawExchange } from '../support/support.ts';
 import { startServerChild } from '../support/support-typesystem.ts';
 
 const statement =
-  'ADR-033: body refusal survives a delayed reader, closes stalled/flooding peers within its grace, blocks pipelined handlers, and releases capacity on close and shutdown';
+  'ADR-033: body refusal survives a delayed reader, closes stalled/flooding peers within its grace, blocks pipelined handlers whether the onRequest hook passes, throws or sends, and releases capacity on close and shutdown';
 const body = t.object({ title: t.string({ maxLength: 36 }) });
 const ok = t.object({ ok: t.boolean() });
 const contract = defineContract({
   upload: { method: 'POST', path: '/upload', body, responses: { 200: ok } },
   slow: { method: 'POST', path: '/slow', body, responses: { 200: ok } },
+  uploadThrow: { method: 'POST', path: '/upload-throw', body, responses: { 200: ok } },
+  uploadSend: { method: 'POST', path: '/upload-send', body, responses: { 200: ok } },
   later: { method: 'GET', path: '/later', responses: { 200: ok } },
   stats: {
     method: 'GET',
@@ -29,8 +32,18 @@ async function serve(): Promise<void> {
   const server = createServer({ closeTimeoutMs: 100 });
   let reached = 0;
   server.addHook('onRequest', (context) => {
-    if (context.route.name === 'later') {
+    const name = context.route.name;
+    if (name === 'later') {
       reached++;
+    }
+    if (name === 'uploadThrow' || name === 'uploadSend') {
+      return (async () => {
+        await delay(50);
+        if (name === 'uploadThrow') {
+          throw new HttpError(401, 'UNAUTHORIZED', 'no');
+        }
+        context.send({ status: 401, payload: '{"status":401}' });
+      })();
     }
   });
   server.addHook('onError', async (context) => {
@@ -42,6 +55,8 @@ async function serve(): Promise<void> {
   server.routes(contract, {
     upload: answer,
     slow: answer,
+    uploadThrow: answer,
+    uploadSend: answer,
     later: () => {
       reached++;
       return answer();
@@ -129,8 +144,12 @@ function exchange(port: number, initial: string, blocked = false, flood = false)
   });
 }
 
-function verify(problems: string[], label: string, result: Result): void {
-  check(problems, result.status === 413 && result.complete, `${label}: incomplete 413 ${JSON.stringify(result)}`);
+function verify(problems: string[], label: string, result: Result, status = 413): void {
+  check(
+    problems,
+    result.status === status && result.complete,
+    `${label}: incomplete ${status} ${JSON.stringify(result)}`,
+  );
   check(problems, result.responseMs !== null && result.responseMs < 400, `${label}: response waited for upload`);
   check(problems, result.closedMs < 1500, `${label}: connection exceeded grace plus scheduling allowance`);
 }
@@ -167,12 +186,19 @@ async function main(): Promise<void> {
 
     const pipeline = 'GET /later HTTP/1.1\r\nHost: x\r\n\r\n';
     await Promise.all(
-      ['/upload', '/slow'].map(async (path) => {
+      (
+        [
+          ['/upload', 413],
+          ['/slow', 413],
+          ['/upload-throw', 401],
+          ['/upload-send', 401],
+        ] as const
+      ).map(async ([path, status]) => {
         const result = await exchange(
           child.port,
           head(path, 'Content-Length: 1481', 'keep-alive') + ' '.repeat(1481) + pipeline,
         );
-        verify(problems, `pipeline ${path}`, result);
+        verify(problems, `pipeline ${path}`, result, status);
       }),
     );
     const statsResponse = await fetch(`http://127.0.0.1:${child.port}/stats`);

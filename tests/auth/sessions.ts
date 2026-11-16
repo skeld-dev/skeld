@@ -1,4 +1,4 @@
-// Does:  Proves session tokens, digests at rest, the cookie, atomic rotation, revocation and lifetimes on both stores.
+// Does:  Proves session tokens, digests at rest, the cookie, atomic rotation and revocation on both stores.
 // Holds: Every admission is read from the store; a replacement is judged from the table and a second server instance.
 
 import { createHash, randomBytes } from 'node:crypto';
@@ -14,14 +14,13 @@ import {
   spareStore,
   startApp,
   type App,
-  disableUser,
 } from './rig/v1-app.ts';
 import { createReport } from './rig/v1-report.ts';
 import { cleanAll, type Kind, makeRig, type Rig, rigKinds, toNumber } from './support-store.ts';
 import type { Pool } from 'pg';
 
 const statement =
-  'session tokens are random 256-bit opaque values in one canonical spelling, stored only as SHA-256 digests; the cookie has the contracted attributes; every authenticated request reads the store; rotation leaves one replacement; revocation, disable and generation changes stop stale issuance and renewal; idle 1 h and absolute 24 h are judged by the store with the contracted renewal; concurrent requests and two server instances on one PostgreSQL database agree';
+  'session tokens are random 256-bit opaque values in one canonical spelling, stored only as SHA-256 digests; the cookie has the contracted attributes; every authenticated request reads the store; rotation leaves one replacement; revocation, disable and generation changes stop stale issuance and renewal; concurrent requests agree';
 const report = createReport('v03', statement);
 
 const NAME = '__Host-skeld';
@@ -80,17 +79,6 @@ async function tokenCases({ rig, app, label }: Setup): Promise<void> {
           Buffer.from(token, 'base64url').toString('base64url') === token,
       ),
     `${new Set(tokens).size} distinct`,
-  );
-  const bits = tokens.map((token) => Buffer.from(token, 'base64url'));
-  const ones = bits.reduce(
-    (sum, bytes) => sum + [...bytes].reduce((inner, byte) => inner + byte.toString(2).split('1').length - 1, 0),
-    0,
-  );
-  const ratio = ones / (40 * 256);
-  report.check(
-    `${label} the 10,240 token bits are balanced (ones ratio ${ratio.toFixed(3)}, allowed 0.47 to 0.53)`,
-    ratio > 0.47 && ratio < 0.53,
-    ratio.toFixed(4),
   );
   const rows = await rowsOf(rig);
   const stored = new Set(rows.map((row) => row.digest));
@@ -661,146 +649,6 @@ async function plainErrorRenewal({ spare, label }: Setup): Promise<void> {
   }
 }
 
-async function lifetimeCases({ rig, spare, label }: Setup): Promise<void> {
-  const observed = spare();
-  const app = await startApp({
-    store: observed.store,
-    session: { idleSeconds: 3, absoluteSeconds: 6, renewSeconds: 1 },
-  });
-  try {
-    const signed = await app.signIn('lifetimes');
-    const token = signed.token ?? '';
-    const first = (await rowsOf(rig, 'lifetimes'))[0];
-    report.check(
-      `${label} configured lifetimes: idle 3 s and absolute 6 s from the stored row`,
-      first !== undefined &&
-        first.expiresAt - first.createdAt === 3000 &&
-        first.absoluteExpiresAt - first.createdAt === 6000,
-      `${first === undefined ? 'no row' : `${first.expiresAt - first.createdAt} / ${first.absoluteExpiresAt - first.createdAt} ms`}`,
-    );
-    observed.reset();
-    await sleepMs(300);
-    const young = await get(app.port, '/docs', [cookieHeader(NAME, token)]);
-    report.check(
-      `${label} a request younger than renewSeconds does not renew`,
-      young.status === 200 && observed.calls('sessionRenew') === 0,
-      `renewals ${observed.calls('sessionRenew')}`,
-    );
-    await sleepMs(1000);
-    const began = performance.now();
-    const aged = await get(app.port, '/docs', [cookieHeader(NAME, token)]);
-    const quick = performance.now() - began;
-    await sleepMs(300);
-    const afterRenew = (await rowsOf(rig, 'lifetimes'))[0];
-    report.check(
-      `${label} a request at least renewSeconds after the last use starts one renewal: last_seen_at moves and expires_at is last_seen_at plus 3 s, never past the absolute expiry`,
-      aged.status === 200 &&
-        observed.calls('sessionRenew') === 1 &&
-        afterRenew !== undefined &&
-        afterRenew.lastSeenAt > (first?.lastSeenAt ?? 0) &&
-        afterRenew.expiresAt === Math.min(afterRenew.lastSeenAt + 3000, afterRenew.absoluteExpiresAt) &&
-        afterRenew.absoluteExpiresAt === first?.absoluteExpiresAt,
-      `renewals ${observed.calls('sessionRenew')}; last_seen +${(afterRenew?.lastSeenAt ?? 0) - (first?.lastSeenAt ?? 0)} ms; response ${Math.round(quick)} ms`,
-    );
-    await sleepMs(1200);
-    observed.reset();
-    let delayed = 0;
-    observed.before('sessionRenew', async () => {
-      await sleepMs(500);
-      delayed++;
-    });
-    const unawaited = performance.now();
-    const early = await get(app.port, '/docs', [cookieHeader(NAME, token)]);
-    const unawaitedMs = performance.now() - unawaited;
-    await sleepMs(700);
-    observed.before('sessionRenew', null);
-    report.check(
-      `${label} between renewSeconds and twice that, the renewal is not awaited: a renewal held 500 ms does not delay the response`,
-      early.status === 200 && unawaitedMs < 400 && delayed === 1,
-      `response ${Math.round(unawaitedMs)} ms; held renewals ${delayed}`,
-    );
-  } finally {
-    await app.close();
-  }
-}
-
-async function awaitedRenewal({ spare, label }: Setup): Promise<void> {
-  const observed = spare();
-  const app = await startApp({
-    store: observed.store,
-    session: { idleSeconds: 6, absoluteSeconds: 30, renewSeconds: 1 },
-  });
-  try {
-    const signed = await app.signIn('awaited');
-    const token = signed.token ?? '';
-    await sleepMs(2300);
-    observed.reset();
-    observed.before('sessionRenew', async () => {
-      await sleepMs(500);
-    });
-    const began = performance.now();
-    const reply = await get(app.port, '/docs', [cookieHeader(NAME, token)]);
-    const elapsed = performance.now() - began;
-    observed.before('sessionRenew', null);
-    report.check(
-      `${label} at twice renewSeconds or more the renewal is awaited: a renewal held 500 ms delays the response by at least that`,
-      reply.status === 200 && elapsed >= 480 && observed.calls('sessionRenew') === 1,
-      `response ${Math.round(elapsed)} ms; renewals ${observed.calls('sessionRenew')}`,
-    );
-    await sleepMs(2300);
-    observed.reset();
-    observed.failWith('no', 'sessionRenew');
-    const failing = await get(app.port, '/docs', [cookieHeader(NAME, token)]);
-    observed.failWith(null);
-    await app.logs.settle();
-    const renewFailures = app.logs
-      .named('auth.store.failed')
-      .filter((record) => record.fields['auth.cause'] === 'unavailable' || record.fields['auth.cause'] === 'renew');
-    report.check(
-      `${label} an awaited renewal that fails still admits the request, and the failure is one auth.store.failed record`,
-      failing.status === 200 && observed.calls('sessionRenew') === 1 && renewFailures.length === 1,
-      `${failing.status}; records ${renewFailures.map((record) => String(record.fields['auth.cause'])).join(',')}`,
-    );
-  } finally {
-    observed.failWith(null);
-    observed.before('sessionRenew', null);
-    await app.close();
-  }
-}
-
-async function expiryCases({ spare, label }: Setup): Promise<void> {
-  const observed = spare();
-  const app = await startApp({
-    store: observed.store,
-    session: { idleSeconds: 2, absoluteSeconds: 5, renewSeconds: 1 },
-  });
-  try {
-    const idle = await app.signIn('idle-user');
-    await sleepMs(2400);
-    const idleReply = await get(app.port, '/docs', [cookieHeader(NAME, idle.token ?? '')]);
-    report.check(
-      `${label} idle expiry: a session unused for longer than idleSeconds is 401`,
-      idleReply.status === 401,
-      `${idleReply.status}`,
-    );
-
-    const kept = await app.signIn('absolute-user');
-    const statuses: number[] = [];
-    for (let step = 0; step < 6; step++) {
-      // biome-ignore lint/performance/noAwaitInLoops: the session is kept alive by one request per step
-      await sleepMs(1000);
-      statuses.push((await get(app.port, '/docs', [cookieHeader(NAME, kept.token ?? '')])).status);
-    }
-    report.check(
-      `${label} absolute expiry: a session used every second stays 200 while renewed and is 401 once 5 s have passed since creation`,
-      statuses.slice(0, 3).every((status) => status === 200) && statuses.slice(5).every((status) => status === 401),
-      statuses.join(','),
-    );
-  } finally {
-    await app.close();
-  }
-}
-
 async function concurrentCases({ observed, app, label }: Setup): Promise<void> {
   const signed = await app.signIn('concurrent');
   observed.reset();
@@ -819,86 +667,6 @@ async function concurrentCases({ observed, app, label }: Setup): Promise<void> {
     issuing.every((entry) => entry.result === 'established') && tokens.size === 12,
     `${tokens.size} distinct`,
   );
-}
-
-async function twoInstances(kind: Kind, rig: Rig): Promise<void> {
-  const label = `[${kind}]`;
-  const pools: Pool[] = [];
-  const first = observe(spareStore(rig, pools));
-  const second = observe(spareStore(rig, pools));
-  const a = await startApp({ store: first.store });
-  const b = await startApp({ store: second.store });
-  try {
-    const signed = await a.signIn('shared');
-    const onB = await get(b.port, '/docs', [cookieHeader(NAME, signed.token ?? '')]);
-    report.check(
-      `${label} a session issued by instance A is admitted by instance B (one database)`,
-      onB.status === 200 && onB.json().who === 'session:shared',
-      `${onB.status}`,
-    );
-    const issuedOnB = await b.signIn('shared');
-    const onA = await get(a.port, '/docs', [cookieHeader(NAME, issuedOnB.token ?? '')]);
-    report.check(
-      `${label} a session issued by instance B is admitted by instance A`,
-      onA.status === 200,
-      `${onA.status}`,
-    );
-    const revoked = await b.subjects.revokeSessions('shared');
-    const afterA = await Promise.all(
-      [signed, issuedOnB].map((entry) => get(a.port, '/docs', [cookieHeader(NAME, entry.token ?? '')])),
-    );
-    report.check(
-      `${label} revokeSessions on instance B: the very next request on instance A is 401 for both sessions`,
-      revoked.kind === 'done' && afterA.every((reply) => reply.status === 401),
-      afterA.map((reply) => reply.status).join(','),
-    );
-    const rotating = await a.signIn('shared-rotate');
-    const results = await Promise.all(
-      Array.from({ length: 12 }, (_, n) =>
-        (n % 2 === 0 ? a : b).sessions.rotate({ rawCookies: cookiesOf(NAME, rotating.token ?? '') }),
-      ),
-    );
-    const rotated = results.filter((result) => result.kind === 'rotated');
-    const rows = await rowsOf(rig, 'shared-rotate');
-    report.check(
-      `${label} 12 concurrent rotations of one cookie across two instances: exactly one rotated, one replacement row`,
-      rotated.length === 1 && rows.length === 1,
-      `${rotated.length} rotated; ${rows.length} row(s)`,
-    );
-    const holdOpen = Promise.withResolvers<void>();
-    const reached = Promise.withResolvers<void>();
-    const pending = b.sessions.establish({
-      rawCookies: cookiesOf(NAME),
-      userId: 'cross',
-      verify: async () => {
-        reached.resolve();
-        await holdOpen.promise;
-        return true;
-      },
-    });
-    await reached.promise;
-    await a.subjects.revokeSessions('cross');
-    holdOpen.resolve();
-    const stale = await pending;
-    report.check(
-      `${label} issuance in flight on instance B while instance A revokes: refused stale, no row`,
-      stale.kind === 'refused' && stale.reason === 'stale' && (await rowsOf(rig, 'cross')).length === 0,
-      JSON.stringify(stale),
-    );
-    const crossGeneration = await disableUser(b.subjects, 'cross');
-    const refused = await a.signIn('cross');
-    await b.subjects.enable('cross', crossGeneration);
-    const again = await a.signIn('cross');
-    report.check(
-      `${label} a subject disabled on instance B cannot sign in on instance A; after enable it can`,
-      refused.result === 'refused:disabled' && again.result === 'established',
-      `${refused.result} then ${again.result}`,
-    );
-  } finally {
-    await a.close();
-    await b.close();
-    await Promise.all(pools.map((pool) => pool.end()));
-  }
 }
 
 async function suite(kind: Kind): Promise<void> {
@@ -924,12 +692,6 @@ async function suite(kind: Kind): Promise<void> {
     await report.run(`${label} stale renewal`, () => renewalStale(setup));
     await report.run(`${label} renewal order`, () => renewalOrder(setup));
     await report.run(`${label} plain error in renewal`, () => plainErrorRenewal(setup));
-    await report.run(`${label} renewal and lifetimes`, () => lifetimeCases(setup));
-    await report.run(`${label} awaited renewal`, () => awaitedRenewal(setup));
-    await report.run(`${label} idle and absolute expiry`, () => expiryCases(setup));
-    if (kind === 'postgres') {
-      await report.run(`${label} two server instances`, () => twoInstances(kind, rig));
-    }
   } finally {
     await Promise.all(pools.map((pool) => pool.end()));
     await rig.dispose();

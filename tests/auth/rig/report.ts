@@ -1,8 +1,7 @@
-// Does:  Reports each case of a V05 or V06 proof script on stdout and in the task's evidence file.
-// Holds: The file is written once, at finish; the exit code is non-zero when any case failed.
+// Does:  Reports each case of a V05 or V06 proof script on stdout.
+// Holds: The exit code is non-zero when any case failed.
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export interface Report {
@@ -14,12 +13,10 @@ export interface Report {
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 
-export function createReport(task: 'v05' | 'v06', script: string, statement: string): Report {
-  const lines: string[] = [];
+export function createReport(_task: 'v05' | 'v06', script: string, statement: string): Report {
   let cases = 0;
   let failed = 0;
   const emit = (line: string): void => {
-    lines.push(line);
     process.stdout.write(`${line}\n`);
   };
   let commit = 'no git';
@@ -51,9 +48,6 @@ export function createReport(task: 'v05' | 'v06', script: string, statement: str
     },
     finish: () => {
       emit(`${cases - failed} of ${cases} cases passed`);
-      const dir = `${root}.project/features/0.2.0-auth/evidence/${task}`;
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(`${dir}/${script}.txt`, `${lines.join('\n')}\n`);
       process.exitCode = failed === 0 ? 0 : 1;
     },
   };

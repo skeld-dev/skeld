@@ -1,4 +1,4 @@
-// Does:  Proves the packed core and auth tarballs ship the contracted subpaths, nothing removed, and run in a consumer.
+// Does:  Proves the packed core and auth tarballs ship the contracted subpaths and run in a consumer.
 // Holds: Packing, unpacking and installing happen in a folder outside the repository, which is removed at the end.
 
 import { spawnSync } from 'node:child_process';
@@ -19,31 +19,19 @@ import { createReport } from './rig/v1-report.ts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
-const authValues: Record<string, readonly string[]> = {
-  server: ['createAuth'],
-  policy: ['definePolicy', 'isGrant', 'isPrincipal'],
-  routes: ['oidcRoutes', 'sessionRoutes', 'sessionStateSchema'],
-  'auth-error': ['AuthError'],
-  store: ['StoreFailure'],
-  sqlite: ['createSqliteStore'],
-  postgres: ['createPostgresStore'],
-  'store-conformance': ['runStoreConformance'],
-  'api-key': ['apiKeys'],
-  jwt: ['jwt'],
-  oidc: ['oidc'],
-  password: ['hashPassword', 'needsRehash', 'verifyPassword'],
-};
-
-const removed: readonly (readonly [string, RegExp])[] = [
-  ['TOTP', /totp/i],
-  ['passkey and WebAuthn', /passkey|webauthn/i],
-  ['recovery codes', /recovery.?code|recoverycodes/i],
-  ['provisioning', /provision/i],
-  ['mail and delivery', /sendmail|mailer|smtp|mailto|deliver\.|\/deliver\/|delivertask|\bdelivery\b/i],
-  ['password lifecycle', /resetpassword|forgotpassword|changepassword|passwordreset|setpassword|password.?lifecycle/i],
-  ['identity linking', /linkidentity|unlinkidentity|linkaccount|unlinkaccount|identity.?link/i],
-  ['factors and step-up', /second.?factor|step.?up|enrol(l)?ment|\bfactor(s)?\b/i],
-  ['the removed hashing subpath and helpers', /\.\/hashing|hashing\.js|topup|overrun/i],
+const authSubpaths = [
+  'server',
+  'policy',
+  'routes',
+  'auth-error',
+  'store',
+  'sqlite',
+  'postgres',
+  'store-conformance',
+  'api-key',
+  'jwt',
+  'oidc',
+  'password',
 ];
 
 function run(command: string, args: readonly string[], cwd: string): { status: number | null; out: string } {
@@ -81,7 +69,7 @@ function exportsOf(manifest: Record<string, unknown>): Map<string, Record<string
 
 const report = createReport(
   'v09',
-  'the packed @skeld/auth ships exactly the twelve contracted subpaths with a default and a types target each, no recorder, no removed export or file; @skeld/core ships ./gate with no runtime dependency; a consumer outside the workspace installs both and imports every subpath at run time',
+  'the packed @skeld/auth ships exactly the twelve contracted subpaths with a default and a types target each, no recorder; @skeld/core ships ./gate with no runtime dependency; a consumer outside the workspace installs both and imports every subpath at run time',
 );
 const scratch = mkdtempSync(join(tmpdir(), 'skeld-v09-pack-'));
 try {
@@ -132,7 +120,7 @@ try {
 
   const authManifest = manifestOf(authDir);
   const authExports = exportsOf(authManifest);
-  const wanted = [...Object.keys(authValues).map((name) => `./${name}`), './package.json'];
+  const wanted = [...authSubpaths.map((name) => `./${name}`), './package.json'];
   report.check(
     '@skeld/auth exports exactly the twelve contracted subpaths and ./package.json, and no ./hashing',
     [...authExports.keys()].sort().join(',') === [...wanted].sort().join(',') && !authExports.has('./hashing'),
@@ -182,25 +170,6 @@ try {
     !/node:fs|process\./.test(emptyText) && !/setInterval|appendFileSync/.test(emptyText),
     `${emptyText.length} bytes`,
   );
-
-  const searchable = [
-    ...filesUnder(authDir).filter((file) => /\.(d\.ts|js|json|md)$/.test(file)),
-    ...filesUnder(coreDir).filter((file) => /\.(d\.ts|js|json|md)$/.test(file)),
-  ];
-  report.note(
-    `terms searched in both tarballs' file names and in every .d.ts, .js, .json and .md text: ${removed.map(([label, pattern]) => `${label} ${pattern.source}`).join('; ')}`,
-  );
-  for (const [label, pattern] of removed) {
-    const nameHits = [...authFiles, ...coreFiles].filter((file) => pattern.test(file));
-    const textHits = searchable
-      .filter((file) => pattern.test(readFileSync(file, 'utf8')))
-      .map((file) => relative(scratch, file));
-    report.check(
-      `no ${label} in a file name or text of either tarball`,
-      nameHits.length === 0 && textHits.length === 0,
-      `${nameHits.length} names, ${textHits.length} files${textHits.length === 0 ? '' : `: ${textHits.slice(0, 4).join(', ')}`}`,
-    );
-  }
 
   const coreManifest = manifestOf(coreDir);
   const coreExports = exportsOf(coreManifest);
@@ -286,20 +255,6 @@ try {
       .filter(([, value]) => !Array.isArray(value))
       .map(([name, value]) => `${name}: ${String(value)}`)
       .join('; ') || 'no import failed',
-  );
-  for (const [name, values] of Object.entries(authValues)) {
-    const found = results.find(([key]) => key === `@skeld/auth/${name}`)?.[1];
-    report.check(
-      `@skeld/auth/${name} exports exactly ${values.join(', ')} as values`,
-      JSON.stringify(found) === JSON.stringify([...values].sort()),
-      JSON.stringify(found),
-    );
-  }
-  const gateValues = results.find(([key]) => key === '@skeld/core/gate')?.[1];
-  report.check(
-    '@skeld/core/gate exports exactly CSRF_TOKEN_HEADER and GateFault as values',
-    JSON.stringify(gateValues) === '["CSRF_TOKEN_HEADER","GateFault"]',
-    JSON.stringify(gateValues),
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });

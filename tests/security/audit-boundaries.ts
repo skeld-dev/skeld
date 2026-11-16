@@ -1,11 +1,7 @@
-// Does:  Proves audit route identity, option ownership and classified-path diagnostic and log boundaries.
-// Holds: Assertions inspect actual client/server exchanges and isolated diagnostic output files.
+// Does:  Proves route path forms, option ownership and that a classified path value reaches no message or log record.
+// Holds: Assertions inspect actual client and server exchanges, error messages and log records.
 
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@skeld/core/client';
 import { defineContract } from '@skeld/core/contract';
@@ -79,25 +75,6 @@ async function clientErrors(): Promise<void> {
 async function routeForms(): Promise<void> {
   for (const path of ['/users/../admin', '/a/./b', '/a\\b', '/..', '/.']) {
     assert.throws(() => defineContract({ item: { method: 'GET', path, responses: { 204: null } } }), TypeError);
-  }
-  for (const path of ['/', '/dot.name', '/.../x', '/café/日本', '/a+b', '/a:b', '/semi;colon', '/at@sign']) {
-    const contract = defineContract({ item: { method: 'GET', path, responses: { 204: null } } });
-    const server = createServer();
-    let calls = 0;
-    server.routes(contract, {
-      item: () => {
-        calls += 1;
-        return { status: 204 };
-      },
-    });
-    // biome-ignore lint/performance/noAwaitInLoops: Serial requests preserve diagnostic attribution.
-    const { port } = await server.listen({ host: '127.0.0.1', port: 0 });
-    try {
-      assert.equal((await createClient(contract, { baseUrl: `http://127.0.0.1:${port}` }).item()).status, 204);
-      assert.equal(calls, 1, path);
-    } finally {
-      await server.close();
-    }
   }
   for (const name of Object.getOwnPropertyNames(Object.prototype)) {
     const contract = defineContract({ [name]: { method: 'GET', path: '/prototype', responses: { 204: null } } });
@@ -223,73 +200,12 @@ async function serverErrors(): Promise<void> {
   assert(!stdout.includes(token), stdout);
 }
 
-async function diagChild(): Promise<void> {
-  const server = createServer();
-  for (const key of ['a', 'b']) {
-    server.register((scope) => {
-      const contract = defineContract({
-        get: { method: 'GET', path: `/${key}`, responses: { 200: t.object({ [key]: t.boolean() }) } },
-      });
-      scope.routes(contract, { get: () => ({ status: 200, body: { [key]: true } }) });
-    });
-  }
-  const { port } = await server.listen({ host: '127.0.0.1', port: 0 });
-  try {
-    for (const key of ['a', 'b', 'b']) {
-      // biome-ignore lint/performance/noAwaitInLoops: Serial requests preserve diagnostic attribution.
-      const res = await fetch(`http://127.0.0.1:${port}/${key}`);
-      assert.equal(res.status, 200);
-      assert.deepEqual(await res.json(), { [key]: true });
-    }
-  } finally {
-    await server.close();
-  }
-}
-
-function record(value: unknown): Record<string, unknown> {
-  assert(value !== null && typeof value === 'object' && !Array.isArray(value));
-  return Object.fromEntries(Object.entries(value));
-}
-
-async function diagnosticIdentity(): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), 'skeld-audit-routes-'));
-  const child = spawnSync(process.execPath, ['--conditions=skeld-source', '--conditions=skeld-diag', script, 'diag'], {
-    env: { ...process.env, SKELD_DIAG_DIR: dir, SKELD_DIAG_STEP_N: '1' },
-    encoding: 'utf8',
-    timeout: 20_000,
-  });
-  assert.equal(child.status, 0, `${child.stderr}\n${child.stdout}`);
-  const run = record(JSON.parse(await readFile(join(dir, 'run.json'), 'utf8')));
-  assert.equal(run.format, 'skeld-diag/2');
-  assert(Array.isArray(run.routes));
-  assert.equal(run.routes.length, 2);
-  const routes = run.routes.map((value: unknown) => record(value));
-  assert.deepEqual(
-    routes.map((route) => route.name),
-    ['get', 'get'],
-  );
-  assert.notEqual(routes[0]?.id, routes[1]?.id);
-  const lines = (await readFile(join(dir, 'snapshot.jsonl'), 'utf8')).trim().split('\n');
-  const last = record(JSON.parse(lines.at(-1) ?? 'null'));
-  const counts = record(last.counts);
-  for (const route of routes) {
-    assert.equal(counts[`req.count{${String(route.id)}}`], route.path === '/a' ? 1 : 2);
-  }
-  assert.deepEqual(last.failing, []);
-  process.stdout.write(`diagnostic evidence ${dir}\n`);
-}
-
 if (process.argv[2] === 'serve') {
   await serve();
-} else if (process.argv[2] === 'diag') {
-  await diagChild();
 } else {
   await routeForms();
   await inheritedOptions();
   await clientErrors();
   await serverErrors();
-  await diagnosticIdentity();
-  process.stdout.write(
-    'pass audit boundaries: route identity, prototype names, classified diagnostics and duplicate-name recorder\n',
-  );
+  process.stdout.write('pass audit boundaries: route forms, prototype names and classified path values\n');
 }

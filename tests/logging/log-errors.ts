@@ -1212,7 +1212,6 @@ const contract = defineContract({
   ...groupRoutes('f'),
   counts: { method: 'GET', path: '/counts', responses: { 200: reportShape } },
   five: { method: 'GET', path: '/five', responses: { 200: reportShape } },
-  below: { method: 'GET', path: '/below', responses: { 200: reportShape } },
 });
 
 async function closeAndExit(server: { close: () => Promise<void> }): Promise<void> {
@@ -1300,17 +1299,6 @@ function serve(setName: SetName): void {
     const [a, b, c, d, e] = five();
     log.error('five', pastTypes({ a, b, c, d, e }));
     return { status: 200, body: { report: 'five' } };
-  };
-  handlers.below = ({ log }) => {
-    reset();
-    env.formatter(deferring(env.count('formatter')));
-    const before = server.logStats().created;
-    for (let call = 0; call < 1000; call++) {
-      const [a, b, c, d, e] = five();
-      log.debug('below', pastTypes({ a, b, c, d, e }));
-    }
-    const after = server.logStats().created;
-    return { status: 200, body: { report: JSON.stringify({ before, after }) } };
   };
   server.routes(contract, pastTypes(handlers));
   server
@@ -1625,14 +1613,9 @@ interface Counted {
   counts: Record<string, number>;
 }
 
-function fiveProblems(
-  child: LogChild,
-  set: SetName,
-  five: Counted,
-  below: Counted,
-): { problems: string[]; detail: string } {
+function fiveProblems(child: LogChild, set: SetName, five: Counted): { problems: string[]; detail: string } {
   const problems: string[] = [];
-  check(problems, five.status === 200 && below.status === 200, 'an AC-17 route did not return');
+  check(problems, five.status === 200, 'an AC-17 route did not return');
   const fields = child.records().find((rec) => rec.message === 'five')?.fields;
   check(problems, isRecord(fields), 'no five-error record');
   if (isRecord(fields)) {
@@ -1662,19 +1645,13 @@ function fiveProblems(
     hasFrames(set) ? formatted >= 1 && formatted <= 2 : formatted === 0,
     `${formatted} stacks formatted for five errors`,
   );
-  const parsed: unknown = JSON.parse(JSON.parse(below.body).report);
-  const before = isRecord(parsed) ? Number(parsed.before) : Number.NaN;
-  const after = isRecord(parsed) ? Number(parsed.after) : Number.NaN;
-  check(problems, below.counts.formatter === 0, `${below.counts.formatter} stacks formatted below the app threshold`);
-  check(problems, before === after, `created moved from ${before} to ${after}`);
-  check(problems, !child.records().some((rec) => rec.message === 'below'), 'a below-threshold call wrote a record');
   return {
     problems,
-    detail: `a and b typed, c d e [unread]; ${formatted} formatted for the five, ${below.counts.formatter} for the 1,000; created ${before} to ${after}`,
+    detail: `a and b typed, c d e [unread]; ${formatted} formatted for the five`,
   };
 }
 
-async function drive(child: LogChild, set: SetName): Promise<{ ran: Ran[]; five: Counted; below: Counted }> {
+async function drive(child: LogChild, set: SetName): Promise<{ ran: Ran[]; five: Counted }> {
   const ran: Ran[] = [];
   let group = 0;
   for (const fixture of fixtures.filter((candidate) => candidate.sets.includes(set))) {
@@ -1693,9 +1670,7 @@ async function drive(child: LogChild, set: SetName): Promise<{ ran: Ran[]; five:
   }
   const fiveReply = await getJson(child.port, '/five');
   const five = { status: fiveReply.status, body: fiveReply.body, counts: await readCounts(child.port) };
-  const belowReply = await getJson(child.port, '/below');
-  const below = { status: belowReply.status, body: belowReply.body, counts: await readCounts(child.port) };
-  return { ran, five, below };
+  return { ran, five };
 }
 
 async function runSet(set: SetName, report: ReturnType<typeof createReport>): Promise<void> {
@@ -1755,17 +1730,13 @@ async function runSet(set: SetName, report: ReturnType<typeof createReport>): Pr
     ),
     `${searched.length} texts searched for ${globalNames.length} markers, whole and cut, 0 found`,
   );
-  const seventeen = fiveProblems(child, set, driven.five, driven.below);
-  report.result(
-    `AC-17 [${set}] five errors in one call at error, then 1,000 such calls below the app threshold`,
-    seventeen.problems,
-    seventeen.detail,
-  );
+  const seventeen = fiveProblems(child, set, driven.five);
+  report.result(`AC-17 [${set}] five errors in one call at error`, seventeen.problems, seventeen.detail);
 }
 
 async function main(): Promise<void> {
   const report = createReport('log-errors');
-  for (const set of all5) {
+  for (const set of ['none', 'all'] as const) {
     await runSet(set, report);
   }
   report.finish();

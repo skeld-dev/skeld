@@ -1,4 +1,4 @@
-// Does:  Runs correctness scripts by category, with explicit modes for diagnostics and external integrations.
+// Does:  Runs correctness scripts by suite or category, with an explicit mode for diagnostics.
 // Holds: Each script gets its own process; missing scripts, timeouts and nonzero exits fail the run.
 
 import { spawnSync } from 'node:child_process';
@@ -9,21 +9,13 @@ import { fileURLToPath } from 'node:url';
 
 import { allScripts, categories, selectScripts } from './support/suites.ts';
 
-const fixtures = new Set([
-  'corpus.ts',
-  'diverse-fixture.ts',
-  'log-collector.ts',
-  'log-destination.ts',
-  'support-store.ts',
-]);
+const fixtures = new Set(['corpus.ts', 'diverse-fixture.ts', 'support-store.ts']);
 const diagScripts = [
   'security/malformed-path.ts',
   'security/prototype-poisoning.ts',
   'security/body-limit.ts',
-  'contracts/response-filter.ts',
   'security/error-leak.ts',
   'security/duplicate-host.ts',
-  'contracts/exports-boundary.ts',
 ];
 const [mode = 'all', ...args] = process.argv.slice(2);
 const list = args.length === 1 && args[0] === '--list';
@@ -44,12 +36,6 @@ if (
 function scriptsFor(): readonly string[] {
   if (mode === 'diag' && (args.length === 0 || list)) {
     return diagScripts;
-  }
-  if (mode === 'collector' && args.length === 2 && args[0] === '--collector' && args[1]) {
-    return ['logging/log-collector.ts'];
-  }
-  if (mode === 'destination' && args.length === 0) {
-    return ['logging/log-destination.ts'];
   }
   if (args.length !== 0 && !list) {
     throw new Error('Expected a selection with optional --list');
@@ -82,12 +68,9 @@ for (const script of scripts) {
     flags.push('--disallow-code-generation-from-strings');
   }
   const scriptArgs =
-    mode === 'collector'
-      ? args
-      : profile === 'quick' &&
-          ['schema/differential.ts', 'schema/json-schema.ts', 'schema/serializer-differential.ts'].includes(script)
-        ? ['--schemas', '200']
-        : [];
+    profile === 'quick' && ['schema/differential.ts', 'schema/serializer-differential.ts'].includes(script)
+      ? ['--schemas', '200']
+      : [];
   const scriptStarted = performance.now();
   try {
     const result = spawnSync(
