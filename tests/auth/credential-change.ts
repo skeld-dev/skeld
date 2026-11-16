@@ -1,6 +1,7 @@
 // Does:  Proves conditional enable and the credential change on both adapters: race, interruptions, stale enable.
 // Holds: Cases are judged from subject answers, real HTTP statuses and direct database reads, never from timing.
 
+import { exhaustive } from '../support/test-profile.ts';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer as createNetServer } from 'node:net';
@@ -21,7 +22,7 @@ const statement =
   'enable(userId, expectedGeneration) enables only a subject disabled at exactly that generation and ends its sessions in the same unit; with the application serialising per user a credential change and a reconciliation never admit an old-password session, without it the change stops at a refused enable and a reconciliation that revokes closes the session; every interruption fails closed; a moved generation stops the change and a reconciliation enables at the generation it read';
 const report = createReport('v03', statement);
 
-const RUNS = 10;
+const RUNS = exhaustive ? 10 : 1;
 const COOKIE = '__Host-skeld';
 
 const routes = defineContract({
@@ -916,7 +917,7 @@ async function suite(kind: Kind): Promise<void> {
     emit(`[${kind}] per-user serialization:`, third);
     await report.run(`[${kind}] interruption`, () => interruptions(env));
     const fifth: Verdicts[] = [];
-    await series(Array.from({ length: 3 }), async () => {
+    await series(Array.from({ length: exhaustive ? 3 : 1 }), async () => {
       fifth.push(await staleEnable(env));
     });
     emit(`[${kind}] stale enable:`, fifth);

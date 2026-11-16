@@ -48,9 +48,6 @@ jobs:
           pnpm run api-check
           pnpm run reference-check
           pnpm run examples-check
-      - name: Package and consumer checks
-        run: |
-          pnpm run pack-check
-          pnpm run consumer-check
+      # Full correctness includes auth/pack-contents.ts: pack once, then check both artifacts.
       - name: Website build
         run: pnpm --filter @skeld/website run build

@@ -8,7 +8,8 @@ import { type OidcApp, begin, bootOidc, COOKIE, location } from './rig/oidc-app.
 import { childPki } from './rig/pki.ts';
 import { ecKey, type Json, nowSeconds, providerHost, rsaKey } from './rig/provider.ts';
 import { createReport } from './rig/report.ts';
-import { kinds, makeStoreRig } from './rig/stores.ts';
+import { makeStoreRig } from './rig/stores.ts';
+import { behaviorKinds as kinds } from '../support/test-profile.ts';
 import type { SigningKey } from './rig/provider.ts';
 
 const pki = await childPki(import.meta.url);

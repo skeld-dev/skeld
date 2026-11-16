@@ -27,7 +27,7 @@ const unpackedLimit = 64 * 1024 * 1024;
 const entryLimit = 10_000;
 const block = 512;
 const root = resolve(import.meta.dirname, '..');
-const usage = 'usage: node tools/check-pack-markers.ts <tarball> | --pack | --help\n';
+const usage = 'usage: node tools/check-pack-markers.ts <tarball> [<tarball> ...] | --pack | --help\n';
 const targetList: readonly Target[] = [
   { name: '@skeld/core', folder: 'packages/core', marker: 'skeld:diag-recorder' },
   // Why: Auth's recorder exports no marker constant; the name of the snapshot file it writes is in no shipped file.
@@ -407,7 +407,7 @@ async function main(args: readonly string[]): Promise<number> {
     process.stdout.write(usage);
     return 0;
   }
-  if (arg === undefined || args.length !== 1 || (arg.startsWith('-') && arg !== '--pack')) {
+  if (arg === undefined || (arg === '--pack' ? args.length !== 1 : args.some((value) => value.startsWith('-')))) {
     process.stderr.write(usage);
     return 2;
   }
@@ -416,7 +416,12 @@ async function main(args: readonly string[]): Promise<number> {
     return 3;
   }
   if (arg !== '--pack') {
-    return check(resolve(arg), arg, undefined);
+    let result = 0;
+    for (const tarball of args) {
+      // biome-ignore lint/performance/noAwaitInLoops: bound unpacked memory to one artifact at a time
+      result = Math.max(result, await check(resolve(tarball), tarball, undefined));
+    }
+    return result;
   }
   let worst = 0;
   for (const target of targetList) {

@@ -7,7 +7,8 @@ import { type Browser, type OidcApp, type Trip, begin, bootOidc, COOKIE, locatio
 import { childPki } from './rig/pki.ts';
 import { type Json, type Provider, providerHost, rsaKey } from './rig/provider.ts';
 import { createReport } from './rig/report.ts';
-import { type Kind, kinds, makeStoreRig, type StoreRig } from './rig/stores.ts';
+import { type Kind, makeStoreRig, type StoreRig } from './rig/stores.ts';
+import { behaviorKinds as kinds } from '../support/test-profile.ts';
 import { sleep } from './rig/util.ts';
 
 const pki = await childPki(import.meta.url);

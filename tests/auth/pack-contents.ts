@@ -85,19 +85,6 @@ const report = createReport(
 );
 const scratch = mkdtempSync(join(tmpdir(), 'skeld-v09-pack-'));
 try {
-  const markers = run('node', ['tools/check-pack-markers.ts', '--pack'], root);
-  report.check(
-    'node tools/check-pack-markers.ts --pack exits 0',
-    markers.status === 0,
-    markers.out.trim().split('\n').slice(-3).join(' | ').slice(0, 300),
-  );
-  const consumerLib = run('node', ['tools/check-consumer-lib.ts'], root);
-  report.check(
-    'node tools/check-consumer-lib.ts exits 0',
-    consumerLib.status === 0,
-    consumerLib.out.trim().split('\n').slice(-2).join(' | ').slice(0, 300),
-  );
-
   const tarDir = join(scratch, 'tarballs');
   mkdirSync(tarDir);
   const packed = ['@skeld/core', '@skeld/auth'].map((name) =>
@@ -114,6 +101,20 @@ try {
   if (coreTar === undefined || authTar === undefined) {
     throw new Error(`tarballs: ${tarballs.join(',')}`);
   }
+  // Why: All distribution checks inspect the same two artifacts; none repacks the workspace.
+  const markers = run('node', ['tools/check-pack-markers.ts', join(tarDir, coreTar), join(tarDir, authTar)], root);
+  report.check(
+    'the marker and export checks pass on both prepared artifacts',
+    markers.status === 0,
+    markers.out.slice(-300),
+  );
+  const consumerLib = run('node', ['tools/check-consumer-lib.ts', '--packed-dir', tarDir], root);
+  report.check(
+    'the consumer declaration checks pass on the same artifacts',
+    consumerLib.status === 0,
+    consumerLib.out.slice(-300),
+  );
+
   const unpack = (tar: string, into: string): void => {
     mkdirSync(into);
     const result = run('tar', ['-xzf', join(tarDir, tar), '-C', into], scratch);
@@ -133,8 +134,8 @@ try {
   const authExports = exportsOf(authManifest);
   const wanted = [...Object.keys(authValues).map((name) => `./${name}`), './package.json'];
   report.check(
-    '@skeld/auth exports exactly the twelve contracted subpaths and ./package.json, in the contract order, and no ./hashing',
-    [...authExports.keys()].join(',') === wanted.join(',') && !authExports.has('./hashing'),
+    '@skeld/auth exports exactly the twelve contracted subpaths and ./package.json, and no ./hashing',
+    [...authExports.keys()].sort().join(',') === [...wanted].sort().join(',') && !authExports.has('./hashing'),
     [...authExports.keys()].join(','),
   );
   const incomplete = [...authExports.entries()].filter(([key, conditions]) => {

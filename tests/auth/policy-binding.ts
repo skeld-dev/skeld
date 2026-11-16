@@ -20,7 +20,8 @@ import {
   sleepMs,
 } from './rig/v1-app.ts';
 import { createReport } from './rig/v1-report.ts';
-import { cleanAll, type Kind, makeRig, rigKinds } from './support-store.ts';
+import { cleanAll, type Kind, makeRig } from './support-store.ts';
+import { behaviorKinds as rigKinds } from '../support/test-profile.ts';
 
 const statement =
   'a policy input is the route schema node and arrives validated and typed; tenant membership is judged before the action; a callback that throws, answers a non-boolean or a bad tenant name never admits; load, tenant and action share one 5,000 ms deadline and a late answer is ignored; a grant is released exactly once on every way a request ends';

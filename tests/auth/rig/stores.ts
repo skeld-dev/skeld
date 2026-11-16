@@ -11,10 +11,11 @@ import { createPostgresStore } from '@skeld/auth/postgres';
 import { createSqliteStore } from '@skeld/auth/sqlite';
 import type { AuthStore } from '@skeld/auth/store';
 import { Client, Pool } from 'pg';
+import { storeKinds } from '../../support/test-profile.ts';
 import { pgBase } from '../support-store.ts';
 
 export type Kind = 'sqlite' | 'postgres';
-export const kinds: readonly Kind[] = ['sqlite', 'postgres'];
+export const kinds = storeKinds;
 
 export interface StoreRig {
   readonly kind: Kind;

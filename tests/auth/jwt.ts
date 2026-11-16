@@ -11,7 +11,8 @@ import { type GatedApp, bootGated } from './rig/app.ts';
 import { childPki } from './rig/pki.ts';
 import { type Json, ecKey, nowSeconds, providerHost, rsaKey, sign, type SigningKey } from './rig/provider.ts';
 import { createReport } from './rig/report.ts';
-import { type Kind, kinds, makeStoreRig } from './rig/stores.ts';
+import { type Kind, makeStoreRig } from './rig/stores.ts';
+import { behaviorKinds as kinds } from '../support/test-profile.ts';
 import { sleep } from './rig/util.ts';
 
 const ISSUER = 'https://issuer.example.test';

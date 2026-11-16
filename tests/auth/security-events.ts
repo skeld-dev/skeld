@@ -21,7 +21,8 @@ import type { LogLine } from './rig/app.ts';
 import { childPki } from './rig/pki.ts';
 import { nowSeconds, type Provider, providerHost, sign } from './rig/provider.ts';
 import { createReport } from './rig/report.ts';
-import { type Kind, kinds, makeStoreRig } from './rig/stores.ts';
+import { type Kind, makeStoreRig } from './rig/stores.ts';
+import { behaviorKinds as kinds } from '../support/test-profile.ts';
 import { settleLog, sleep, until } from './rig/util.ts';
 
 const pki = await childPki(import.meta.url);

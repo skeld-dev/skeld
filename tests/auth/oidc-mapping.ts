@@ -9,7 +9,8 @@ import { type OidcApp, begin, bootOidc, COOKIE, location } from './rig/oidc-app.
 import { childPki } from './rig/pki.ts';
 import { providerHost } from './rig/provider.ts';
 import { createReport } from './rig/report.ts';
-import { kinds, makeStoreRig, type StoreRig } from './rig/stores.ts';
+import { makeStoreRig, type StoreRig } from './rig/stores.ts';
+import { behaviorKinds as kinds } from '../support/test-profile.ts';
 
 const pki = await childPki(import.meta.url);
 const report = createReport(

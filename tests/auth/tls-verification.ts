@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { begin, bootOidc, COOKIE, location } from './rig/oidc-app.ts';
 import { loadPki, makePki } from './rig/pki.ts';
 import { providerHost } from './rig/provider.ts';
-import { type Kind, kinds, makeStoreRig } from './rig/stores.ts';
+import { type Kind, makeStoreRig } from './rig/stores.ts';
+import { behaviorKinds as kinds } from '../support/test-profile.ts';
 import { createReport } from './rig/v1-report.ts';
 
 const variants = ['environment', 'agent-subclass', 'agent-lax', 'agent-options', 'check-server-identity'] as const;

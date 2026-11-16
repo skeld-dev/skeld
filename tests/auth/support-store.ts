@@ -14,6 +14,7 @@ import { createPostgresStore } from '@skeld/auth/postgres';
 import { createSqliteStore } from '@skeld/auth/sqlite';
 import { type AuthStore, type StoreEvent, StoreFailure } from '@skeld/auth/store';
 import { Client, Pool } from 'pg';
+import { storeKinds } from '../support/test-profile.ts';
 
 export type Kind = 'sqlite' | 'postgres';
 export type Table = 'subjects' | 'sessions' | 'api_keys' | 'limit_windows' | 'oidc_attempts';
@@ -242,6 +243,8 @@ export interface Rig {
 }
 
 export interface RigOptions {
+  // Does:  Names a database the serial conformance fixture owns and resets; the rig closes its pools, never drops it.
+  database?: PgDatabase;
   cleanupIntervalSeconds?: number;
   maxClients?: number;
   poolMax?: number;
@@ -338,7 +341,7 @@ export async function makeRig(kind: Kind, options: RigOptions = {}): Promise<Rig
       },
     };
   } else {
-    const database = await createDatabase();
+    const database = options.database ?? (await createDatabase());
     const appPool = database.pool({ max: poolMax, application: 'proof-app' });
     const sidePool = new Pool({
       connectionString: database.url(),
@@ -429,7 +432,9 @@ export async function makeRig(kind: Kind, options: RigOptions = {}): Promise<Rig
         await store.close();
         await appPool.end();
         await sidePool.end();
-        await dropDatabase(database.name);
+        if (options.database === undefined) {
+          await dropDatabase(database.name);
+        }
       },
     };
   }
@@ -449,4 +454,4 @@ export async function makeRig(kind: Kind, options: RigOptions = {}): Promise<Rig
   return rig;
 }
 
-export const rigKinds: readonly Kind[] = ['sqlite', 'postgres'];
+export const rigKinds = storeKinds;

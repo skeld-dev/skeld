@@ -17,7 +17,8 @@ import { begin, bootOidc, COOKIE, location } from './rig/oidc-app.ts';
 import { childPki } from './rig/pki.ts';
 import { nowSeconds, providerHost, rsaKey, sign } from './rig/provider.ts';
 import { createReport } from './rig/report.ts';
-import { type Kind, kinds, makeStoreRig } from './rig/stores.ts';
+import { type Kind, makeStoreRig } from './rig/stores.ts';
+import { behaviorKinds as kinds, exhaustive } from '../support/test-profile.ts';
 import { parseRecord, settleLog, sleep } from './rig/util.ts';
 
 const pki = await childPki(import.meta.url);
@@ -294,6 +295,16 @@ const mapFaults: Fault[] = [
   },
 ];
 
+function cleanErrorText(text: string): boolean {
+  return !text.includes(CANARY) && !text.includes('stack');
+}
+
+report.check(
+  'the disclosure check refuses a planted stack trace and callback text',
+  !cleanErrorText(JSON.stringify({ stack: 'private trace' })) && !cleanErrorText(CANARY),
+  'both poisoned controls refused',
+);
+
 async function gateSection(kind: Kind): Promise<void> {
   const tag = `[${kind}]`;
   handled = 0;
@@ -363,7 +374,7 @@ async function gateSection(kind: Kind): Promise<void> {
         Object.assign(hooks, healthy);
         await settleLog(lines);
         const written = pairs(records.filter((record) => record.event_name === 'auth.callback.failed').slice(before));
-        const clean = !reply.text.includes(CANARY) && !JSON.stringify([...reply.text]).includes('stack');
+        const clean = cleanErrorText(reply.text);
         report.check(
           `${tag} ${section}: ${fault.name} gives ${fault.status} ${fault.code}, no handler, one auth.callback.failed ${fault.expect}, no callback text in the response`,
           reply.status === fault.status &&
@@ -542,32 +553,35 @@ async function handoffSection(kind: Kind): Promise<void> {
         (await rig.count('sessions')) === 0,
       `${busy.kind}${busy.kind === 'unavailable' ? `/${busy.outcome}` : ''}; records ${unavailableRecords.map((record) => `${record.event_name} ${JSON.stringify(record.fields)}`).join(' | ')}`,
     );
-    const before = records.filter((record) => record.event_name === 'auth.callback.failed').length;
-    const started = Date.now();
-    const tooLate = await auth.sessions.establish({
-      rawCookies: cookies,
-      userId: 'slow',
-      verify: () => new Promise((resolve) => setTimeout(() => resolve(true), 12_000)),
-    });
-    const took = Date.now() - started;
-    await settleLog(lines);
-    const written = pairs(records.filter((record) => record.event_name === 'auth.callback.failed').slice(before));
-    report.check(
-      `${tag} a verify that answers true after the 10,000 ms deadline is refused callback, with no session, and the late true is ignored`,
-      tooLate.kind === 'refused' &&
-        tooLate.reason === 'callback' &&
-        written.join() === 'handoff.verify:deadline' &&
-        took >= 9900 &&
-        took < 11_500 &&
-        (await rig.count('sessions')) === 0,
-      `${tooLate.kind} after ${took} ms; records ${written.join(', ')}`,
-    );
-    await sleep(2500);
-    report.check(
-      `${tag} the late answer later changed nothing and no callback text is in any record`,
-      (await rig.count('sessions')) === 0 && !lines.some((line) => line.includes(CANARY)),
-      `${lines.length} records`,
-    );
+    // Why: handoff.ts proves this deadline, late-result refusal and event together.
+    if (exhaustive) {
+      const before = records.filter((record) => record.event_name === 'auth.callback.failed').length;
+      const started = Date.now();
+      const tooLate = await auth.sessions.establish({
+        rawCookies: cookies,
+        userId: 'slow',
+        verify: () => new Promise((resolve) => setTimeout(() => resolve(true), 12_000)),
+      });
+      const took = Date.now() - started;
+      await settleLog(lines);
+      const written = pairs(records.filter((record) => record.event_name === 'auth.callback.failed').slice(before));
+      report.check(
+        `${tag} a verify that answers true after the 10,000 ms deadline is refused callback, with no session, and the late true is ignored`,
+        tooLate.kind === 'refused' &&
+          tooLate.reason === 'callback' &&
+          written.join() === 'handoff.verify:deadline' &&
+          took >= 9900 &&
+          took < 11_500 &&
+          (await rig.count('sessions')) === 0,
+        `${tooLate.kind} after ${took} ms; records ${written.join(', ')}`,
+      );
+      await sleep(2500);
+      report.check(
+        `${tag} the late answer later changed nothing and no callback text is in any record`,
+        (await rig.count('sessions')) === 0 && !lines.some((line) => line.includes(CANARY)),
+        `${lines.length} records`,
+      );
+    }
   } finally {
     await server.close();
     await rig.dispose();

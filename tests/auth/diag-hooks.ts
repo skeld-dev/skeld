@@ -9,7 +9,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cookieHeader, get, observe, send, series, sleepMs, startApp } from './rig/v1-app.ts';
 import { createReport } from './rig/v1-report.ts';
-import { cleanAll, type Kind, makeRig, rigKinds } from './support-store.ts';
+import { cleanAll, type Kind, makeRig } from './support-store.ts';
+import { storeKinds as rigKinds } from '../support/test-profile.ts';
 import { hashPassword } from '@skeld/auth/password';
 import { Secret } from '@skeld/core/secret';
 

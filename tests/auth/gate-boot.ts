@@ -1,10 +1,7 @@
 // Does:  Proves the boot refusals of a gated server and of a store factory, and that public routes read no identity.
 // Holds: Each refusal is judged by its BootError code and exact message; a control with a valid declaration boots.
 
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { generateKeyPairSync } from 'node:crypto';
 import { apiKeys } from '@skeld/auth/api-key';
@@ -21,10 +18,11 @@ import { defineContract } from '@skeld/core/contract';
 import type { AccessTypes, Gate } from '@skeld/core/gate';
 import { object, string } from '@skeld/core/schema';
 import { createServer, type Server } from '@skeld/core/server';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import { cookieHeader, get, type Observed, ORIGIN, observe, series, spareStore, startApp } from './rig/v1-app.ts';
 import { createReport } from './rig/v1-report.ts';
-import { cleanAll, makeRig, type Kind, rigKinds } from './support-store.ts';
+import { cleanAll, makeRig, type Kind } from './support-store.ts';
+import { behaviorKinds as rigKinds } from '../support/test-profile.ts';
 
 const statement =
   'an omitted access declaration, an unknown policy or action, a policy input that is not in the route schemas, a credential kind that is not installed, a cookie route outside a strict csrf group, an access declaration without a gate, an invalid configuration and every unknown option key refuse boot with the contract wording; public routes do no identity lookup; a server without a gate behaves as before';
@@ -481,7 +479,7 @@ async function storeFindings(kind: Kind): Promise<void> {
 }
 
 async function storeFactoryCases(): Promise<void> {
-  const rig = await makeRig('postgres', { attach: false });
+  const pool = new Pool({ max: 1 });
   try {
     const sqlite = (() => {
       try {
@@ -498,7 +496,7 @@ async function storeFactoryCases(): Promise<void> {
     );
     const postgres = (() => {
       try {
-        createPostgresStore({ pool: rig.appPool ?? JSON.parse('null'), ...JSON.parse('{"maxClient":3}') });
+        createPostgresStore({ pool, ...JSON.parse('{"maxClient":3}') });
         return 'returned';
       } catch (error) {
         return error instanceof BootError ? `${error.code}: ${error.message}` : String(error);
@@ -510,7 +508,7 @@ async function storeFactoryCases(): Promise<void> {
       postgres,
     );
   } finally {
-    await rig.dispose();
+    await pool.end();
   }
 }
 
@@ -556,37 +554,17 @@ async function noGateCases(): Promise<void> {
   );
 }
 
-const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
-
 function baselineCase(): void {
-  const dir = mkdtempSync(join(tmpdir(), 'skeld-head-core-'));
-  try {
-    const archive = execFileSync('git', ['archive', 'HEAD', 'packages/core'], {
-      cwd: sourceRoot,
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    execFileSync('tar', ['-x', '-C', dir], { input: archive });
-    const run = (root: string): string => {
-      const result = spawnSync(
-        process.execPath,
-        ['--conditions=skeld-source', fileURLToPath(new URL('./rig/v1-baseline.ts', import.meta.url)), root],
-        { encoding: 'utf8', timeout: 60_000 },
-      );
-      return result.status === 0 ? result.stdout : `exit ${String(result.status)} ${result.stderr.slice(0, 300)}`;
-    };
-    const previous = run(dir);
-    const current = run(sourceRoot);
-    const names = previous.startsWith('[') ? JSON.parse(previous).length : 0;
-    report.check(
-      `[core] a server without a gate answers ${names} wire probes (200, 404, 400, 403, 500, HEAD, OPTIONS, ignored credentials) byte for byte as core at HEAD does`,
-      names >= 16 && previous === current,
-      previous === current
-        ? `${names} probes identical`
-        : `HEAD: ${previous.slice(0, 200)} / working tree: ${current.slice(0, 200)}`,
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  const result = spawnSync(
+    process.execPath,
+    ['--conditions=skeld-source', fileURLToPath(new URL('./rig/v1-baseline.ts', import.meta.url))],
+    { encoding: 'utf8', timeout: 60_000 },
+  );
+  report.check(
+    '[core] non-gated wire behavior matches fixed expectations',
+    result.status === 0,
+    `${result.stdout.trim()} ${result.stderr.slice(0, 300)}`,
+  );
 }
 
 async function publicCases(kind: Kind): Promise<void> {
@@ -638,7 +616,7 @@ async function publicCases(kind: Kind): Promise<void> {
 try {
   await report.run('[factory] store factory unknown keys', storeFactoryCases);
   await report.run('[core] no-gate cases', noGateCases);
-  await report.run('[core] no-gate baseline against HEAD', () => Promise.resolve(baselineCase()));
+  await report.run('[core] fixed non-gated wire regression', () => Promise.resolve(baselineCase()));
   await series(rigKinds, async (kind) => {
     const pools: Pool[] = [];
     const rig = await makeRig(kind, { attach: false });

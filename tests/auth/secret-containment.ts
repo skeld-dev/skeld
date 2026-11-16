@@ -26,7 +26,8 @@ import type { Provider } from './rig/provider.ts';
 import { loadPki, makePki } from './rig/pki.ts';
 import { nowSeconds, providerHost, sign } from './rig/provider.ts';
 import { createReport, type Report } from './rig/report.ts';
-import { type Kind, kinds, makeStoreRig } from './rig/stores.ts';
+import { type Kind, makeStoreRig } from './rig/stores.ts';
+import { behaviorKinds as kinds } from '../support/test-profile.ts';
 import { settleLog, sleep } from './rig/util.ts';
 
 interface Surface {

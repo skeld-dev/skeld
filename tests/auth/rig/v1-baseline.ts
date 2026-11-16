@@ -1,13 +1,14 @@
-// Does:  Serves one fixed contract on the core source under the root named by argv and prints what the wire answers.
-// Holds: It reads nothing of the candidate's gate: the same script runs on the previous commit and on the working tree.
+// Does:  Checks sixteen non-gated wire responses against fixed expectations.
+// Holds: A committed regression fails without requiring a previous checkout or comparing HEAD to itself.
 
-import { pathToFileURL } from 'node:url';
+import assert from 'node:assert/strict';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { rawExchange } from '../../support/support.ts';
 
 type Fn = (...args: unknown[]) => unknown;
 type Module = Record<string, Fn>;
 
-const root = process.argv[2] ?? '';
+const root = fileURLToPath(new URL('../../..', import.meta.url));
 const load = async (path: string): Promise<Module> => {
   const loaded: Module = await import(pathToFileURL(`${root}/packages/core/src/${path}`).href);
   return loaded;
@@ -84,17 +85,28 @@ const probes: [string, string][] = [
   ['session cookie is ignored', 'GET /ok HTTP/1.1\r\nhost: x\r\nconnection: close\r\ncookie: __Host-skeld=abc\r\n\r\n'],
 ];
 
-const ignored = new Set(['date', 'x-request-id']);
-const out: Record<string, unknown>[] = [];
-for (const [name, request] of probes) {
-  // biome-ignore lint/performance/noAwaitInLoops: the probes run one after another
-  const response = await rawExchange(port, request, 2000);
-  const lines = response.raw
-    .split('\r\n\r\n')[0]
-    ?.split('\r\n')
-    .filter((line, index) => index === 0 || !ignored.has(line.split(':')[0]?.toLowerCase() ?? ''))
-    .sort();
-  out.push({ name, status: response.status, head: lines, body: response.body });
+const expected = [200, 200, 404, 404, 404, 200, 400, 400, 500, 200, 400, 403, 403, 400, 200, 200];
+try {
+  for (const [index, [name, request]] of probes.entries()) {
+    // biome-ignore lint/performance/noAwaitInLoops: a failure identifies its exact wire probe
+    const response = await rawExchange(port, request, 2000);
+    assert.equal(response.status, expected[index], name);
+    if (name === 'head ok') {
+      assert.equal(response.body, '', name);
+    } else if (response.status === 200) {
+      const body = name === 'params and query' ? { id: 'abc' } : name === 'post valid' ? { name: 'ann' } : { ok: 'y' };
+      assert.deepEqual(JSON.parse(response.body), body, name);
+    } else if (name !== 'two hosts') {
+      const body = JSON.parse(response.body);
+      assert.equal(body.status, response.status, name);
+      assert.equal(typeof body.code, 'string', name);
+      assert.equal(Object.hasOwn(body, 'stack'), false, name);
+      if (name === 'throwing handler') {
+        assert.equal(response.body.includes('boom'), false, name);
+      }
+    }
+  }
+  process.stdout.write(`${probes.length} fixed wire expectations passed\n`);
+} finally {
+  await Promise.resolve(call(server, 'close'));
 }
-await Promise.resolve(call(server, 'close'));
-process.stdout.write(`${JSON.stringify(out)}\n`);

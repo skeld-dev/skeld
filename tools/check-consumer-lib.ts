@@ -37,7 +37,7 @@ const packages = [
   { name: '@skeld/auth', folder: 'auth', built: join(root, 'packages/auth/dist/server/auth.d.ts') },
 ] as const;
 const defaultPages = ['docs/logging/logging.md', 'docs/guides/auth.md', 'docs/guides/auth-obligations.md'];
-const usage = 'usage: node tools/check-consumer-lib.ts [--page <markdown file>] | --help\n';
+const usage = 'usage: node tools/check-consumer-lib.ts [--page <markdown file>] [--packed-dir <directory>] | --help\n';
 const diagnosticPattern = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
 const typesConditions: ReadonlySet<string> = new Set(['types', 'import', 'node', 'default']);
 
@@ -102,19 +102,22 @@ function tsBlocks(page: string, shown: string, first: number): Block[] {
   return blocks;
 }
 
-async function installPacked(project: string, name: string, folder: string): Promise<void> {
+async function installPacked(project: string, name: string, folder: string, packedDir?: string): Promise<void> {
   const destination = join(project, '.packed', folder);
   mkdirSync(destination, { recursive: true });
-  const packed = await run('pnpm', ['--filter', name, 'pack', '--pack-destination', destination], root);
-  if (packed.code !== 0) {
-    throw new CouldNotRun(`pnpm pack of ${name} exited ${String(packed.code)}: ${packed.stderr.trim()}`);
+  if (packedDir === undefined) {
+    const packed = await run('pnpm', ['--filter', name, 'pack', '--pack-destination', destination], root);
+    if (packed.code !== 0) {
+      throw new CouldNotRun(`pnpm pack of ${name} exited ${String(packed.code)}: ${packed.stderr.trim()}`);
+    }
   }
-  const tarballs = readdirSync(destination).filter((file) => file.endsWith('.tgz'));
+  const source = packedDir ?? destination;
+  const tarballs = readdirSync(source).filter((file) => file.startsWith(`skeld-${folder}-`) && file.endsWith('.tgz'));
   const [tarball] = tarballs;
   if (tarball === undefined || tarballs.length !== 1) {
-    throw new CouldNotRun(`pnpm pack of ${name} left ${tarballs.length} tarballs`);
+    throw new CouldNotRun(`Expected one ${name} tarball in ${source}`);
   }
-  const unpacked = await run('tar', ['-xzf', join(destination, tarball), '-C', destination], project);
+  const unpacked = await run('tar', ['-xzf', join(source, tarball), '-C', destination], project);
   if (unpacked.code !== 0) {
     throw new CouldNotRun(`tar exited ${String(unpacked.code)}: ${unpacked.stderr.trim()}`);
   }
@@ -189,7 +192,7 @@ function findings(output: string, blocks: readonly Block[]): string[] {
   return found;
 }
 
-async function check(pages: readonly string[]): Promise<number> {
+async function check(pages: readonly string[], packedDir?: string): Promise<number> {
   for (const { built, folder } of packages) {
     if (!existsSync(built)) {
       throw new CouldNotRun(
@@ -213,7 +216,7 @@ async function check(pages: readonly string[]): Promise<number> {
   try {
     for (const { name, folder } of packages) {
       // biome-ignore lint/performance/noAwaitInLoops: pnpm pack runs once at a time, one tarball per folder.
-      await installPacked(project, name, folder);
+      await installPacked(project, name, folder, packedDir);
     }
     writeProject(project, blocks);
     const compiled = await run(tsc, ['-p', 'tsconfig.json', '--pretty', 'false'], project);
@@ -242,13 +245,23 @@ async function main(args: readonly string[]): Promise<number> {
     process.stdout.write(usage);
     return 0;
   }
-  const page = args.length === 2 && args[0] === '--page' ? args[1] : undefined;
-  if (args.length !== 0 && page === undefined) {
-    process.stderr.write(usage);
-    return 2;
+  const options = new Map<string, string>();
+  for (let index = 0; index < args.length; index += 2) {
+    const flag = args[index];
+    const value = args[index + 1];
+    if ((flag !== '--page' && flag !== '--packed-dir') || !value || value.startsWith('--') || options.has(flag)) {
+      process.stderr.write(usage);
+      return 2;
+    }
+    options.set(flag, value);
   }
+  const page = options.get('--page');
+  const packedDir = options.get('--packed-dir');
   try {
-    return await check(page === undefined ? defaultPages : [page]);
+    return await check(
+      page === undefined ? defaultPages : [page],
+      packedDir === undefined ? undefined : resolve(packedDir),
+    );
   } catch (error) {
     if (error instanceof CouldNotRun) {
       process.stderr.write(`Consumer check could not run: ${error.message}\n`);
