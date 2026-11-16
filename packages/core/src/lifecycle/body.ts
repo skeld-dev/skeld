@@ -71,6 +71,17 @@ export function declaresOverLimit(req: IncomingMessage, limit: number): boolean 
   return declared !== undefined && Number.parseInt(declared, 10) > limit;
 }
 
+// Does:  Tells whether body bytes the request declares are still unread, so its connection cannot carry another.
+export function hasUnreadBody(req: IncomingMessage): boolean {
+  if (req.complete) {
+    return false;
+  }
+  const declared = req.headers['content-length'];
+  return (
+    req.headers['transfer-encoding'] !== undefined || (declared !== undefined && Number.parseInt(declared, 10) > 0)
+  );
+}
+
 // Does:  Reads the body when there is one: returns the outcome now, or a cancel and reports it later through done.
 // Holds: Either an outcome is returned or done is called at most once, never both; never after cancel.
 export function readRouteBody(

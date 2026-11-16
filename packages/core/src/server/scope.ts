@@ -2,7 +2,7 @@
 // Holds: A sealed scope refuses every registration, and one scope has at most one error handler.
 
 import { checkContract } from '../contract/checks.ts';
-import type { ContractRoutes, RouteDefinition, RouteInfo } from '../contract/types.ts';
+import type { Access, ContractRoutes, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import { type ResolvedCors, resolveCors } from '../cors/policy.ts';
 import { type ResolvedCsrf, resolveCsrf } from '../csrf/policy.ts';
 import type { RuntimeHandler } from '../lifecycle/types.ts';
@@ -223,13 +223,23 @@ function toRouteRecords(
   });
 }
 
+// Does:  Copies a policy access into a frozen object of its two names; another value is kept for the checks to refuse.
+function snapshotAccess(access: Access): Access {
+  if (typeof access !== 'object' || access === null) {
+    return access;
+  }
+  const { policy, action } = access;
+  return Object.freeze({ policy, action });
+}
+
 // Why: A field is read once, so an accessor cannot show one value to the checks and register another.
 function snapshotRoute(definition: RouteDefinition): RouteDefinition {
-  const { method, path, params, query, headers, cookies, body, responses } = definition;
+  const { method, path, params, query, headers, cookies, body, responses, access } = definition;
   return Object.freeze({
     method,
     path,
     responses: Object.freeze({ ...responses }),
+    ...(access === undefined ? {} : { access: snapshotAccess(access) }),
     ...(params === undefined ? {} : { params }),
     ...(query === undefined ? {} : { query }),
     ...(headers === undefined ? {} : { headers }),

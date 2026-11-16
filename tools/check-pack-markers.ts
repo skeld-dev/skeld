@@ -1,4 +1,4 @@
-// Does:  Checks that the packed tarball of the core package carries no diagnostic recorder.
+// Does:  Checks that the packed tarballs of core and auth carry every export target and no diagnostic recorder.
 // Holds: The tarball is unpacked in memory under a byte and an entry limit; nothing from it is written or run.
 
 import { spawn } from 'node:child_process';
@@ -16,14 +16,23 @@ interface Entry {
 
 type Unpacked = { readonly entries: readonly Entry[] } | { readonly refused: string };
 
-const marker = 'skeld:diag-recorder';
+interface Target {
+  readonly name: string;
+  readonly folder: string;
+  readonly marker: string;
+}
+
 // Why: The tarball is untrusted input to this tool, so its unpacked size and entry count are bounded.
 const unpackedLimit = 64 * 1024 * 1024;
 const entryLimit = 10_000;
 const block = 512;
 const root = resolve(import.meta.dirname, '..');
-const corePath = join(root, 'packages/core');
 const usage = 'usage: node tools/check-pack-markers.ts <tarball> | --pack | --help\n';
+const targetList: readonly Target[] = [
+  { name: '@skeld/core', folder: 'packages/core', marker: 'skeld:diag-recorder' },
+  // Why: Auth's recorder exports no marker constant; the name of the snapshot file it writes is in no shipped file.
+  { name: '@skeld/auth', folder: 'packages/auth', marker: 'auth-snapshot.jsonl' },
+];
 
 const nodeShipped: ReadonlySet<string> = new Set(['node', 'import', 'module-sync', 'node-addons', 'default']);
 const typesShipped: ReadonlySet<string> = new Set(['types', 'import', 'node', 'default']);
@@ -93,28 +102,30 @@ function parseManifest(text: string): unknown {
   }
 }
 
-function selfTest(): boolean {
-  const manifestPath = join(corePath, 'package.json');
+function selfTest(target: Target): boolean {
+  const { marker } = target;
+  const folderPath = join(root, target.folder);
+  const manifestPath = join(folderPath, 'package.json');
   const entry = diagEntry(parseManifest(readFileSync(manifestPath, 'utf8')));
   if (!hasDiagBranch(entry)) {
     fail('S', `${manifestPath} has no imports["#diag"] skeld-diag branch`);
     return false;
   }
-  const target = packagePath(entry, nodeDiag);
-  if (target === undefined) {
+  const recorder = packagePath(entry, nodeDiag);
+  if (recorder === undefined) {
     fail('S', `imports["#diag"] selects no file under the Node diag conditions`);
     return false;
   }
-  const file = join(corePath, target);
+  const file = join(folderPath, recorder);
   if (!existsSync(file)) {
-    fail('S', `${file} does not exist; build first with pnpm exec tsc -b packages/core`);
+    fail('S', `${file} does not exist; build first with pnpm exec tsc -b ${target.folder}`);
     return false;
   }
   if (!readFileSync(file).includes(marker)) {
     fail('S', `${file} does not contain the marker ${marker}`);
     return false;
   }
-  ok('S', `packages/core/${target} carries the marker`);
+  ok('S', `${target.folder}/${recorder} carries the marker`);
   return true;
 }
 
@@ -194,7 +205,7 @@ function readTar(bytes: Buffer): Unpacked {
   return { entries };
 }
 
-async function check(tarball: string, label: string): Promise<number> {
+async function check(tarball: string, label: string, expected: Target | undefined): Promise<number> {
   const unpacked = await gunzip(tarball);
   const read = typeof unpacked === 'string' ? { refused: unpacked } : readTar(unpacked);
   if ('refused' in read) {
@@ -204,20 +215,58 @@ async function check(tarball: string, label: string): Promise<number> {
   const files = new Map(read.entries.map(({ path, data }) => [path, data]));
   const packed = files.get('package/package.json');
   const manifest = packed === undefined ? undefined : parseManifest(packed.toString('utf8'));
+  const name = isRecord(manifest) && typeof manifest.name === 'string' ? manifest.name : '(no name)';
+  const target = targetList.find((candidate) => candidate.name === name);
+  if (target === undefined || (expected !== undefined && target !== expected)) {
+    fail('read', `${label} is ${name}, not ${expected?.name ?? 'a package this check knows'}`);
+    return 3;
+  }
+  const before = problems;
   const entry = diagEntry(manifest);
   const version = isRecord(manifest) && typeof manifest.version === 'string' ? manifest.version : '(no version)';
   if (entry === undefined) {
-    fail('P1', 'package/package.json does not map #diag; P2 to P6 skipped');
+    fail('P1', `${name}: package/package.json does not map #diag; P2 to P6 skipped`);
   } else {
-    ok('P1', 'package/package.json maps #diag');
-    rules(entry, files, read.entries);
+    ok('P1', `${name}: package/package.json maps #diag`);
+    rules(entry, files, read.entries, target.marker);
   }
-  if (problems === 0) {
-    process.stdout.write(`Pack check passed: @skeld/core ${version} carries no recorder.\n`);
+  exportRule(manifest, files, name);
+  if (problems === before) {
+    process.stdout.write(`Pack check passed: ${name} ${version} carries every export target and no recorder.\n`);
     return 0;
   }
-  process.stderr.write(`Pack check failed: ${problems} problems in ${label}. Do not publish it.\n`);
+  process.stderr.write(`Pack check failed: ${problems - before} problems in ${label}. Do not publish it.\n`);
   return 1;
+}
+
+// Does:  Requires the file each exports subpath selects for Node and for types to be in the tarball.
+function exportRule(manifest: unknown, files: ReadonlyMap<string, Buffer>, name: string): void {
+  const exports = isRecord(manifest) && isRecord(manifest.exports) ? manifest.exports : {};
+  const failures: string[] = [];
+  let count = 0;
+  let sourceOnly = 0;
+  for (const [subpath, entry] of Object.entries(exports)) {
+    // Why: A subpath with no default branch resolves only under skeld-source, inside the repository, and ships nothing.
+    if (isRecord(entry) && !('default' in entry)) {
+      sourceOnly++;
+      continue;
+    }
+    for (const [kind, conditions] of [
+      ['node', nodeShipped],
+      ['types', typesShipped],
+    ] as const) {
+      const target = packagePath(entry, conditions);
+      count++;
+      if (target === undefined || !files.has(`package/${target}`)) {
+        failures.push(`${name} export ${subpath} (${kind}) selects ${target ?? 'no file'}, not in the tarball`);
+      }
+    }
+  }
+  if (count === 0) {
+    failures.push(`${name}: package/package.json has no exports map`);
+  }
+  const shipped = Object.keys(exports).length - sourceOnly;
+  report('P7', failures, `${name}: all ${count} export targets of ${shipped} shipped subpaths are in the tarball`);
 }
 
 interface Targets {
@@ -260,7 +309,7 @@ function report(rule: string, failures: readonly string[], passed: string): void
   }
 }
 
-function rules(diag: unknown, files: ReadonlyMap<string, Buffer>, entries: readonly Entry[]): void {
+function rules(diag: unknown, files: ReadonlyMap<string, Buffer>, entries: readonly Entry[], marker: string): void {
   const { shipped, allowed, forbidden } = targets(diag);
   report(
     'P2',
@@ -302,8 +351,8 @@ function rules(diag: unknown, files: ReadonlyMap<string, Buffer>, entries: reado
   );
 }
 
-async function pack(destination: string, signal: AbortSignal): Promise<string | undefined> {
-  const child = spawn('pnpm', ['--filter', '@skeld/core', 'pack', '--pack-destination', destination], {
+async function pack(packageName: string, destination: string, signal: AbortSignal): Promise<string | undefined> {
+  const child = spawn('pnpm', ['--filter', packageName, 'pack', '--pack-destination', destination], {
     cwd: root,
     stdio: ['ignore', 'ignore', 'pipe'],
     signal,
@@ -331,7 +380,7 @@ async function pack(destination: string, signal: AbortSignal): Promise<string | 
   return tarball;
 }
 
-async function checkPacked(): Promise<number> {
+async function checkPacked(target: Target): Promise<number> {
   const destination = mkdtempSync(join(tmpdir(), 'skeld-pack-'));
   const controller = new AbortController();
   const remove = (): void => rmSync(destination, { recursive: true, force: true });
@@ -343,8 +392,8 @@ async function checkPacked(): Promise<number> {
   process.once('SIGINT', interrupt);
   process.once('SIGTERM', interrupt);
   try {
-    const tarball = await pack(destination, controller.signal);
-    return tarball === undefined ? 3 : await check(join(destination, tarball), tarball);
+    const tarball = await pack(target.name, destination, controller.signal);
+    return tarball === undefined ? 3 : await check(join(destination, tarball), tarball, target);
   } finally {
     process.off('SIGINT', interrupt);
     process.off('SIGTERM', interrupt);
@@ -352,7 +401,7 @@ async function checkPacked(): Promise<number> {
   }
 }
 
-function main(args: readonly string[]): number | Promise<number> {
+async function main(args: readonly string[]): Promise<number> {
   const [arg] = args;
   if (args.length === 1 && arg === '--help') {
     process.stdout.write(usage);
@@ -362,11 +411,19 @@ function main(args: readonly string[]): number | Promise<number> {
     process.stderr.write(usage);
     return 2;
   }
-  if (!selfTest()) {
+  if (!targetList.every(selfTest)) {
     process.stderr.write('Pack check could not run: the self-test failed.\n');
     return 3;
   }
-  return arg === '--pack' ? checkPacked() : check(resolve(arg), arg);
+  if (arg !== '--pack') {
+    return check(resolve(arg), arg, undefined);
+  }
+  let worst = 0;
+  for (const target of targetList) {
+    // biome-ignore lint/performance/noAwaitInLoops: pnpm pack runs once at a time, one tarball per folder.
+    worst = Math.max(worst, await checkPacked(target));
+  }
+  return worst;
 }
 
 process.exitCode = await main(process.argv.slice(2));

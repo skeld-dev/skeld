@@ -9,7 +9,7 @@ import { type CorsRoute, corsRoute } from '../cors/grant.ts';
 import { type CsrfRoute, csrfRoute, isUnsafeMethod } from '../csrf/check.ts';
 import { createDeadlines, type Deadlines } from '../lifecycle/deadline.ts';
 import { expire } from '../lifecycle/error-path.ts';
-import type { EngineRuntime, HookChains, RouteRuntime } from '../lifecycle/types.ts';
+import type { EngineRuntime, HookChains, RouteGateRuntime, RouteRuntime } from '../lifecycle/types.ts';
 import { partSchemasOf } from '../log/classified.ts';
 import type { ServerLog } from '../log/shapes.ts';
 import { createRouter } from '../router/router.ts';
@@ -25,6 +25,15 @@ import { BootError } from './boot-error.ts';
 import { causeMessage } from './cause-message.ts';
 import { pluginName, type RouteRecord, type ScopeState } from './scope.ts';
 import type { ErrorHandler, ResolvedServerOptions } from './types.ts';
+
+// Does:  Whether the server has a gate, and the route gate each route was bound to at listen.
+export interface RouteGates {
+  readonly gated: boolean;
+  readonly bound: ReadonlyMap<RouteRecord, RouteGateRuntime | null>;
+}
+
+// Why: A runtime built without route gates is the runtime of a server without a gate.
+const NO_GATE: RouteGates = Object.freeze({ gated: false, bound: new Map() });
 
 const NO_HOOKS: HookChains = { onRequest: [], preHandler: [], onSend: [], onResponse: [], onError: [] };
 
@@ -117,6 +126,7 @@ function toRouteRuntime(
   errorHandlers: readonly ErrorHandler[],
   options: ResolvedServerOptions,
   deadlines: Deadlines,
+  gates: RouteGates,
 ): RouteRuntime {
   const { info, definition } = route;
   const plugin = pluginName(state);
@@ -153,6 +163,8 @@ function toRouteRuntime(
     info: Object.freeze(info),
     definition,
     handler: route.handler,
+    gate: gates.bound.get(route) ?? null,
+    gated: gates.gated,
     validators,
     serializers,
     bodyLimit,
@@ -187,12 +199,13 @@ function addScope(
   parentErrorHandlers: readonly ErrorHandler[],
   options: ResolvedServerOptions,
   deadlines: Deadlines,
+  gates: RouteGates,
 ): boolean {
   let anyCors = false;
   const hooks = extendChains(parentHooks, state);
   const errorHandlers = extendErrorHandlers(parentErrorHandlers, state);
   for (const route of state.routes) {
-    const runtime = toRouteRuntime(route, state, hooks, errorHandlers, options, deadlines);
+    const runtime = toRouteRuntime(route, state, hooks, errorHandlers, options, deadlines, gates);
     anyCors ||= runtime.cors !== null;
     const { info } = route;
     const added = router.add(info.method, info.path, parsePath(info.path), runtime);
@@ -210,7 +223,7 @@ function addScope(
     end(declared);
   }
   for (const child of state.children) {
-    anyCors = addScope(router, child.state, hooks, errorHandlers, options, deadlines) || anyCors;
+    anyCors = addScope(router, child.state, hooks, errorHandlers, options, deadlines, gates) || anyCors;
   }
   return anyCors;
 }
@@ -221,6 +234,7 @@ export function buildRuntime(
   trustProxy: BlockList | null,
   isClosing: () => boolean,
   log: ServerLog,
+  gates: RouteGates = NO_GATE,
 ): EngineRuntime {
   const span = start('boot.runtime');
   mark();
@@ -232,7 +246,7 @@ export function buildRuntime(
     }
     const router = createRouter<RouteRuntime>();
     const deadlines = createDeadlines(expire);
-    const preflight = addScope(router, root, NO_HOOKS, [], options, deadlines);
+    const preflight = addScope(router, root, NO_HOOKS, [], options, deadlines, gates);
     log.ready([...addTemplates(root, new Set())], process.cwd());
     const errorSerializerSpan = start('boot.error_serializer');
     mark();

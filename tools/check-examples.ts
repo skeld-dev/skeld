@@ -1,9 +1,10 @@
-// Does:  Runs the example clients and checks their documented refusals, logging boundaries and shutdown.
+// Does:  Runs the example clients and the auth walkthrough and checks their refusals, logs and shutdown.
 // Holds: Each server uses a free loopback port and is closed or killed before the check leaves it.
 
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
@@ -157,6 +158,29 @@ async function checkExample(name: 'hello' | 'logging' | 'service'): Promise<void
   }
 }
 
+// Does:  Runs the auth example's own walkthrough script, which picks its port before start since auth needs its origin.
+function checkAuthWalkthrough(): void {
+  const cwd = join(root, 'examples', 'auth');
+  const openssl = spawnSync('openssl', ['version'], { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(openssl.status, 0, 'auth: the walkthrough needs openssl on the PATH for its local certificate');
+  const manifest: unknown = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'));
+  assert.ok(typeof manifest === 'object' && manifest !== null && 'scripts' in manifest);
+  const { scripts } = manifest;
+  assert.ok(typeof scripts === 'object' && scripts !== null && 'walkthrough' in scripts);
+  const { walkthrough } = scripts;
+  assert.ok(typeof walkthrough === 'string');
+  const [command, ...args] = walkthrough.split(' ');
+  assert.equal(command, 'node', `auth: the walkthrough script is not a node command: ${walkthrough}`);
+  // Why: The walkthrough starts an HTTPS provider, two databases and about 90 checks; 120 s allows a loaded host.
+  const run = spawnSync(process.execPath, args, { cwd, encoding: 'utf8', timeout: 120_000 });
+  assert.equal(run.signal, null, `auth walkthrough killed by ${run.signal}: ${run.stderr}`);
+  assert.equal(run.status, 0, `auth walkthrough: ${run.stdout}${run.stderr}`);
+  assert.ok(run.stdout.trimEnd().endsWith('walkthrough passed'), run.stdout);
+  const checks = run.stdout.split('\n').filter((line) => line.startsWith('  ok  ')).length;
+  process.stdout.write(`ok auth: walkthrough passed, ${checks} checks\n`);
+}
+
 await checkExample('hello');
 await checkExample('logging');
 await checkExample('service');
+checkAuthWalkthrough();

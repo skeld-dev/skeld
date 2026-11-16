@@ -14,6 +14,7 @@ import { stageBodyRefusal } from './body-refusal.ts';
 import { settle, timeoutReason } from './deadline.ts';
 import { collectCookies } from './cookies.ts';
 import { faultOf } from './engine-fault.ts';
+import { releaseGrant } from './grant.ts';
 import type { Exchange, Failure } from './exchange.ts';
 import { ErrorContextRecord, runObservers } from './hooks.ts';
 import { pointErrorWritten, pointFailed, pointHookFailed, pointRefused } from './points.ts';
@@ -24,7 +25,7 @@ const FIRST_SERVER_ERROR = 500;
 
 // Does:  Tells whether a value is an instance of an engine class by comparing its prototypes, calling none of its code.
 // Holds: No Proxy, the value or a prototype, is asked for its prototype, and at most CHAIN_MAX prototypes are read.
-function isInstance<T>(value: unknown, type: { readonly prototype: T }): value is T {
+export function isInstance<T>(value: unknown, type: { readonly prototype: T }): value is T {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
@@ -259,6 +260,7 @@ export function expire(exchange: Exchange): void {
   resume(exchange.diag);
   exchange.state = 'timed-out';
   exchange.abort?.abort(timeoutReason());
+  releaseGrant(exchange);
   event('refuse.handler_timeout', route.info.name);
   const { cancelRead } = exchange;
   if (cancelRead !== null) {

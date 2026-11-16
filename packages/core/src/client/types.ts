@@ -18,7 +18,29 @@ export interface ClientOptions {
    * By default a declared status's schema sets it, else 1 MiB; `createClient` throws `TypeError` unless it is a positive integer.
    */
   readonly maxResponseBytes?: number;
+  /**
+   * The one credential the client sends to routes whose access is not `'public'`, only to `baseUrl`'s origin (default none).
+   * A call rejects HttpError `CREDENTIAL_UNAVAILABLE`, sending nothing, when the token function fails or breaks its grammar.
+   */
+  readonly credential?: ClientCredential;
 }
+
+/**
+ * A bearer token, sent as `authorization`, or a session cookie the browser holds, with its CSRF token on unsafe methods.
+ * A bearer token is 1 to 4,096 `b64token` characters; a CSRF token 1 to 256 of `A-Z a-z 0-9 - _`, or `null` for none.
+ */
+export type ClientCredential =
+  | {
+      /** How the credential is sent: a bearer token, or the session cookie the browser holds. */
+      readonly kind: 'bearer';
+      /** Gives the bearer token; called once for each call that sends it. */
+      readonly token: () => string | Promise<string>;
+    }
+  | {
+      readonly kind: 'session';
+      /** Gives the CSRF token, or `null` for none; called once for each unsafe call that sends it. */
+      readonly csrfToken: () => string | null | Promise<string | null>;
+    };
 
 /** Every status from 200 to 599, the range a call can resolve with. */
 export type FetchStatus =

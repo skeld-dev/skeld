@@ -1,4 +1,4 @@
-// Does: Copies the current page's public Markdown and offers a selectable fallback.
+// Does:  Copies the current page's public Markdown and offers a selectable fallback.
 // Holds: The source loads only on demand; failures preserve a working native Markdown link.
 
 export function mountMarkdown(root: ParentNode): () => void {

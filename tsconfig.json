@@ -8,6 +8,12 @@
       "path": "./packages/core"
     },
     {
+      "path": "./packages/auth"
+    },
+    {
+      "path": "./examples/auth"
+    },
+    {
       "path": "./examples/hello"
     },
     {

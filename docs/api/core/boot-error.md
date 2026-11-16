@@ -22,7 +22,11 @@ export type BootErrorCode =
   | 'INVALID_BOUND'
   | 'SECRET_IN_RESPONSE'
   | 'NESTED_TOO_DEEP'
-  | 'CODEGEN_UNAVAILABLE';
+  | 'CODEGEN_UNAVAILABLE'
+  | 'ACCESS_WITHOUT_GATE'
+  | 'ACCESS_UNDECLARED'
+  | 'ACCESS_REFUSED'
+  | 'GATE_FAILED';
 ```
 
 Source: `packages/core/src/server/boot-error.ts:10`
@@ -49,4 +53,4 @@ export class BootError extends Error {
 }
 ```
 
-Source: `packages/core/src/server/boot-error.ts:31`
+Source: `packages/core/src/server/boot-error.ts:35`

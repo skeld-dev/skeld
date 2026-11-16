@@ -22,7 +22,11 @@ export type BootErrorCode =
   | 'INVALID_BOUND'
   | 'SECRET_IN_RESPONSE'
   | 'NESTED_TOO_DEEP'
-  | 'CODEGEN_UNAVAILABLE';
+  | 'CODEGEN_UNAVAILABLE'
+  | 'ACCESS_WITHOUT_GATE'
+  | 'ACCESS_UNDECLARED'
+  | 'ACCESS_REFUSED'
+  | 'GATE_FAILED';
 
 /**
  * The error thrown when a service cannot boot: a bad option, a refused route or plugin, or a failed listen.

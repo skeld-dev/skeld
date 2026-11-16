@@ -21,6 +21,31 @@ const REQUEST_PARTS = ['params', 'query', 'headers', 'cookies', 'body'] as const
 // Why: The router, the cross-site check and the preflight trust the method, and a declaration can bypass the type.
 const METHODS: ReadonlySet<unknown> = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] satisfies HttpMethod[]);
 
+const ACCESS_NAME = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
+
+// Does:  Tests a policy, action or other access name: 1 to 64 characters, a letter, then letters, digits, _, . and -.
+export function isAccessName(value: unknown): value is string {
+  return typeof value === 'string' && ACCESS_NAME.test(value);
+}
+
+function checkAccess(route: RouteDefinition): string | null {
+  const access: unknown = route.access;
+  if (access === undefined || access === 'public' || access === 'optional') {
+    return null;
+  }
+  if (
+    typeof access === 'object' &&
+    access !== null &&
+    'policy' in access &&
+    'action' in access &&
+    isAccessName(access.policy) &&
+    isAccessName(access.action)
+  ) {
+    return null;
+  }
+  return "access must be 'public', 'optional' or { policy, action } of names of 1 to 64 characters: a letter, then letters, digits, _, . or -";
+}
+
 function checkMethod(route: RouteDefinition): string | null {
   return METHODS.has(route.method) ? null : 'method must be GET, POST, PUT, PATCH or DELETE';
 }
@@ -218,7 +243,8 @@ function checkRoute(route: RouteDefinition): string | null {
     checkResponses(route) ??
     checkHeaderKeys(route) ??
     checkCookieKeys(route) ??
-    checkPropertyKinds(route)
+    checkPropertyKinds(route) ??
+    checkAccess(route)
   );
 }
 

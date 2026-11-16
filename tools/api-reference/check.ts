@@ -1,15 +1,21 @@
-// Does:  Runs the API-doc check: every public symbol documented in at most three lines, with its example run.
+// Does:  Runs the API-doc check on each package: every public symbol documented in at most three lines, examples run.
 // Holds: Exit 0 only when no symbol has a finding; the first line of each block must equal the compiler's hover text.
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkExamples, type Finding, ruleOrder } from './examples.ts';
-import { type PublicSymbol, root, walk } from './walk.ts';
+import { type PublicSymbol, type Refusal, root, walk } from './walk.ts';
 
 interface Options {
-  readonly packageDir: string;
+  readonly packageDirs: readonly string[];
   readonly entry: string | undefined;
+}
+
+interface Checked {
+  readonly symbols: number;
+  readonly ran: number;
+  readonly findings: readonly Finding[];
 }
 
 const usage = 'usage: node tools/api-reference/check.ts [--package <dir>] [--entry <file>] | --help\n';
@@ -31,12 +37,35 @@ function parseArgs(args: readonly string[]): Options | 'help' | undefined {
     given.set(name, value);
   }
   const entry = given.get('entry');
+  const named = given.get('package');
   return {
-    packageDir: resolve(
-      given.get('package') ?? dirname(fileURLToPath(import.meta.resolve('@skeld/core/package.json'))),
-    ),
+    packageDirs:
+      named !== undefined
+        ? [resolve(named)]
+        : entry !== undefined
+          ? [packageFolder('@skeld/core')]
+          : [packageFolder('@skeld/core'), join(root, 'packages/auth')],
     entry: entry === undefined ? undefined : resolve(entry),
   };
+}
+
+function packageFolder(name: string): string {
+  return dirname(fileURLToPath(import.meta.resolve(`${name}/package.json`)));
+}
+
+// Does:  The folders of the workspace packages a package depends on, whose values its examples may also import.
+function dependencyFolders(packageDir: string): string[] {
+  const manifest: unknown = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'));
+  if (typeof manifest !== 'object' || manifest === null || !('dependencies' in manifest)) {
+    return [];
+  }
+  const { dependencies } = manifest;
+  if (typeof dependencies !== 'object' || dependencies === null) {
+    return [];
+  }
+  return Object.keys(dependencies)
+    .filter((name) => name.startsWith('@skeld/'))
+    .map(packageFolder);
 }
 
 function flatten(symbols: readonly PublicSymbol[]): PublicSymbol[] {
@@ -98,6 +127,37 @@ function notRun(reason: string): number {
   return 3;
 }
 
+async function checkPackage(
+  packageDir: string,
+  extra: { readonly file: string; readonly config: string } | undefined,
+  abort: AbortSignal,
+): Promise<Checked | Refusal> {
+  const result = await walk(extra === undefined ? { packageDir } : { packageDir, extra });
+  if ('refused' in result) {
+    return result;
+  }
+  const imports = [{ packageName: result.packageName, entries: result.entries }];
+  for (const folder of dependencyFolders(packageDir)) {
+    // biome-ignore lint/performance/noAwaitInLoops: each walk opens its own compiler API, and two at once gain nothing.
+    const dependency = await walk({ packageDir: folder });
+    if ('refused' in dependency) {
+      return dependency;
+    }
+    imports.push({ packageName: dependency.packageName, entries: dependency.entries });
+  }
+  const checked = result.extra === undefined ? result.entries.flatMap((entry) => entry.symbols) : result.extra.symbols;
+  const symbols = unique(flatten(checked));
+  const examples = await checkExamples(symbols, imports, join(scratch, result.packageFolder), abort);
+  if ('refused' in examples) {
+    return examples;
+  }
+  return {
+    symbols: symbols.length,
+    ran: examples.ran,
+    findings: [...symbols.flatMap(blockFindings), ...examples.findings],
+  };
+}
+
 async function check(options: Options, started: number, abort: AbortSignal): Promise<number> {
   let extra: { file: string; config: string } | undefined;
   if (options.entry !== undefined) {
@@ -109,21 +169,22 @@ async function check(options: Options, started: number, abort: AbortSignal): Pro
     );
     extra = { file: options.entry, config };
   }
-  const result = await walk(
-    extra === undefined ? { packageDir: options.packageDir } : { packageDir: options.packageDir, extra },
-  );
-  if ('refused' in result) {
-    return notRun(result.refused);
+  let symbols = 0;
+  let ran = 0;
+  const all: Finding[] = [];
+  for (const packageDir of options.packageDirs) {
+    // biome-ignore lint/performance/noAwaitInLoops: one package at a time so its examples' 10 s limits share no load.
+    const checked = await checkPackage(packageDir, extra, abort);
+    if ('refused' in checked) {
+      return notRun(checked.refused);
+    }
+    symbols += checked.symbols;
+    ran += checked.ran;
+    all.push(...checked.findings);
   }
-  const checked = result.extra === undefined ? result.entries.flatMap((entry) => entry.symbols) : result.extra.symbols;
-  const symbols = unique(flatten(checked));
-  const examples = await checkExamples(symbols, result.entries, result.packageName, scratch, abort);
-  if ('refused' in examples) {
-    return notRun(examples.refused);
-  }
-  const findings = sortFindings([...symbols.flatMap(blockFindings), ...examples.findings]);
+  const findings = sortFindings(all);
   const seconds = ((performance.now() - started) / 1000).toFixed(2);
-  const summary = `API check read ${symbols.length} symbols and ran ${examples.ran} examples in ${seconds} s.\n`;
+  const summary = `API check read ${symbols} symbols and ran ${ran} examples in ${seconds} s.\n`;
   if (findings.length > 0) {
     for (const finding of findings) {
       process.stderr.write(`${finding.file}:${finding.line} ${finding.rule}: ${finding.text}\n`);
@@ -133,7 +194,7 @@ async function check(options: Options, started: number, abort: AbortSignal): Pro
     return 1;
   }
   process.stdout.write(summary);
-  process.stdout.write(`API check passed: ${symbols.length} symbols, ${examples.ran} examples run.\n`);
+  process.stdout.write(`API check passed: ${symbols} symbols, ${ran} examples run.\n`);
   return 0;
 }
 

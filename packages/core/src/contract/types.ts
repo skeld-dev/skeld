@@ -53,7 +53,18 @@ export interface RouteDefinition {
   readonly body?: Schema;
   /** The responses the route may write, by status. */
   readonly responses: ResponseSchemas;
+  /**
+   * Who may call the route: `'public'`, `'optional'`, or a policy and one of its actions; required on a server with a gate.
+   * A value of any other shape, or a name outside the access-name grammar, is refused when declared (`TypeError`).
+   */
+  readonly access?: Access;
 }
+
+/**
+ * A route's access: anyone, anyone with or without a credential, or a principal a policy action admits.
+ * Policy and action names are 1 to 64 characters: a letter, then letters, digits, `_`, `.` and `-`.
+ */
+export type Access = 'public' | 'optional' | { readonly policy: string; readonly action: string };
 
 /** A contract: route definitions by route name. */
 export interface ContractRoutes {
@@ -132,7 +143,15 @@ export type EngineErrorCode =
   | 'NETWORK'
   | 'INVALID_RESPONSE'
   | 'RESPONSE_TOO_LARGE'
-  | 'REDIRECT_NOT_SUPPORTED';
+  | 'REDIRECT_NOT_SUPPORTED'
+  | 'CREDENTIAL_MISSING'
+  | 'CREDENTIAL_INVALID'
+  | 'CREDENTIAL_CONFLICT'
+  | 'CSRF_TOKEN_INVALID'
+  | 'RATE_LIMITED'
+  | 'ACCESS_DENIED'
+  | 'AUTH_UNAVAILABLE'
+  | 'CREDENTIAL_UNAVAILABLE';
 
 /** The type of a request part the route does not declare: an object with no keys. */
 export interface Empty {

@@ -13,6 +13,7 @@ cleanup after disconnects, and the types an application can use. Keep a test whe
 | `contracts/` | Route and client contracts, response projection, derived classes and package exports                |
 | `schema/`    | Validation, serialization and JSON Schema agreement; shared schema corpora live beside these proofs |
 | `logging/`   | Redaction, injection, correlation, suppression, sinks and log shutdown                              |
+| `auth/`      | The auth store on file SQLite and PostgreSQL: conformance, races, unknown outcomes, bounds, install |
 | `support/`   | Shared compiler, wire, child-process, diagnostic and evidence helpers; no standalone tests          |
 
 File a test under the behavior it protects. A CSRF attack belongs in `browser/`; a secret leaking through a
@@ -31,6 +32,7 @@ pnpm test security             # one category; any folder name above except supp
 pnpm test browser
 pnpm test schema
 pnpm test logging
+pnpm test auth                 # needs SKELD_TEST_PG_URL, a PostgreSQL 18 connection string; unset fails the run
 pnpm test diag                 # the seven base checks under diagnostic instrumentation
 ```
 

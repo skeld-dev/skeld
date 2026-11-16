@@ -1,4 +1,4 @@
-// Does:  Proves close() flushes a reading reader, resolves in time against a silent one, and delivers its closed record.
+// Does:  Proves close() flushes a reading reader, resolves in time against a silent one and delivers its closed record.
 // Holds: Stats are sampled inside the served process in one tick, so every sample is one consistent view of a server.
 
 // biome-ignore-all lint/security/noSecrets: route templates and event names, not credentials

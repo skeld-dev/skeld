@@ -5,6 +5,7 @@ import type { HttpError } from '../contract/http-error.ts';
 import type { ContractRoutes, Empty, OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { ResolvedCors } from '../cors/policy.ts';
 import type { ResolvedCsrf } from '../csrf/policy.ts';
+import type { AccessTypes, Gate, NoAccess } from '../gate/types.ts';
 import type { Classified, Logger, LogOptions, LogStats, RequestPart } from '../log/types.ts';
 import type { Infer, Schema, Wire } from '../schema/types.ts';
 
@@ -12,7 +13,12 @@ import type { Infer, Schema, Wire } from '../schema/types.ts';
  * The options of `createServer`; each number is a positive integer.
  * `createServer` throws BootError `INVALID_OPTION` for any other value, or for a `headersTimeout` above `requestTimeout`.
  */
-export interface ServerOptions {
+export interface ServerOptions<A extends AccessTypes = NoAccess> {
+  /**
+   * The server's access control; with it every route must declare `access` (default none: no route may declare it).
+   * `createServer` throws BootError `INVALID_OPTION` for a value that is not an object with `boot` and `bind` functions.
+   */
+  readonly gate?: Gate<A>;
   /**
    * Largest request body accepted, in bytes; a larger one is refused with 413 (default 1 MiB).
    * A route's limit is the smaller of this, or its `bodyLimits` entry, and the cap derived from its body schema.
@@ -255,6 +261,37 @@ export type Handler<C extends ContractRoutes, K extends keyof C> = (
 /** One handler per route name of a contract. */
 export type Handlers<C extends ContractRoutes> = { readonly [K in keyof C]: Handler<C, K> };
 
+type PrincipalOf<X, P> = X extends object ? P : X extends 'optional' ? P | null : undefined;
+
+type GrantOf<X, G> = X extends { readonly policy: infer N extends keyof G; readonly action: infer T }
+  ? T extends keyof G[N]
+    ? G[N][T]
+    : never
+  : X extends object
+    ? never
+    : undefined;
+
+/** What a handler on a server with a gate receives: the route's request, its principal and its grant. */
+export interface GatedRequest<R extends RouteDefinition, A extends AccessTypes> extends RouteRequest<R> {
+  /** The admitted principal: `undefined` on a `'public'` route, `null` on an `'optional'` one without a credential. */
+  readonly principal: PrincipalOf<R['access'], A['principal']>;
+  /** The grant of the route's policy action: `undefined` unless the route names a policy, `never` for an unknown name. */
+  readonly grant: GrantOf<R['access'], A['grants']>;
+}
+
+/**
+ * The function that serves one route of a contract on a server with a gate.
+ * A `Handler` of the same route is assignable to it.
+ */
+export type GatedHandler<C extends ContractRoutes, K extends keyof C, A extends AccessTypes> = (
+  request: GatedRequest<C[K], A>,
+) => RouteReply<C[K]> | Promise<RouteReply<C[K]>>;
+
+/** One handler per route name of a contract, on a server with a gate. */
+export type GatedHandlers<C extends ContractRoutes, A extends AccessTypes> = {
+  readonly [K in keyof C]: GatedHandler<C, K, A>;
+};
+
 /** The options of `Scope.routes`. */
 export interface RoutesOptions<C extends ContractRoutes> {
   /**
@@ -461,7 +498,7 @@ export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'o
  * A place to declare routes, hooks, an error handler and plugins; the server is the root scope.
  * Its methods throw BootError `REGISTRATION_CLOSED` once `listen` is called, or once the plugin that owns it has settled.
  */
-export interface Scope {
+export interface Scope<A extends AccessTypes = NoAccess> {
   /** Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work. */
   readonly signal: AbortSignal;
   /** The server's logger, the same in every scope, plugins included; its records carry no request id. */
@@ -478,7 +515,7 @@ export interface Scope {
    */
   routes<C extends ContractRoutes>(
     contract: C,
-    handlers: NoInfer<Handlers<C>>,
+    handlers: NoInfer<[A] extends [NoAccess] ? Handlers<C> : GatedHandlers<C, A>>,
     options?: NoInfer<RoutesOptions<C>>,
   ): void;
   /** Adds a hook to this scope; it runs for this scope's routes and its plugins' routes, after its parents' hooks. */
@@ -496,11 +533,11 @@ export interface Scope {
    * Adds a plugin, which `listen` runs in order with a child scope of this one.
    * A plugin that throws or rejects makes `listen` reject with BootError `PLUGIN_FAILED`.
    */
-  register(plugin: Plugin, options?: RegisterOptions): void;
+  register(plugin: Plugin<A>, options?: RegisterOptions): void;
 }
 
 /** A function that declares routes, hooks and plugins on the child scope it is given; it may be async. */
-export type Plugin = (scope: Scope) => void | Promise<void>;
+export type Plugin<A extends AccessTypes = NoAccess> = (scope: Scope<A>) => void | Promise<void>;
 
 /** The options of `Scope.register`. */
 export interface RegisterOptions {
@@ -530,7 +567,7 @@ export interface ListeningAddress {
 }
 
 /** A service: the root scope, with `listen` and `close`. */
-export interface Server extends Scope {
+export interface Server<A extends AccessTypes = NoAccess> extends Scope<A> {
   /**
    * Runs the plugins, checks and compiles every route, then listens; resolves with the bound address.
    * Rejects with BootError: `ALREADY_LISTENING` on a second call, `SERVER_CLOSED` after `close`, or the code of the step that failed.

@@ -1,0 +1,186 @@
+rules:
+  - id: auth-sqlite-outside-adapter
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      node:sqlite is imported outside packages/auth/src/sqlite/, the one module that may open a SQLite
+      database (ADR-085).
+    paths:
+      include:
+        - "/packages/auth/src/"
+      exclude:
+        - "/packages/auth/src/sqlite/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?sqlite$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/085-build-skeld-auth-as-one-workspace-with-its-own-diag-and-semgrep-rules.md"
+  - id: auth-imports-beyond-core-and-node
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      packages/auth/src imports a package other than a @skeld/core subpath or a node: module; auth has
+      @skeld/core as its only dependency and never imports a database driver (ADR-085).
+    paths:
+      include:
+        - "/packages/auth/src/"
+      exclude:
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(?!\.{1,2}/|#diag$|node:|@skeld/core/)
+    metadata:
+      category: security
+      references:
+        - ".project/adr/085-build-skeld-auth-as-one-workspace-with-its-own-diag-and-semgrep-rules.md"
+  - id: auth-fs-outside-sqlite-and-recorder
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      node:fs is imported outside packages/auth/src/sqlite/ and packages/auth/src/diag/recorder/, the
+      only auth modules that touch the file system (ADR-085).
+    paths:
+      include:
+        - "/packages/auth/src/"
+      exclude:
+        - "/packages/auth/src/sqlite/"
+        - "/packages/auth/src/diag/recorder/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?(fs|fs/promises)$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/085-build-skeld-auth-as-one-workspace-with-its-own-diag-and-semgrep-rules.md"
+  - id: auth-process-io-outside-recorder
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      process.env, process.stdout or console is used in packages/auth/src outside the diagnostic recorder;
+      auth takes its configuration from its options and writes records only through core's log (ADR-085).
+    paths:
+      include:
+        - "/packages/auth/src/"
+      exclude:
+        - "/packages/auth/src/diag/recorder/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern-either:
+      - pattern: process.env
+      - pattern: process['env']
+      - pattern: process.stdout
+      - pattern: process['stdout']
+      - pattern: "{ ..., env, ... } = process"
+      - pattern: "{ ..., stdout, ... } = process"
+      - pattern: "{ ..., env: $V, ... } = process"
+      - pattern: "{ ..., stdout: $V, ... } = process"
+      - pattern: console.$M(...)
+    metadata:
+      category: security
+      references:
+        - ".project/adr/085-build-skeld-auth-as-one-workspace-with-its-own-diag-and-semgrep-rules.md"
+  - id: auth-clock-outside-allowed-files
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      The process clock (Date.now() or new Date()) is read outside src/jwt/, src/outbound/ and
+      src/diag/recorder/; every stored instant comes from the store's clock (ADR-071, ADR-085).
+    paths:
+      include:
+        - "/packages/auth/src/"
+      exclude:
+        - "/packages/auth/src/jwt/"
+        - "/packages/auth/src/outbound/"
+        - "/packages/auth/src/diag/recorder/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern-either:
+      - pattern: Date.now()
+      - pattern: new Date()
+    metadata:
+      category: security
+      references:
+        - ".project/adr/071-judge-every-expiry-by-the-stores-clock-read-after-the-units-locks.md"
+        - ".project/adr/085-build-skeld-auth-as-one-workspace-with-its-own-diag-and-semgrep-rules.md"
+  - id: auth-node-import-in-routes-or-policy
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      A node: module is imported under packages/auth/src/routes/ or packages/auth/src/policy/, which a
+      browser bundle must be able to hold (ADR-085).
+    paths:
+      include:
+        - "/packages/auth/src/routes/"
+        - "/packages/auth/src/policy/"
+      exclude:
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: "^node:"
+    metadata:
+      category: security
+      references:
+        - ".project/adr/085-build-skeld-auth-as-one-workspace-with-its-own-diag-and-semgrep-rules.md"

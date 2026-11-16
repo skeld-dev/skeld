@@ -104,6 +104,10 @@ export function preRoute(
         cookieEntries: null,
         rawCookies: null,
         pendingCookies: null,
+        gateRequest: null,
+        principal: undefined,
+        grant: undefined,
+        release: null,
       };
     case 'not-found': {
       count('refuse.not_found', method);

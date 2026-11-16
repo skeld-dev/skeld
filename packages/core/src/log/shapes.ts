@@ -3,7 +3,7 @@
 
 import type { Schema } from '../schema/types.ts';
 import type { Category, ErrorEvent, HookErrorReason, RefusalEvent, RequestErrorReason } from './events.ts';
-import type { LogSink, LogStats, Logger, RequestPart, Severity } from './types.ts';
+import type { LogFields, LogSink, LogStats, Logger, RequestPart, Severity } from './types.ts';
 
 // Does:  The checked `log` option; `enabled` is false only for `log: false`, and then every flag is false too.
 export interface ResolvedLog {
@@ -78,7 +78,8 @@ export interface Destination {
   close(timeoutMs: number): Promise<void>;
 }
 
-export type SuppressedEvent = RefusalEvent | ErrorEvent;
+// Why: A gate's security events share the engine's windows, under the names its gate registered at boot.
+export type SuppressedEvent = RefusalEvent | ErrorEvent | string;
 
 export interface Suppression {
   ready(templates: readonly string[]): void;
@@ -116,6 +117,8 @@ export interface ServerLog {
     detail: readonly [string, string | number] | null,
   ): void;
   ended(request: RequestLog, outcome: 'completed' | 'aborted', status: number | null, durationMs: number): void;
+  // Does:  Writes a gate's security record for a logger this server made; any other logger writes nothing.
+  security(event: string, severity: Severity, logger: unknown, fields: LogFields | undefined): void;
   logger(request: RequestLog | null): Logger;
   stats(): LogStats;
   close(): Promise<void>;

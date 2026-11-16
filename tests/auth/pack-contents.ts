@@ -1,0 +1,305 @@
+// Does:  Proves the packed core and auth tarballs ship the contracted subpaths, nothing removed, and run in a consumer.
+// Holds: Packing, unpacking and installing happen in a folder outside the repository, which is removed at the end.
+
+import { spawnSync } from 'node:child_process';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createReport } from './rig/v1-report.ts';
+
+const root = fileURLToPath(new URL('../..', import.meta.url));
+
+const authValues: Record<string, readonly string[]> = {
+  server: ['createAuth'],
+  policy: ['definePolicy', 'isGrant', 'isPrincipal'],
+  routes: ['oidcRoutes', 'sessionRoutes', 'sessionStateSchema'],
+  'auth-error': ['AuthError'],
+  store: ['StoreFailure'],
+  sqlite: ['createSqliteStore'],
+  postgres: ['createPostgresStore'],
+  'store-conformance': ['runStoreConformance'],
+  'api-key': ['apiKeys'],
+  jwt: ['jwt'],
+  oidc: ['oidc'],
+  password: ['hashPassword', 'needsRehash', 'verifyPassword'],
+};
+
+const removed: readonly (readonly [string, RegExp])[] = [
+  ['TOTP', /totp/i],
+  ['passkey and WebAuthn', /passkey|webauthn/i],
+  ['recovery codes', /recovery.?code|recoverycodes/i],
+  ['provisioning', /provision/i],
+  ['mail and delivery', /sendmail|mailer|smtp|mailto|deliver\.|\/deliver\/|delivertask|\bdelivery\b/i],
+  ['password lifecycle', /resetpassword|forgotpassword|changepassword|passwordreset|setpassword|password.?lifecycle/i],
+  ['identity linking', /linkidentity|unlinkidentity|linkaccount|unlinkaccount|identity.?link/i],
+  ['factors and step-up', /second.?factor|step.?up|enrol(l)?ment|\bfactor(s)?\b/i],
+  ['the removed hashing subpath and helpers', /\.\/hashing|hashing\.js|topup|overrun/i],
+];
+
+function run(command: string, args: readonly string[], cwd: string): { status: number | null; out: string } {
+  const result = spawnSync(command, [...args], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 240_000,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return { status: result.status, out: `${result.stdout}${result.stderr}` };
+}
+
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? filesUnder(join(dir, entry.name)) : [join(dir, entry.name)],
+  );
+}
+
+function manifestOf(dir: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(readFileSync(join(dir, 'package/package.json'), 'utf8'));
+  return typeof parsed === 'object' && parsed !== null ? Object.fromEntries(Object.entries(parsed)) : {};
+}
+
+function exportsOf(manifest: Record<string, unknown>): Map<string, Record<string, unknown>> {
+  const table: unknown = manifest.exports;
+  return new Map(
+    typeof table === 'object' && table !== null
+      ? Object.entries(table).map(([key, value]) => [
+          key,
+          typeof value === 'object' && value !== null ? Object.fromEntries(Object.entries(value)) : {},
+        ])
+      : [],
+  );
+}
+
+const report = createReport(
+  'v09',
+  'the packed @skeld/auth ships exactly the twelve contracted subpaths with a default and a types target each, no recorder, no removed export or file; @skeld/core ships ./gate with no runtime dependency; a consumer outside the workspace installs both and imports every subpath at run time',
+);
+const scratch = mkdtempSync(join(tmpdir(), 'skeld-v09-pack-'));
+try {
+  const markers = run('node', ['tools/check-pack-markers.ts', '--pack'], root);
+  report.check(
+    'node tools/check-pack-markers.ts --pack exits 0',
+    markers.status === 0,
+    markers.out.trim().split('\n').slice(-3).join(' | ').slice(0, 300),
+  );
+  const consumerLib = run('node', ['tools/check-consumer-lib.ts'], root);
+  report.check(
+    'node tools/check-consumer-lib.ts exits 0',
+    consumerLib.status === 0,
+    consumerLib.out.trim().split('\n').slice(-2).join(' | ').slice(0, 300),
+  );
+
+  const tarDir = join(scratch, 'tarballs');
+  mkdirSync(tarDir);
+  const packed = ['@skeld/core', '@skeld/auth'].map((name) =>
+    run('pnpm', ['--filter', name, 'pack', '--pack-destination', tarDir], root),
+  );
+  report.check(
+    'pnpm pack of both packages succeeds',
+    packed.every((result) => result.status === 0),
+    packed.map((result) => String(result.status)).join(','),
+  );
+  const tarballs = readdirSync(tarDir).sort();
+  const coreTar = tarballs.find((name) => name.startsWith('skeld-core-'));
+  const authTar = tarballs.find((name) => name.startsWith('skeld-auth-'));
+  if (coreTar === undefined || authTar === undefined) {
+    throw new Error(`tarballs: ${tarballs.join(',')}`);
+  }
+  const unpack = (tar: string, into: string): void => {
+    mkdirSync(into);
+    const result = run('tar', ['-xzf', join(tarDir, tar), '-C', into], scratch);
+    if (result.status !== 0) {
+      throw new Error(`tar failed: ${result.out}`);
+    }
+  };
+  const coreDir = join(scratch, 'core');
+  const authDir = join(scratch, 'auth');
+  unpack(coreTar, coreDir);
+  unpack(authTar, authDir);
+  const authFiles = filesUnder(authDir).map((file) => relative(join(authDir, 'package'), file));
+  const coreFiles = filesUnder(coreDir).map((file) => relative(join(coreDir, 'package'), file));
+  report.note(`tarballs: ${coreTar} (${coreFiles.length} files), ${authTar} (${authFiles.length} files)`);
+
+  const authManifest = manifestOf(authDir);
+  const authExports = exportsOf(authManifest);
+  const wanted = [...Object.keys(authValues).map((name) => `./${name}`), './package.json'];
+  report.check(
+    '@skeld/auth exports exactly the twelve contracted subpaths and ./package.json, in the contract order, and no ./hashing',
+    [...authExports.keys()].join(',') === wanted.join(',') && !authExports.has('./hashing'),
+    [...authExports.keys()].join(','),
+  );
+  const incomplete = [...authExports.entries()].filter(([key, conditions]) => {
+    if (key === './package.json') {
+      return false;
+    }
+    const types = conditions.types;
+    const standard = conditions.default;
+    return (
+      typeof types !== 'string' ||
+      typeof standard !== 'string' ||
+      !authFiles.includes(types.replace(/^\.\//, '')) ||
+      !authFiles.includes(standard.replace(/^\.\//, ''))
+    );
+  });
+  report.check(
+    'every auth subpath has a default and a types target and both files are in the tarball',
+    incomplete.length === 0,
+    incomplete.map(([key]) => key).join(',') || 'all present',
+  );
+  report.check(
+    '@skeld/auth depends on @skeld/core alone: no peer, optional or other dependency',
+    JSON.stringify(authManifest.dependencies) === '{"@skeld/core":"0.1.2"}' &&
+      authManifest.peerDependencies === undefined &&
+      authManifest.optionalDependencies === undefined,
+    JSON.stringify(authManifest.dependencies),
+  );
+  const recorderFiles = authFiles.filter((file) => /recorder/i.test(file));
+  const diagFiles = authFiles.filter((file) => file.startsWith('dist/diag/'));
+  report.check(
+    'no recorder file ships in @skeld/auth, and dist/diag holds only the empty module and its declaration',
+    recorderFiles.length === 0 && diagFiles.sort().join(',') === 'dist/diag/empty.d.ts,dist/diag/empty.js',
+    `recorder files ${recorderFiles.length}; dist/diag: ${diagFiles.join(',')}`,
+  );
+  report.check(
+    'the published #diag target is the empty module and no skeld-diag recorder is loaded by default',
+    JSON.stringify(authManifest.imports).includes('./dist/diag/empty.js'),
+    JSON.stringify(authManifest.imports).slice(0, 200),
+  );
+  const emptyText = readFileSync(join(authDir, 'package/dist/diag/empty.js'), 'utf8');
+  report.check(
+    'dist/diag/empty.js has no file, process or timer access: it is empty functions',
+    !/node:fs|process\./.test(emptyText) && !/setInterval|appendFileSync/.test(emptyText),
+    `${emptyText.length} bytes`,
+  );
+
+  const searchable = [
+    ...filesUnder(authDir).filter((file) => /\.(d\.ts|js|json|md)$/.test(file)),
+    ...filesUnder(coreDir).filter((file) => /\.(d\.ts|js|json|md)$/.test(file)),
+  ];
+  report.note(
+    `terms searched in both tarballs' file names and in every .d.ts, .js, .json and .md text: ${removed.map(([label, pattern]) => `${label} ${pattern.source}`).join('; ')}`,
+  );
+  for (const [label, pattern] of removed) {
+    const nameHits = [...authFiles, ...coreFiles].filter((file) => pattern.test(file));
+    const textHits = searchable
+      .filter((file) => pattern.test(readFileSync(file, 'utf8')))
+      .map((file) => relative(scratch, file));
+    report.check(
+      `no ${label} in a file name or text of either tarball`,
+      nameHits.length === 0 && textHits.length === 0,
+      `${nameHits.length} names, ${textHits.length} files${textHits.length === 0 ? '' : `: ${textHits.slice(0, 4).join(', ')}`}`,
+    );
+  }
+
+  const coreManifest = manifestOf(coreDir);
+  const coreExports = exportsOf(coreManifest);
+  const gate = coreExports.get('./gate');
+  report.check(
+    '@skeld/core ships ./gate with a default and a types target in the tarball',
+    gate !== undefined &&
+      typeof gate.default === 'string' &&
+      typeof gate.types === 'string' &&
+      coreFiles.includes(String(gate.default).replace(/^\.\//, '')) &&
+      coreFiles.includes(String(gate.types).replace(/^\.\//, '')),
+    JSON.stringify(gate),
+  );
+  report.check(
+    '@skeld/core has no runtime dependency: no dependencies, peerDependencies or optionalDependencies',
+    ['dependencies', 'peerDependencies', 'optionalDependencies'].every((key) => {
+      const value = coreManifest[key];
+      return value === undefined || (typeof value === 'object' && value !== null && Object.keys(value).length === 0);
+    }),
+    JSON.stringify([coreManifest.dependencies, coreManifest.peerDependencies, coreManifest.optionalDependencies]),
+  );
+
+  const consumer = join(scratch, 'consumer');
+  mkdirSync(consumer);
+  writeFileSync(
+    join(consumer, 'package.json'),
+    JSON.stringify({
+      name: 'consumer',
+      private: true,
+      type: 'module',
+    }),
+  );
+  const install = run(
+    'npm',
+    ['install', '--no-audit', '--no-fund', '--ignore-scripts', join(tarDir, authTar), join(tarDir, coreTar)],
+    consumer,
+  );
+  report.check(
+    'a fresh folder outside the workspace installs both tarballs with npm',
+    install.status === 0 &&
+      existsSync(join(consumer, 'node_modules/@skeld/auth/package.json')) &&
+      existsSync(join(consumer, 'node_modules/@skeld/core/package.json')),
+    install.out.trim().split('\n').slice(-2).join(' | ').slice(0, 300),
+  );
+  const installedVersion = (name: string): string => {
+    const parsed: unknown = JSON.parse(readFileSync(join(consumer, 'node_modules', name, 'package.json'), 'utf8'));
+    return typeof parsed === 'object' && parsed !== null ? String(Reflect.get(parsed, 'version')) : '';
+  };
+  const copied = ['@skeld/core', '@skeld/auth'].every(
+    (name) => !lstatSync(join(consumer, 'node_modules', name)).isSymbolicLink(),
+  );
+  report.check(
+    'the installed packages are copies of the tarballs (not links into the repository) at the packed versions',
+    copied &&
+      installedVersion('@skeld/core') === String(coreManifest.version) &&
+      installedVersion('@skeld/auth') === String(authManifest.version),
+    `core ${installedVersion('@skeld/core')}, auth ${installedVersion('@skeld/auth')}`,
+  );
+
+  const subpaths = [...authExports.keys()]
+    .map((key) => `@skeld/auth/${key.slice(2)}`)
+    .concat(
+      [...coreExports.entries()]
+        .filter(([key, conditions]) => key === './package.json' || typeof conditions.default === 'string')
+        .map(([key]) => `@skeld/core/${key.slice(2)}`),
+    );
+  writeFileSync(
+    join(consumer, 'check.mjs'),
+    `const names = ${JSON.stringify(subpaths)};\nconst out = [];\nfor (const name of names) {\n  try {\n    const mod = name.endsWith('/package.json') ? { default: (await import(name, { with: { type: 'json' } })).default } : await import(name);\n    out.push([name, Object.keys(mod).sort()]);\n  } catch (error) {\n    out.push([name, 'ERROR ' + (error && error.code ? error.code : String(error))]);\n  }\n}\nprocess.stdout.write(JSON.stringify(out));\n`,
+  );
+  const imported = run('node', ['check.mjs'], consumer);
+  let results: [string, unknown][] = [];
+  try {
+    const parsed: unknown = JSON.parse(imported.out);
+    results = Array.isArray(parsed) ? parsed.map((entry) => [String(entry[0]), entry[1]]) : [];
+  } catch {
+    results = [];
+  }
+  report.check(
+    `the consumer imports every subpath at run time (${results.length} of ${subpaths.length}: ${authExports.size} of auth, ${subpaths.length - authExports.size} of core; ./generated-check is source-only by design and has no default target)`,
+    imported.status === 0 && results.length === subpaths.length && results.every(([, value]) => Array.isArray(value)),
+    results
+      .filter(([, value]) => !Array.isArray(value))
+      .map(([name, value]) => `${name}: ${String(value)}`)
+      .join('; ') || 'no import failed',
+  );
+  for (const [name, values] of Object.entries(authValues)) {
+    const found = results.find(([key]) => key === `@skeld/auth/${name}`)?.[1];
+    report.check(
+      `@skeld/auth/${name} exports exactly ${values.join(', ')} as values`,
+      JSON.stringify(found) === JSON.stringify([...values].sort()),
+      JSON.stringify(found),
+    );
+  }
+  const gateValues = results.find(([key]) => key === '@skeld/core/gate')?.[1];
+  report.check(
+    '@skeld/core/gate exports exactly CSRF_TOKEN_HEADER and GateFault as values',
+    JSON.stringify(gateValues) === '["CSRF_TOKEN_HEADER","GateFault"]',
+    JSON.stringify(gateValues),
+  );
+} finally {
+  rmSync(scratch, { recursive: true, force: true });
+}
+report.finish();

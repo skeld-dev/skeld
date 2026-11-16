@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { defineContract } from '@skeld/core/contract';
+import type { AccessTypes, AuthorizeOutcome, Gate, GateRequest, IdentifyOutcome } from '@skeld/core/gate';
 import { HttpError } from '@skeld/core/http-error';
 import * as t from '@skeld/core/schema';
 import { createServer, type RequestContext, type Server } from '@skeld/core/server';
@@ -137,6 +138,56 @@ const contract = defineContract({
   flood: { method: 'GET', path: '/flood', responses: { 200: ok } },
 });
 
+const gatedContract = defineContract({
+  guarded: { method: 'GET', path: '/guarded', access: { policy: 'p', action: 'a' }, responses: { 200: ok } },
+});
+
+function caseOf(request: GateRequest): string {
+  const value = request.headers['x-case'];
+  return typeof value === 'string' ? value : '';
+}
+
+// Does:  A minimal gate for the third server: the x-case header picks which refusal or fault each step answers.
+const testGate: Gate<AccessTypes> = {
+  boot: () => undefined,
+  bind: () => ({
+    cookie: false,
+    identify: (request): IdentifyOutcome<unknown> => {
+      switch (caseOf(request)) {
+        case 'credential_missing':
+          return { kind: 'refuse', reason: 'credential_missing', challenge: 'bearer' };
+        case 'credential_invalid':
+          return { kind: 'refuse', reason: 'credential_invalid', challenge: null };
+        case 'credential_conflict':
+          return { kind: 'refuse', reason: 'credential_conflict' };
+        case 'csrf_token':
+          return { kind: 'refuse', reason: 'csrf_token' };
+        case 'rate_limited':
+          return { kind: 'refuse', reason: 'rate_limited', retryAfterSeconds: 3 };
+        case 'unavailable':
+          return { kind: 'refuse', reason: 'unavailable' };
+        case 'gate':
+          throw new Error('a gate step that threw');
+        default:
+          return { kind: 'admit', principal: { id: 'p' } };
+      }
+    },
+    authorize: (_principal, _input, request): AuthorizeOutcome => {
+      switch (caseOf(request)) {
+        case 'access_denied':
+          return { kind: 'refuse', reason: 'access_denied' };
+        case 'access_hidden':
+          return { kind: 'refuse', reason: 'access_hidden' };
+        case 'resource_missing':
+          return { kind: 'refuse', reason: 'resource_missing' };
+        default:
+          return { kind: 'admit', grant: { g: 1 } };
+      }
+    },
+    release: () => undefined,
+  }),
+};
+
 function pastTypes(value: unknown): never {
   // biome-ignore lint/nursery/noUnsafeTypeAssertion: the fixtures return and send values the declared types refuse, to see the run-time answer
   return value as never;
@@ -175,6 +226,8 @@ function serve(): void {
     csrf: { mode: 'strict' },
     cors: { origins: ['https://app.example'] },
   });
+  const third = createServer({ log, gate: testGate });
+  third.routes(gatedContract, { guarded: () => goodReply });
   first.addHook('onRequest', onRequest);
   first.addHook('onResponse', (context) => {
     if (context.route.name === 'hookOnResponse') {
@@ -187,6 +240,7 @@ function serve(): void {
     }
   });
   let secondPort = 0;
+  let thirdPort = 0;
   first.routes(
     contract,
     {
@@ -226,7 +280,7 @@ function serve(): void {
         requestLog.error('an error call', { k: 3 });
         return goodReply;
       },
-      ports: () => ({ status: 200, body: { report: String(secondPort) } }),
+      ports: () => ({ status: 200, body: { report: `${secondPort},${thirdPort}` } }),
       flood: () => {
         for (let call = 0; call < 1500; call++) {
           first.log.error(padding, { call });
@@ -268,10 +322,14 @@ function serve(): void {
     .listen({ port: 0, host: '127.0.0.1' })
     .then((address) => {
       secondPort = address.port;
+      return third.listen({ port: 0, host: '127.0.0.1' });
+    })
+    .then((address) => {
+      thirdPort = address.port;
       return first.listen({ port: 0, host: '127.0.0.1' });
     })
     .then(({ port }) => {
-      process.on('SIGTERM', () => void closeBoth(first, second));
+      process.on('SIGTERM', () => void closeBoth(first, second, third));
       announceListening(port);
     })
     .catch((error: unknown) => {
@@ -280,13 +338,13 @@ function serve(): void {
     });
 }
 
-async function closeBoth(first: Server, second: Server): Promise<void> {
-  await Promise.all([first.close(), second.close()]);
+async function closeBoth(first: Server, second: Server, third: { close: () => Promise<void> }): Promise<void> {
+  await Promise.all([first.close(), second.close(), third.close()]);
   process.exit(0);
 }
 
 interface Spec {
-  server: 'first' | 'second';
+  server: 'first' | 'second' | 'third';
   method: string;
   path: string;
   headers?: string[];
@@ -409,6 +467,37 @@ const triggers = new Map<string, Spec>([
       headers: ['Origin: https://evil.example', 'Access-Control-Request-Method: POST'],
     },
   ],
+  [
+    'skeld.refuse.credential_missing',
+    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: credential_missing'] },
+  ],
+  [
+    'skeld.refuse.credential_invalid',
+    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: credential_invalid'] },
+  ],
+  [
+    'skeld.refuse.credential_conflict',
+    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: credential_conflict'] },
+  ],
+  ['skeld.refuse.csrf_token', { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: csrf_token'] }],
+  [
+    'skeld.refuse.rate_limited',
+    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: rate_limited'] },
+  ],
+  [
+    'skeld.refuse.access_denied',
+    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: access_denied'] },
+  ],
+  [
+    'skeld.refuse.access_hidden',
+    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: access_hidden'] },
+  ],
+  [
+    'skeld.refuse.resource_missing',
+    { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: resource_missing'] },
+  ],
+  ['skeld.refuse.unavailable', { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: unavailable'] }],
+  ['skeld.request.error|gate', { server: 'third', method: 'GET', path: '/guarded', headers: ['x-case: gate'] }],
   ['skeld.app.message', { server: 'first', method: 'GET', path: '/log' }],
 ]);
 const notTriggerable = 'no application code or request produces it; it marks a fault in the engine itself';
@@ -454,9 +543,11 @@ async function runMain(options: unknown): Promise<Run> {
   try {
     const portReply = await fetch(`http://127.0.0.1:${child.port}/second-port`);
     const body: unknown = await portReply.json();
-    const secondPort = Number(typeof body === 'object' && body !== null ? Reflect.get(body, 'report') : Number.NaN);
+    const ports = String(typeof body === 'object' && body !== null ? Reflect.get(body, 'report') : '').split(',');
+    const secondPort = Number(ports[0]);
+    const thirdPort = Number(ports[1]);
     for (const [key, spec] of triggers) {
-      const port = spec.server === 'first' ? child.port : secondPort;
+      const port = spec.server === 'first' ? child.port : spec.server === 'second' ? secondPort : thirdPort;
       let last: RawResponse | null = null;
       let firstId: string | null = null;
       for (let attempt = 0; attempt < (spec.times ?? 1); attempt++) {
@@ -829,10 +920,10 @@ async function main(): Promise<void> {
   for (const [category, level, removed] of raised) {
     const run = await runMain({ thresholds: { [category]: level } });
     variantCase(
-      `AC-11 raising thresholds.${category} to ${level} removes only the ${removed} records`,
+      `AC-11 raising thresholds.${category} to ${level} removes only the ${removed} records below ${level}`,
       base,
       run,
-      (rec) => rec['skeld.category'] !== removed,
+      (rec) => rec['skeld.category'] !== removed || severityNumber(String(rec.severity_text)) >= severityNumber(level),
       [],
       report,
     );

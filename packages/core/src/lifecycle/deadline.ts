@@ -2,6 +2,7 @@
 // Holds: A request is tracked only while it waits and its connection is open, and expires at most once.
 
 import type { Exchange } from './exchange.ts';
+import { releaseGrant } from './grant.ts';
 
 // Why: A deadline then fires at most a tenth of its limit late, as Node's own request-timeout check does.
 const CHECKS_PER_LIMIT = 10;
@@ -54,10 +55,11 @@ function release(exchange: Exchange): void {
   }
 }
 
-// Does:  Ends a running request in its final state and stops tracking it.
+// Does:  Ends a running request in its final state, stops tracking it and releases the grant it holds.
 export function settle(exchange: Exchange, state: 'sent-by-hook' | 'written'): void {
   exchange.state = state;
   release(exchange);
+  releaseGrant(exchange);
 }
 
 // Does:  Returns the signal application code holds: aborted when the client leaves or the request times out.

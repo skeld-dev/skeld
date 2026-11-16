@@ -1,0 +1,103 @@
+{
+  "name": "@skeld/auth",
+  "version": "0.2.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skeld-dev/skeld.git",
+    "directory": "packages/auth"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=26.12.0"
+  },
+  "files": [
+    "dist",
+    "!dist/diag/recorder",
+    "!dist/**/*.d.ts.map",
+    "LICENSE",
+    "README.md"
+  ],
+  "imports": {
+    "#diag": {
+      "skeld-diag": {
+        "skeld-source": "./src/diag/recorder/recorder.ts",
+        "default": "./dist/diag/recorder/recorder.js"
+      },
+      "skeld-source": "./src/diag/empty.ts",
+      "default": "./dist/diag/empty.js"
+    }
+  },
+  "exports": {
+    "./server": {
+      "skeld-source": "./src/server/auth.ts",
+      "types": "./dist/server/auth.d.ts",
+      "default": "./dist/server/auth.js"
+    },
+    "./policy": {
+      "skeld-source": "./src/policy/policy.ts",
+      "types": "./dist/policy/policy.d.ts",
+      "default": "./dist/policy/policy.js"
+    },
+    "./routes": {
+      "skeld-source": "./src/routes/routes.ts",
+      "types": "./dist/routes/routes.d.ts",
+      "default": "./dist/routes/routes.js"
+    },
+    "./auth-error": {
+      "skeld-source": "./src/auth-error/auth-error.ts",
+      "types": "./dist/auth-error/auth-error.d.ts",
+      "default": "./dist/auth-error/auth-error.js"
+    },
+    "./store": {
+      "skeld-source": "./src/store/store.ts",
+      "types": "./dist/store/store.d.ts",
+      "default": "./dist/store/store.js"
+    },
+    "./sqlite": {
+      "skeld-source": "./src/sqlite/sqlite.ts",
+      "types": "./dist/sqlite/sqlite.d.ts",
+      "default": "./dist/sqlite/sqlite.js"
+    },
+    "./postgres": {
+      "skeld-source": "./src/postgres/postgres.ts",
+      "types": "./dist/postgres/postgres.d.ts",
+      "default": "./dist/postgres/postgres.js"
+    },
+    "./store-conformance": {
+      "skeld-source": "./src/store-conformance/store-conformance.ts",
+      "types": "./dist/store-conformance/store-conformance.d.ts",
+      "default": "./dist/store-conformance/store-conformance.js"
+    },
+    "./api-key": {
+      "skeld-source": "./src/api-key/api-key.ts",
+      "types": "./dist/api-key/api-key.d.ts",
+      "default": "./dist/api-key/api-key.js"
+    },
+    "./jwt": {
+      "skeld-source": "./src/jwt/jwt.ts",
+      "types": "./dist/jwt/jwt.d.ts",
+      "default": "./dist/jwt/jwt.js"
+    },
+    "./oidc": {
+      "skeld-source": "./src/oidc/oidc.ts",
+      "types": "./dist/oidc/oidc.d.ts",
+      "default": "./dist/oidc/oidc.js"
+    },
+    "./password": {
+      "skeld-source": "./src/password/password.ts",
+      "types": "./dist/password/password.d.ts",
+      "default": "./dist/password/password.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@skeld/core": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Access control and authentication building blocks for Skeld services: route policies, sessions, API keys, JWT verification, OpenID Connect, rate limits and password hashing, over SQLite or PostgreSQL.",
+  "homepage": "https://skeld.dev"
+}

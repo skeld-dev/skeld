@@ -16,6 +16,6 @@ export function renderDiagram(source: string, title: string): string {
     .replace(/<style>[\s\S]*?<\/style>/g, '')
     .replace(/ style="[^"]*"/, '')
     .replace(/<([a-zA-Z][\w:-]*)([^<>]*?)\s*\/>/g, '<$1$2></$1>')
-    .replace('<svg ', `<svg role="img" aria-label="${escapeHtml(title)} diagram" `);
+    .replace('<svg ', () => `<svg role="img" aria-label="${escapeHtml(title)} diagram" `);
   return `<figure class="docs-diagram"><div class="docs-diagram-canvas" tabindex="0" role="region" aria-label="${escapeHtml(title)} diagram">${diagram}</div><details><summary>Diagram source</summary><pre tabindex="0"><code>${escapeHtml(source)}</code></pre></details></figure>`;
 }

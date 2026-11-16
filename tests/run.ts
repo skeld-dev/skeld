@@ -7,8 +7,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const categories = ['security', 'browser', 'lifecycle', 'contracts', 'schema', 'logging'];
-const fixtures = new Set(['corpus.ts', 'diverse-fixture.ts', 'log-collector.ts', 'log-destination.ts']);
+const categories = ['security', 'browser', 'lifecycle', 'contracts', 'schema', 'logging', 'auth'];
+const fixtures = new Set([
+  'corpus.ts',
+  'diverse-fixture.ts',
+  'log-collector.ts',
+  'log-destination.ts',
+  'support-store.ts',
+]);
 const diagScripts = [
   'security/malformed-path.ts',
   'security/prototype-poisoning.ts',

@@ -10,7 +10,7 @@ export interface Empty {
 }
 ```
 
-Source: `packages/core/src/contract/types.ts:138`
+Source: `packages/core/src/contract/types.ts:157`
 
 ## OutgoingCookie
 
@@ -44,7 +44,7 @@ export interface OutgoingCookie {
 | `sameSite`    | Which cross-site requests carry it (default `Lax`).                                                                                  |
 | `partitioned` | Whether it is keyed to the top-level site it was set under (default false).                                                          |
 
-Source: `packages/core/src/contract/types.ts:75`
+Source: `packages/core/src/contract/types.ts:86`
 
 ## RouteInfo
 
@@ -64,7 +64,45 @@ export interface RouteInfo {
 | `method` | The route's HTTP method.          |
 | `path`   | The route's path pattern.         |
 
-Source: `packages/core/src/contract/types.ts:143`
+Source: `packages/core/src/contract/types.ts:162`
+
+## AccessTypes
+
+What a gate tells the server's types: the principal it admits and the grant of each policy action.
+
+```ts
+export interface AccessTypes {
+  readonly principal: unknown;
+  readonly grants: { readonly [policy: string]: { readonly [action: string]: unknown } };
+}
+```
+
+| Field       | Summary                                                       |
+| ----------- | ------------------------------------------------------------- |
+| `principal` | The principal a credential resolves to.                       |
+| `grants`    | The grant a handler receives, by policy name and action name. |
+
+Source: `packages/core/src/gate/types.ts:9`
+
+## NoAccess
+
+The access types of a server without a gate; with them every public type is the one a server had before gates.
+
+```ts
+export interface NoAccess extends AccessTypes {
+  readonly principal: never;
+  readonly grants: { readonly [policy: string]: never };
+  readonly '~none': true;
+}
+```
+
+| Field       | Summary                      |
+| ----------- | ---------------------------- |
+| `principal` | No principal exists.         |
+| `grants`    | No grant exists.             |
+| `~none`     | Marks the absence of a gate. |
+
+Source: `packages/core/src/gate/types.ts:17`
 
 ## RequestPart
 
@@ -92,7 +130,7 @@ export type AuthorHeaderName<N extends string> = N extends unknown
   : never;
 ```
 
-Source: `packages/core/src/server/types.ts:171`
+Source: `packages/core/src/server/types.ts:177`
 
 ## CompletedContext
 
@@ -122,7 +160,7 @@ export interface CompletedContext {
 | `log`           | The request's logger, shared with its handler and its other hooks; each record carries `requestId`.   |
 | `requestId`     | The request's local id, a version 4 UUID, also sent as the `x-request-id` response header.            |
 
-Source: `packages/core/src/server/types.ts:384`
+Source: `packages/core/src/server/types.ts:421`
 
 ## CorsHeaderName
 
@@ -138,7 +176,7 @@ export type CorsHeaderName =
   | 'access-control-max-age';
 ```
 
-Source: `packages/core/src/server/types.ts:148`
+Source: `packages/core/src/server/types.ts:154`
 
 ## CorsPolicy
 
@@ -166,7 +204,7 @@ createServer({ cors: { origins: ['https://app.example'], credentials: true } });
 | `exposedHeaders` | Response header names a granted page may read beyond the CORS-safelisted ones (default none).                    |
 | `maxAgeSeconds`  | How long a browser may cache a preflight answer, in whole seconds from 0 to 86,400 (default 600).                |
 
-Source: `packages/core/src/server/types.ts:92`
+Source: `packages/core/src/server/types.ts:98`
 
 ## CsrfPolicy
 
@@ -188,7 +226,7 @@ createServer({ publicOrigin: 'https://api.example', csrf: { mode: 'strict' } });
 | `mode`           | `baseline` passes a request with neither `Origin` nor `Sec-Fetch-Site`; `strict` refuses it (default `baseline`).      |
 | `trustedOrigins` | Other origins whose pages may send unsafe requests, besides `publicOrigin`; CORS origins are not added (default none). |
 
-Source: `packages/core/src/server/types.ts:109`
+Source: `packages/core/src/server/types.ts:115`
 
 ## ErrorContext
 
@@ -220,7 +258,7 @@ export interface ErrorContext {
 | `log`           | The request's logger, shared with its handler and its other hooks; each record carries `requestId`.   |
 | `requestId`     | The request's local id, a version 4 UUID, also sent as the `x-request-id` response header.            |
 
-Source: `packages/core/src/server/types.ts:404`
+Source: `packages/core/src/server/types.ts:441`
 
 ## ErrorHandler
 
@@ -232,7 +270,51 @@ The nearest scope's handler runs first and a value it throws goes to the parent'
 export type ErrorHandler = (error: unknown, context: ErrorContext) => HttpError | Promise<HttpError>;
 ```
 
-Source: `packages/core/src/server/types.ts:455`
+Source: `packages/core/src/server/types.ts:492`
+
+## GatedHandler
+
+The function that serves one route of a contract on a server with a gate.
+
+A `Handler` of the same route is assignable to it.
+
+```ts
+export type GatedHandler<C extends ContractRoutes, K extends keyof C, A extends AccessTypes> = (
+  request: GatedRequest<C[K], A>,
+) => RouteReply<C[K]> | Promise<RouteReply<C[K]>>;
+```
+
+Source: `packages/core/src/server/types.ts:286`
+
+## GatedHandlers
+
+One handler per route name of a contract, on a server with a gate.
+
+```ts
+export type GatedHandlers<C extends ContractRoutes, A extends AccessTypes> = {
+  readonly [K in keyof C]: GatedHandler<C, K, A>;
+};
+```
+
+Source: `packages/core/src/server/types.ts:291`
+
+## GatedRequest
+
+What a handler on a server with a gate receives: the route's request, its principal and its grant.
+
+```ts
+export interface GatedRequest<R extends RouteDefinition, A extends AccessTypes> extends RouteRequest<R> {
+  readonly principal: PrincipalOf<R['access'], A['principal']>;
+  readonly grant: GrantOf<R['access'], A['grants']>;
+}
+```
+
+| Field       | Summary                                                                                                           |
+| ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `principal` | The admitted principal: `undefined` on a `'public'` route, `null` on an `'optional'` one without a credential.    |
+| `grant`     | The grant of the route's policy action: `undefined` unless the route names a policy, `never` for an unknown name. |
+
+Source: `packages/core/src/server/types.ts:275`
 
 ## Handler
 
@@ -246,7 +328,7 @@ export type Handler<C extends ContractRoutes, K extends keyof C> = (
 ) => RouteReply<C[K]> | Promise<RouteReply<C[K]>>;
 ```
 
-Source: `packages/core/src/server/types.ts:251`
+Source: `packages/core/src/server/types.ts:257`
 
 ## Handlers
 
@@ -256,7 +338,7 @@ One handler per route name of a contract.
 export type Handlers<C extends ContractRoutes> = { readonly [K in keyof C]: Handler<C, K> };
 ```
 
-Source: `packages/core/src/server/types.ts:256`
+Source: `packages/core/src/server/types.ts:262`
 
 ## HookName
 
@@ -266,7 +348,7 @@ The hook names `addHook` accepts.
 export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'onError';
 ```
 
-Source: `packages/core/src/server/types.ts:458`
+Source: `packages/core/src/server/types.ts:495`
 
 ## ListeningAddress
 
@@ -286,7 +368,7 @@ export interface ListeningAddress {
 | `port` | The bound port.                                                           |
 | `url`  | The base URL, as in `http://127.0.0.1:3000`; an IPv6 host is in brackets. |
 
-Source: `packages/core/src/server/types.ts:523`
+Source: `packages/core/src/server/types.ts:560`
 
 ## ListenOptions
 
@@ -304,7 +386,7 @@ export interface ListenOptions {
 | `port` | The TCP port, from 0 to 65535; 0 picks a free one.                     |
 | `host` | The address to bind; an empty string is refused (default `127.0.0.1`). |
 
-Source: `packages/core/src/server/types.ts:512`
+Source: `packages/core/src/server/types.ts:549`
 
 ## OnErrorHook
 
@@ -316,7 +398,7 @@ It cannot change the reply; a throw is logged as `skeld.hook.error`.
 export type OnErrorHook = (context: ErrorContext, error: unknown) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:449`
+Source: `packages/core/src/server/types.ts:486`
 
 ## OnRequestHook
 
@@ -328,7 +410,7 @@ A hook run after routing and before the body is read.
 export type OnRequestHook = (context: RequestContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:429`
+Source: `packages/core/src/server/types.ts:466`
 
 ## OnResponseHook
 
@@ -340,7 +422,7 @@ A throw is logged as `skeld.hook.error` and changes nothing; it does not run aft
 export type OnResponseHook = (context: CompletedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:444`
+Source: `packages/core/src/server/types.ts:481`
 
 ## OnSendHook
 
@@ -352,7 +434,7 @@ Its return value is ignored; a throw goes to the error path.
 export type OnSendHook = (context: ResponseContext, payload: string) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:439`
+Source: `packages/core/src/server/types.ts:476`
 
 ## OutgoingHeaders
 
@@ -366,7 +448,7 @@ export type OutgoingHeaders = { readonly [name: string]: string | number | reado
 };
 ```
 
-Source: `packages/core/src/server/types.ts:185`
+Source: `packages/core/src/server/types.ts:191`
 
 ## PartKey
 
@@ -380,17 +462,17 @@ export type PartKey<R extends RouteDefinition, P extends RequestPart> = R extend
   : never;
 ```
 
-Source: `packages/core/src/server/types.ts:190`
+Source: `packages/core/src/server/types.ts:196`
 
 ## Plugin
 
 A function that declares routes, hooks and plugins on the child scope it is given; it may be async.
 
 ```ts
-export type Plugin = (scope: Scope) => void | Promise<void>;
+export type Plugin<A extends AccessTypes = NoAccess> = (scope: Scope<A>) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:503`
+Source: `packages/core/src/server/types.ts:540`
 
 ## PreHandlerHook
 
@@ -402,7 +484,7 @@ It never runs for a refused request; `context.send` replies and skips the handle
 export type PreHandlerHook = (context: ValidatedContext) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:434`
+Source: `packages/core/src/server/types.ts:471`
 
 ## RawCookies
 
@@ -420,7 +502,7 @@ export interface RawCookies {
 | `get`    | Returns the value of a cookie sent exactly once; a name sent twice or never gives `undefined`. |
 | `getAll` | Returns every value sent under the name, in the order received; empty when it was not sent.    |
 
-Source: `packages/core/src/server/types.ts:140`
+Source: `packages/core/src/server/types.ts:146`
 
 ## RawHeaders
 
@@ -432,7 +514,7 @@ export interface RawHeaders {
 }
 ```
 
-Source: `packages/core/src/server/types.ts:135`
+Source: `packages/core/src/server/types.ts:141`
 
 ## RawReply
 
@@ -452,7 +534,7 @@ export interface RawReply {
 | `headers` | Headers to set on the reply; a reserved name of `OutgoingHeaders` makes `send` throw `Error` before anything is set. |
 | `payload` | The body, written as given; without it the reply has no body.                                                        |
 
-Source: `packages/core/src/server/types.ts:293`
+Source: `packages/core/src/server/types.ts:330`
 
 ## RegisterOptions
 
@@ -468,7 +550,7 @@ export interface RegisterOptions {
 | ------ | ------------------------------------------------------------------------------------------------------ |
 | `name` | The plugin's name in boot errors (default the function's name, or `plugin #<n>` for an anonymous one). |
 
-Source: `packages/core/src/server/types.ts:506`
+Source: `packages/core/src/server/types.ts:543`
 
 ## ReservedHeaderName
 
@@ -489,7 +571,7 @@ export type ReservedHeaderName =
   | CorsHeaderName;
 ```
 
-Source: `packages/core/src/server/types.ts:157`
+Source: `packages/core/src/server/types.ts:163`
 
 ## RequestContext
 
@@ -527,7 +609,7 @@ export interface RequestContext {
 | `setCookie`     | Sets a cookie on the response, replacing a pending one of the same name, path and domain.             |
 | `send`          | Replies at once; later hooks and the handler do not run.                                              |
 
-Source: `packages/core/src/server/types.ts:303`
+Source: `packages/core/src/server/types.ts:340`
 
 ## ResponseContext
 
@@ -565,7 +647,7 @@ export interface ResponseContext {
 | `setHeader`     | Sets a header on the response.                                                                        |
 | `setCookie`     | Sets a cookie on the response, replacing a pending one of the same name, path and domain.             |
 
-Source: `packages/core/src/server/types.ts:350`
+Source: `packages/core/src/server/types.ts:387`
 
 ## RouteReply
 
@@ -594,7 +676,7 @@ export type RouteReply<R extends RouteDefinition> = {
 }[keyof R['responses']];
 ```
 
-Source: `packages/core/src/server/types.ts:228`
+Source: `packages/core/src/server/types.ts:234`
 
 ## RouteRequest
 
@@ -632,7 +714,7 @@ export interface RouteRequest<R extends RouteDefinition> {
 | `requestId`     | The request's local id, a version 4 UUID, also sent as the `x-request-id` response header.                  |
 | `classified`    | Pairs a request part, or one declared key of it, with the route's own schema for that part, for a log call. |
 
-Source: `packages/core/src/server/types.ts:197`
+Source: `packages/core/src/server/types.ts:203`
 
 ## RoutesOptions
 
@@ -658,7 +740,7 @@ export interface RoutesOptions<C extends ContractRoutes> {
 | `csrf`            | The cross-site check of these routes, replacing the server's `csrf` whole, never merged.                         |
 | `csrfExempt`      | Route names the cross-site check skips, such as a webhook that proves its sender another way.                    |
 
-Source: `packages/core/src/server/types.ts:259`
+Source: `packages/core/src/server/types.ts:296`
 
 ## Scope
 
@@ -667,13 +749,13 @@ A place to declare routes, hooks, an error handler and plugins; the server is th
 Its methods throw BootError `REGISTRATION_CLOSED` once `listen` is called, or once the plugin that owns it has settled.
 
 ```ts
-export interface Scope {
+export interface Scope<A extends AccessTypes = NoAccess> {
   readonly signal: AbortSignal;
   readonly log: Logger;
   onClose(callback: () => void | Promise<void>): void;
   routes<C extends ContractRoutes>(
     contract: C,
-    handlers: NoInfer<Handlers<C>>,
+    handlers: NoInfer<[A] extends [NoAccess] ? Handlers<C> : GatedHandlers<C, A>>,
     options?: NoInfer<RoutesOptions<C>>,
   ): void;
   addHook(name: 'onRequest', hook: OnRequestHook): void;
@@ -682,7 +764,7 @@ export interface Scope {
   addHook(name: 'onResponse', hook: OnResponseHook): void;
   addHook(name: 'onError', hook: OnErrorHook): void;
   setErrorHandler(handler: ErrorHandler): void;
-  register(plugin: Plugin, options?: RegisterOptions): void;
+  register(plugin: Plugin<A>, options?: RegisterOptions): void;
 }
 ```
 
@@ -696,14 +778,14 @@ export interface Scope {
 | `setErrorHandler` | Sets this scope's error handler.                                                                              |
 | `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                   |
 
-Source: `packages/core/src/server/types.ts:464`
+Source: `packages/core/src/server/types.ts:501`
 
 ## Server
 
 A service: the root scope, with `listen` and `close`.
 
 ```ts
-export interface Server extends Scope {
+export interface Server<A extends AccessTypes = NoAccess> extends Scope<A> {
   listen(options: ListenOptions): Promise<ListeningAddress>;
   close(): Promise<void>;
   logStats(): LogStats;
@@ -716,7 +798,7 @@ export interface Server extends Scope {
 | `close`    | Stops accepting connections and resolves once every open one has closed.                          |
 | `logStats` | Returns this server's log counts; never throws, before `listen` and after `close` too.            |
 
-Source: `packages/core/src/server/types.ts:533`
+Source: `packages/core/src/server/types.ts:570`
 
 ## ServerOptions
 
@@ -725,7 +807,8 @@ The options of `createServer`; each number is a positive integer.
 `createServer` throws BootError `INVALID_OPTION` for any other value, or for a `headersTimeout` above `requestTimeout`.
 
 ```ts
-export interface ServerOptions {
+export interface ServerOptions<A extends AccessTypes = NoAccess> {
+  readonly gate?: Gate<A>;
   readonly bodyLimit?: number;
   readonly maxParamLength?: number;
   readonly pluginTimeoutMs?: number;
@@ -748,6 +831,7 @@ export interface ServerOptions {
 
 | Field                  | Summary                                                                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `gate`                 | The server's access control; with it every route must declare `access` (default none: no route may declare it).           |
 | `bodyLimit`            | Largest request body accepted, in bytes; a larger one is refused with 413 (default 1 MiB).                                |
 | `maxParamLength`       | Longest path parameter accepted, in bytes as received; a longer one is refused with 414 (default 100).                    |
 | `pluginTimeoutMs`      | Time each plugin has to settle at `listen`, in milliseconds, at most 2 147 483 647 (default 10 000).                      |
@@ -766,7 +850,7 @@ export interface ServerOptions {
 | `csrf`                 | The cross-site check on POST, PUT, PATCH and DELETE, unless a `routes()` group sets its own (default `baseline`).         |
 | `log`                  | The structured log on stdout or a sink; `false` writes no record and calls no sink (default: stdout, no options).         |
 
-Source: `packages/core/src/server/types.ts:15`
+Source: `packages/core/src/server/types.ts:16`
 
 ## ValidatedContext
 
@@ -786,7 +870,7 @@ export interface ValidatedContext extends RequestContext {
 | `query`  | The validated query parameters. |
 | `body`   | The validated body.             |
 
-Source: `packages/core/src/server/types.ts:340`
+Source: `packages/core/src/server/types.ts:377`
 
 ## createServer
 
@@ -795,7 +879,8 @@ Creates a server, the root scope of a service; nothing listens until `listen`.
 Throws BootError `INVALID_OPTION` for an option out of range or malformed, or `csrf.mode: 'strict'` without `publicOrigin`.
 
 ```ts
-export function createServer(options: ServerOptions = {}): Server;
+export function createServer<A extends AccessTypes = NoAccess>(options?: ServerOptions<A>): Server<A>;
+export function createServer(options?: ServerOptions): Server;
 ```
 
 ```ts
@@ -804,4 +889,4 @@ await server.listen({ port: 0 });
 await server.close();
 ```
 
-Source: `packages/core/src/server/server.ts:63`
+Source: `packages/core/src/server/server.ts:69`

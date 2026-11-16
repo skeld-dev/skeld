@@ -121,7 +121,10 @@ export function pagesPlugin(): Plugin {
         const page = pages.find((item) => context.filename === item.template || context.path === item.url);
         return page?.render === undefined
           ? document
-          : withSocialMetadata(document.replace('<!-- app -->', renderToString(page.render())), page.url);
+          : withSocialMetadata(
+              document.replace('<!-- app -->', () => renderToString(page.render())),
+              page.url,
+            );
       },
     },
     generateBundle: {

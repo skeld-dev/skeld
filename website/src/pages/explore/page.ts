@@ -1,4 +1,4 @@
-// Does: Renders a searchable library and one focused, source-backed illustrated scene.
+// Does:  Renders a searchable library and one focused, source-backed illustrated scene.
 // Holds: All scenario content is static data; native controls also work without dragging.
 import { html } from '@lightstart/light/html/core';
 import { signal } from '@lightstart/light/signals';

@@ -52,6 +52,38 @@ export function writeJson(
   }
 }
 
+// Does:  Removes every header set before an engine-written error, keeping Node's Date header.
+function clearHead(res: ServerResponse): void {
+  // Why: A header set before the failure (a cookie, a cache directive) must not ride out on the error.
+  for (const name of res.getHeaderNames()) {
+    res.removeHeader(name);
+  }
+  // Why: removeHeader('date') turns sendDate off, which would leave the error without Node's Date header.
+  res.sendDate = true;
+}
+
+// Does:  Writes a gate refusal's fixed text with its CORS grant and one optional header, after clearing the head.
+export function writeRefusal(
+  runtime: EngineRuntime,
+  res: ServerResponse,
+  requestId: string,
+  method: string,
+  status: number,
+  text: string,
+  close: boolean,
+  cors: CorsGrant | null,
+  header: readonly [string, string] | null,
+): void {
+  const span = start('err.write');
+  clearHead(res);
+  if (header !== null) {
+    res.setHeader(header[0], header[1]);
+  }
+  const closing = close || runtime.isClosing();
+  writeJson(res, requestId, method, status, text, closing, runtime.securityHeaders, null, null, cors);
+  end(span);
+}
+
 function errorText(runtime: EngineRuntime, body: ErrorBody): string | null {
   try {
     const written = runtime.errorSerializer.write(body);
@@ -76,12 +108,7 @@ export function writeErrorBody(
   const span = start('err.write');
   const text = errorText(runtime, body);
   const closing = close || runtime.isClosing();
-  // Why: A header set before the failure (a cookie, a cache directive) must not ride out on the error.
-  for (const name of res.getHeaderNames()) {
-    res.removeHeader(name);
-  }
-  // Why: removeHeader('date') turns sendDate off, which would leave the error without Node's Date header.
-  res.sendDate = true;
+  clearHead(res);
   if (text === null) {
     writeJson(
       res,

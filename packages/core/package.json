@@ -85,6 +85,11 @@
       "types": "./dist/log/log.d.ts",
       "default": "./dist/log/log.js"
     },
+    "./gate": {
+      "skeld-source": "./src/gate/gate.ts",
+      "types": "./dist/gate/gate.d.ts",
+      "default": "./dist/gate/gate.js"
+    },
     "./generated-check": {
       "skeld-source": "./src/compile/generate.ts"
     },

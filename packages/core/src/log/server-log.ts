@@ -6,6 +6,7 @@ import { createLogger } from './author-logger.ts';
 import { createDestination } from './destination.ts';
 import { readError } from './error-reader.ts';
 import { type Category, EVENTS, SEVERITY_NUMBER } from './events.ts';
+import { encodeFields } from './fields.ts';
 import { encodeRecord } from './line.ts';
 import type { ErrorOptions, RecordParts, RequestLog, ResolvedLog, ServerLog } from './shapes.ts';
 import { createSuppression } from './suppress.ts';
@@ -20,6 +21,10 @@ interface Spec {
 
 const none = (): void => undefined;
 
+function isEventName(event: string): event is keyof typeof EVENTS {
+  return Object.hasOwn(EVENTS, event);
+}
+
 const SILENT: Logger = Object.freeze({ debug: none, info: none, warn: none, error: none, fatal: none });
 
 // Why: Under `log: false` nothing is created, so every count is zero.
@@ -32,6 +37,7 @@ const DISABLED: ServerLog = Object.freeze({
   publicOriginHint: none,
   refused: none,
   failed: none,
+  security: none,
   ended: none,
   logger: () => SILENT,
   stats: (): LogStats => ({
@@ -84,7 +90,8 @@ function engineRecord(
   };
 }
 
-export function createServerLog(resolved: ResolvedLog): ServerLog {
+// Holds: Only a server with a gate keeps a map of its loggers; without one, logger() adds nothing per call.
+export function createServerLog(resolved: ResolvedLog, gated = false): ServerLog {
   if (!resolved.enabled) {
     return DISABLED;
   }
@@ -95,12 +102,14 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
     cwd: '',
   });
   let closing: Promise<void> | null = null;
+  const securitySeverities = new Map<string, Severity>();
+  const loggers = gated ? new WeakMap<object, RequestLog | null>() : null;
   const suppression = createSuppression((event, route, refused) => {
-    const { category, severity } = EVENTS[event];
-    // Why: Every suppressed event has both in the table; only the summary's own entry leaves them to the caller.
-    if (category === null || severity === null) {
+    const spec = summarySpec(event);
+    if (spec === null) {
       return;
     }
+    const { category, severity } = spec;
     // Why: The summary skips the threshold, which its event already passed to be admitted, and is never suppressed.
     offer(
       engineRecord('skeld.log.suppressed', { category, severity }, null, null, [
@@ -138,6 +147,20 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
       return null;
     }
     return { category, severity };
+  }
+
+  // Does:  The category and severity a suppression summary takes from the event it counts.
+  function summarySpec(event: string): Spec | null {
+    const security = securitySeverities.get(event);
+    if (security !== undefined) {
+      return { category: 'security', severity: security };
+    }
+    if (!isEventName(event)) {
+      return null;
+    }
+    const { category, severity } = EVENTS[event];
+    // Why: Every suppressed event has both in the table; only the summary's own entry leaves them to the caller.
+    return category === null || severity === null ? null : { category, severity };
   }
 
   function stats(): LogStats {
@@ -204,8 +227,28 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
         );
       }
     },
+    // Holds: Only a logger this server made writes, so a record can never claim another server's request.
+    security(event, severity, logger, fields) {
+      if (loggers === null || typeof logger !== 'object' || logger === null || !loggers.has(logger)) {
+        return;
+      }
+      const request = loggers.get(logger) ?? null;
+      securitySeverities.set(event, severity);
+      if (SEVERITY_NUMBER[severity] < resolved.thresholds.security) {
+        return;
+      }
+      if (!suppression.admit(event, request === null ? null : request.route)) {
+        return;
+      }
+      offer({
+        ...engineRecord(event, { category: 'security', severity }, request, null, null),
+        fields: fields === undefined ? null : encodeFields(fields, errorOptions),
+      });
+    },
     logger(request) {
-      return createLogger(outlet, request);
+      const made = createLogger(outlet, request);
+      loggers?.set(made, request);
+      return made;
     },
     stats,
     close() {

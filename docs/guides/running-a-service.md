@@ -51,8 +51,8 @@ The runnable examples handle SIGINT and SIGTERM and await `server.close()`. Foll
 
 ## Keep application obligations visible
 
-Before exposing a service, implement its authentication, authorization, durable storage rules, and any abuse controls it needs. Verify origin and proxy behavior through the real deployment path, not only on loopback. Configure TLS and secret storage in that environment.
+Before exposing a service, implement its authentication, authorization, durable storage rules, and any abuse controls it needs. [Add authentication](auth.md) covers what `@skeld/auth` supplies and what it leaves to the application. Verify origin and proxy behavior through the real deployment path, not only on loopback. Configure TLS and secret storage in that environment.
 
-The examples intentionally omit identity and persistent storage. Passing their checks establishes that the examples work; it does not establish production readiness for your application. The [security boundary guide](../concepts/security-boundaries.md) separates framework behavior from those obligations.
+The hello, logging and service examples intentionally omit identity and persistent storage; `examples/auth` adds identity with temporary local stores. Passing their checks establishes that the examples work; it does not establish production readiness for your application. The [security boundary guide](../concepts/security-boundaries.md) separates framework behavior from those obligations.
 
 **Next:** [troubleshoot a specific symptom](troubleshooting.md). Reference: [server options](../api/core/server.md).

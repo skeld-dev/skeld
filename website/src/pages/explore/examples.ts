@@ -1,4 +1,4 @@
-// Does: Describes prepared, source-backed scenarios for the static walkthrough library.
+// Does:  Describes prepared, source-backed scenarios for the static walkthrough library.
 // Holds: Content is illustrative data; adding a scenario cannot enable runtime execution.
 export const groups = [
   'Requests',

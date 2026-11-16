@@ -100,7 +100,7 @@ function arrayText(levels: number): string {
 
 function numberAfter(mode: string, prefix: string): number {
   const value = Number(mode.slice(prefix.length));
-  // The hostile-response fixture needs at most two million bytes, never arbitrary allocations.
+  // Why: The hostile-response fixture needs at most two million bytes, never arbitrary allocations.
   return Number.isSafeInteger(value) && value >= 14 && value <= 2_000_000 ? value : 14;
 }
 
