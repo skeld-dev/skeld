@@ -1,6 +1,6 @@
 name: Publish npm release
 
-# A reviewed core or auth version bump merged to main starts publication.
+# A core or auth version bump merged to main starts publication; the pull request's Checks already ran the tests.
 on:
   push:
     branches: [ main ]
@@ -84,14 +84,6 @@ jobs:
           NODE
           git merge-base --is-ancestor HEAD origin/main
 
-  checks:
-    name: Release checks
-    needs: validate
-    if: needs.validate.outputs.publish == 'true'
-    uses: ./.github/workflows/ci.yml
-    permissions:
-      contents: read
-
   security:
     name: Release security
     needs: validate
@@ -103,7 +95,7 @@ jobs:
 
   package:
     name: Build verified packages
-    needs: [ validate, checks, security ]
+    needs: [ validate, security ]
     permissions:
       contents: read
       security-events: read

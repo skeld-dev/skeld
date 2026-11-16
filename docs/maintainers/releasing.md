@@ -16,7 +16,8 @@ After the first push, configure the repository:
 - Keep automatic Dependabot security-update PRs disabled. Review security alerts and make deliberate fixes;
   weekly version-update PRs remain enabled. Changing Dependabot configuration can cause an immediate update check.
 - Use the committed advanced CodeQL workflow, not a second default-setup scan.
-- Protect `main`: require pull requests, resolved conversations, an up-to-date branch and passing `Checks`.
+- Protect `main` with a ruleset ("Protect main"): require pull requests, resolved conversations, an up-to-date
+  branch and passing `Checks`, with no bypass actors. The release workflow does not rerun the tests and relies on it.
 - CodeQL runs weekly and during releases, not on every PR. Do not require its status or a CodeQL scanning
   rule on PRs. Review open findings before a release: a successful scan means analysis completed, not that
   there are no findings.
@@ -35,20 +36,22 @@ Dependabot can propose updates. Node and pnpm follow `.nvmrc` and `packageManage
 
 ## Checks and security coverage
 
-`ci.yml` runs on pull requests, on manual request, and when called by the release workflow. Its first job,
+`ci.yml` runs on pull requests and on manual request. It is the only place the tests run: nothing repeats
+them after a pull request merges, and the release workflow does not run them again. Its first job,
 `Select checks`, chooses the other jobs with `tools/ci-select.ts`. On a pull request it reads the changed
-paths; a path no rule claims selects the full run. Manual and release runs always take the full run.
+paths; a path no rule claims, such as the lockfile, a workflow or a file under `tools/`, selects every job.
+A manual run selects every job.
 
 - The static job checks types, strict Biome lint, unused dependencies and exports, and the complete lockfile's
-  security advisories. It runs on every pull request that changes a file, and in every full run.
-- A pull request runs only the test groups its paths select (runtime, database, protocol, extended, tooling,
-  diagnostic), plus the API documentation, examples, consumer declaration and website jobs when their paths change.
-- The full run replaces the test groups with one full correctness job (with PostgreSQL 18), and adds the
-  diagnostic tests, the public API reference and its example, the runnable examples and the website build.
+  security advisories, and scans `packages/core/src` and `packages/auth/src` with every rule in `.semgrep`,
+  failing on any finding. It runs on every pull request that changes a file.
+- The test groups (runtime, database with PostgreSQL 18, protocol, extended, tooling) and the diagnostic tests
+  each run as their own job, in parallel, when the changed paths select them. The API documentation, examples,
+  consumer declaration and website jobs run when their paths change.
 - A final `Checks` job fails when any selected job failed or was cancelled. It is the status branch protection requires.
 
-CI does not repeat after a PR merges to `main`. Benchmarks are not CI timing gates. Each job has its own
-timeout; no hosted timing of the split workflow has been measured.
+A pull request is meant to finish within 10 minutes: every test job has a 10-minute timeout. Benchmarks are
+not CI timing gates.
 
 `security.yml` runs one job combining CodeQL's extended security queries for JavaScript/TypeScript and
 GitHub Actions with a full-lockfile advisory audit. It runs weekly on Monday, on manual request and during
@@ -107,8 +110,10 @@ configuration's first successful publish within 2 days, or the configuration exp
    repository and each package's name, access and version against npm, and decides per package whether
    to publish. A version already on npm is skipped; registry errors fail. `@skeld/auth` may be absent from
    the registry; `@skeld/core` may not.
-3. CI and CodeQL run for that commit when at least one package will be published. Packaging requires the
-   checks, an advisory-free lockfile and no open CodeQL alerts on `main`. Documented false positives remain
+3. The tests do not run again. The "Protect main" ruleset requires a pull request, a passing `Checks` status
+   and a branch up to date with `main`, with no bypass actors, so the merged commit is the tree that passed.
+   When at least one package will be published, CodeQL and the advisory audit run for that commit. Packaging
+   requires an advisory-free lockfile and no open CodeQL alerts on `main`. Documented false positives remain
    visible in GitHub as dismissed alerts.
 4. A clean build job builds both packages, packs each one that will be published, checks recorder exclusion
    and exports on those exact tarballs, and uploads them as one artifact with one SHA-256 checksum file.

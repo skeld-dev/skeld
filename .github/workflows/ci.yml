@@ -3,7 +3,6 @@ name: CI
 on:
   pull_request:
   workflow_dispatch:
-  workflow_call:
 
 permissions:
   contents: read
@@ -21,7 +20,7 @@ jobs:
   select:
     name: Select checks
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
+    timeout-minutes: 3
     outputs:
       static: ${{ steps.select.outputs.static }}
       quick: ${{ steps.select.outputs.quick }}
@@ -30,7 +29,6 @@ jobs:
       extended: ${{ steps.select.outputs.extended }}
       tooling: ${{ steps.select.outputs.tooling }}
       diag: ${{ steps.select.outputs.diag }}
-      full: ${{ steps.select.outputs.full }}
       docs: ${{ steps.select.outputs.docs }}
       examples: ${{ steps.select.outputs.examples }}
       consumer: ${{ steps.select.outputs.consumer }}
@@ -54,15 +52,15 @@ jobs:
           if [ "$EVENT" = pull_request ]; then
             git diff --name-only --no-renames -z "$BASE...$HEAD" | node tools/ci-select.ts
           else
-            node tools/ci-select.ts --full
+            node tools/ci-select.ts --all
           fi
 
   static:
-    name: Typecheck, lint and audit
+    name: Typecheck, lint, audit and scan
     needs: select
     if: needs.select.outputs.static == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -84,13 +82,21 @@ jobs:
         run: pnpm exec biome check . --error-on-warnings
       - name: Unused dependencies and exports
         run: pnpm run knip
+      # Why: The runner's own PIPX_BIN_DIR points elsewhere, so the scan names the binary it installed.
+      - name: Install Semgrep
+        run: |
+          PIPX_HOME="$HOME/.local/share/pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install semgrep==1.182.1
+          "$HOME/.local/bin/semgrep" --version
+      - name: Semgrep rules on core and auth sources
+        run: |
+          "$HOME/.local/bin/semgrep" scan --metrics=off --config .semgrep --error packages/core/src packages/auth/src
 
   quick:
     name: Runtime tests
     needs: select
     if: needs.select.outputs.quick == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -112,7 +118,7 @@ jobs:
     needs: select
     if: needs.select.outputs.database == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,7 +152,7 @@ jobs:
     needs: select
     if: needs.select.outputs.protocol == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -160,7 +166,6 @@ jobs:
           run_install: false
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      # Why: tests/auth/rig/cdp.ts runs /usr/bin/chromium, which the runner image links to its Chromium build.
       - name: Protocol tests
         run: pnpm test protocol
 
@@ -169,7 +174,7 @@ jobs:
     needs: select
     if: needs.select.outputs.extended == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -191,7 +196,7 @@ jobs:
     needs: select
     if: needs.select.outputs.tooling == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -205,58 +210,15 @@ jobs:
           run_install: false
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      # Why: tests/auth/static-invariants.ts runs ~/.local/bin/semgrep; the runner's own PIPX_BIN_DIR points elsewhere.
-      - name: Install Semgrep
-        run: |
-          PIPX_HOME="$HOME/.local/share/pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install semgrep==1.182.1
-          "$HOME/.local/bin/semgrep" --version
       - name: Tooling tests
         run: pnpm test tooling
-
-  full:
-    name: Full correctness tests
-    needs: select
-    if: needs.select.outputs.full == 'true'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        with:
-          run_install: false
-      - name: Install locked dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Install Semgrep
-        run: |
-          PIPX_HOME="$HOME/.local/share/pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install semgrep==1.182.1
-          "$HOME/.local/bin/semgrep" --version
-      - name: Start PostgreSQL 18
-        run: |
-          password="$(openssl rand -hex 24)"
-          echo "::add-mask::$password"
-          POSTGRES_PASSWORD="$password" docker run -d --name skeld-pg -e POSTGRES_PASSWORD \
-            -p 127.0.0.1:54329:5432 --tmpfs /var/lib/postgresql postgres:18-alpine > /dev/null
-          for _ in $(seq 60); do
-            docker exec skeld-pg pg_isready -q -h 127.0.0.1 -U postgres && break
-            sleep 1
-          done
-          docker exec skeld-pg pg_isready -h 127.0.0.1 -U postgres
-          echo "SKELD_TEST_PG_URL=postgres://postgres:$password@127.0.0.1:54329/postgres" >> "$GITHUB_ENV"
-      - name: Full correctness tests
-        run: pnpm test full
 
   diag:
     name: Diagnostic tests
     needs: select
     if: needs.select.outputs.diag == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -278,7 +240,7 @@ jobs:
     needs: select
     if: needs.select.outputs.docs == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -311,7 +273,7 @@ jobs:
     needs: select
     if: needs.select.outputs.website == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -330,7 +292,7 @@ jobs:
 
   checks:
     name: Checks
-    needs: [ select, static, quick, database, protocol, extended, tooling, full, diag, docs, website ]
+    needs: [ select, static, quick, database, protocol, extended, tooling, diag, docs, website ]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 2

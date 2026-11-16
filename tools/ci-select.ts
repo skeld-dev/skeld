@@ -1,5 +1,5 @@
 // Does:  Chooses the CI jobs a pull request needs from its changed paths, with the test catalog as the script list.
-// Holds: A path no rule claims selects the full run, so a change is never left unchecked by omission.
+// Holds: A path no rule claims selects every job, so a change is never left unchecked by omission.
 
 import { appendFileSync, readFileSync } from 'node:fs';
 
@@ -11,7 +11,6 @@ const jobs = [
   'extended',
   'tooling',
   'diag',
-  'full',
   'docs',
   'examples',
   'consumer',
@@ -20,11 +19,22 @@ const jobs = [
 type Job = (typeof jobs)[number];
 type TestJob = 'quick' | 'database' | 'protocol' | 'extended' | 'tooling';
 
+const everything: readonly Job[] = [
+  'quick',
+  'database',
+  'protocol',
+  'extended',
+  'tooling',
+  'diag',
+  'docs',
+  'examples',
+  'website',
+];
 // Why: The database and protocol rigs (tests/auth/rig/v1-app.ts, oidc-app.ts) import nearly every auth subpath.
 const auth: readonly Job[] = ['quick', 'database', 'protocol', 'extended', 'tooling', 'docs', 'examples'];
 const core: readonly Job[] = [...auth, 'diag'];
-// Why: tests/support/support-log.ts runs benchmarks/logging; tests/security/benchmark-lock.ts imports its lock.
-const benchmarks: readonly Job[] = ['quick', 'extended', 'tooling'];
+// Why: tests/support/support-log.ts and tests/logging/log-destination.ts run scripts from benchmarks/logging.
+const benchmarks: readonly Job[] = ['quick', 'extended'];
 const groupJobs: Readonly<Record<string, TestJob>> = {
   runtime: 'quick',
   database: 'database',
@@ -34,18 +44,22 @@ const groupJobs: Readonly<Record<string, TestJob>> = {
 };
 
 // Does:  Reads the catalog's suites into a map from script path to the job that runs its group.
-function scriptJobs(module: unknown): ReadonlyMap<string, Job> {
+function scriptJobs(module: unknown): ReadonlyMap<string, TestJob> {
   const suites = typeof module === 'object' && module !== null ? Reflect.get(module, 'suites') : undefined;
   if (typeof suites !== 'object' || suites === null) {
     throw new Error('tests/support/suites.ts exports no suites object');
   }
-  const map = new Map<string, Job>();
+  const map = new Map<string, TestJob>();
   for (const [group, scripts] of Object.entries(suites)) {
+    const job = groupJobs[group];
+    if (!Object.hasOwn(groupJobs, group) || job === undefined) {
+      throw new Error(`tests/support/suites.ts group ${group} has no CI job`);
+    }
     if (!Array.isArray(scripts) || !scripts.every((script) => typeof script === 'string')) {
       throw new Error(`tests/support/suites.ts group ${group} is not a list of script paths`);
     }
     for (const script of scripts) {
-      map.set(script, Object.hasOwn(groupJobs, group) ? (groupJobs[group] ?? 'full') : 'full');
+      map.set(script, job);
     }
   }
   return map;
@@ -56,7 +70,7 @@ function withDiag(owners: readonly Job[]): readonly Job[] {
 }
 
 // Does:  Names the jobs one test path needs: its catalog group, or every group of its folder for a fixture or rig.
-function testJobs(script: string, scripts: ReadonlyMap<string, Job>): readonly Job[] {
+function testJobs(script: string, scripts: ReadonlyMap<string, TestJob>): readonly Job[] {
   if (script === 'README.md') {
     return ['website'];
   }
@@ -67,10 +81,10 @@ function testJobs(script: string, scripts: ReadonlyMap<string, Job>): readonly J
   const slash = script.indexOf('/');
   const folder = script.slice(0, slash + 1);
   const owners = [...scripts].filter(([path]) => slash > 0 && path.startsWith(folder)).map(([, job]) => job);
-  return owners.length === 0 ? ['full'] : withDiag([...new Set(owners)]);
+  return owners.length === 0 ? everything : withDiag([...new Set(owners)]);
 }
 
-function pathJobs(path: string, scripts: ReadonlyMap<string, Job>): readonly Job[] {
+function pathJobs(path: string, scripts: ReadonlyMap<string, TestJob>): readonly Job[] {
   const [top, next] = path.split('/');
   switch (top) {
     case 'docs':
@@ -79,8 +93,6 @@ function pathJobs(path: string, scripts: ReadonlyMap<string, Job>): readonly Job
       return ['website'];
     case 'examples':
       return ['docs', 'examples', 'website'];
-    case '.semgrep':
-      return ['tooling'];
     case 'benchmarks':
       return path === 'benchmarks/README.md' ? [...benchmarks, 'website'] : benchmarks;
     case 'tests':
@@ -89,49 +101,29 @@ function pathJobs(path: string, scripts: ReadonlyMap<string, Job>): readonly Job
       if (next === 'core') {
         return path === 'packages/core/README.md' ? [...core, 'website'] : core;
       }
-      return next === 'auth' ? auth : ['full'];
+      return next === 'auth' ? auth : everything;
     case 'CONTRIBUTING.md':
       return ['website'];
+    case '.semgrep':
     case 'README.md':
     case 'LICENSE':
       return [];
     default:
-      return ['full'];
+      return everything;
   }
 }
 
-// Does:  Turns changed paths into the job set; the full run replaces the five group jobs, never runs beside them.
-function select(
-  changed: readonly string[],
-  catalog: ReadonlyMap<string, Job>,
-  everything: boolean,
-): Record<Job, boolean> {
-  const wanted = new Set<Job>(everything ? ['full'] : changed.flatMap((path) => pathJobs(path, catalog)));
-  if (wanted.has('full')) {
-    return {
-      static: true,
-      quick: false,
-      database: false,
-      protocol: false,
-      extended: false,
-      tooling: false,
-      diag: true,
-      full: true,
-      docs: true,
-      examples: true,
-      consumer: false,
-      website: true,
-    };
-  }
+// Does:  Turns changed paths into the job set; the static job runs whenever any file changed.
+function select(changed: readonly string[], catalog: ReadonlyMap<string, TestJob>, all: boolean): Record<Job, boolean> {
+  const wanted = new Set<Job>(all ? everything : changed.flatMap((path) => pathJobs(path, catalog)));
   return {
-    static: changed.length > 0,
+    static: all || changed.length > 0,
     quick: wanted.has('quick'),
     database: wanted.has('database'),
     protocol: wanted.has('protocol'),
     extended: wanted.has('extended'),
     tooling: wanted.has('tooling'),
     diag: wanted.has('diag'),
-    full: false,
     docs: wanted.has('docs'),
     examples: wanted.has('examples'),
     // Why: The tooling group already runs the consumer declaration check on its own packed artifacts.
@@ -141,12 +133,12 @@ function select(
 }
 
 const args = process.argv.slice(2);
-if (args.length > 1 || (args.length === 1 && args[0] !== '--full')) {
-  process.stderr.write('usage: node tools/ci-select.ts [--full] < changed paths, NUL- or newline-separated\n');
+if (args.length > 1 || (args.length === 1 && args[0] !== '--all')) {
+  process.stderr.write('usage: node tools/ci-select.ts [--all] < changed paths, NUL- or newline-separated\n');
   process.exit(2);
 }
-const fullRun = args[0] === '--full';
-const changedPaths = fullRun
+const allJobs = args[0] === '--all';
+const changedPaths = allJobs
   ? []
   : readFileSync(0, 'utf8')
       .split(/[\0\n]/)
@@ -155,7 +147,7 @@ const scriptMap = scriptJobs(await import(new URL('../tests/support/suites.ts', 
 for (const path of changedPaths) {
   process.stdout.write(`${path}: ${pathJobs(path, scriptMap).join(' ') || 'static only'}\n`);
 }
-const selected = select(changedPaths, scriptMap, fullRun);
+const selected = select(changedPaths, scriptMap, allJobs);
 process.stdout.write(`selected: ${jobs.filter((job) => selected[job]).join(' ') || 'nothing'}\n`);
 const output = process.env.GITHUB_OUTPUT;
 if (output !== undefined) {
