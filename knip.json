@@ -15,6 +15,9 @@
     "examples/auth": {
       "entry": ["server.ts", "walkthrough.ts", "postgres-store.ts"]
     },
+    "examples/openapi": {
+      "entry": ["service.ts"]
+    },
     "examples/*": {},
     "benchmarks": {
       "entry": [
@@ -35,13 +38,14 @@
         "contracts/*.ts",
         "logging/*.ts",
         "schema/*.ts",
-        "auth/*.ts"
+        "auth/*.ts",
+        "openapi/*.ts"
       ],
       "ignoreBinaries": ["prlimit"]
     },
     "tools": {
       "entry": ["*.ts"],
-      "ignoreDependencies": ["@skeld/auth", "@skeld/core"]
+      "ignoreDependencies": ["@skeld/auth", "@skeld/openapi"]
     }
   }
 }

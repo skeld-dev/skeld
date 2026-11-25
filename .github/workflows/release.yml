@@ -1,10 +1,10 @@
 name: Publish npm release
 
-# A core or auth version bump merged to main starts publication; the pull request's Checks already ran the tests.
+# A core, auth or openapi version bump merged to main starts publication; the pull request's Checks already ran the tests.
 on:
   push:
     branches: [ main ]
-    paths: [ packages/core/package.json, packages/auth/package.json ]
+    paths: [ packages/core/package.json, packages/auth/package.json, packages/openapi/package.json ]
   workflow_dispatch:
 
 permissions:
@@ -24,6 +24,7 @@ jobs:
       publish: ${{ steps.version.outputs.publish }}
       core: ${{ steps.version.outputs.core }}
       auth: ${{ steps.version.outputs.auth }}
+      openapi: ${{ steps.version.outputs.openapi }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,10 +51,18 @@ jobs:
           const packages = [
             { output: 'core', folder: 'packages/core', name: '@skeld/core', mayBeAbsent: false },
             { output: 'auth', folder: 'packages/auth', name: '@skeld/auth', mayBeAbsent: true },
+            { output: 'openapi', folder: 'packages/openapi', name: '@skeld/openapi', mayBeAbsent: true },
           ];
+          // Why: The packages share one version: below 1.0 a caret range covers one minor, and auth pins core exactly.
+          const manifests = packages.map(({ folder }) => JSON.parse(readFileSync(`${folder}/package.json`, 'utf8')));
+          const version = manifests[0].version;
+          for (const manifest of manifests) {
+            assert.equal(manifest.version, version, `${manifest.name} must share the release version ${version}`);
+          }
+          assert.equal(manifests[2].peerDependencies?.['@skeld/core'], `^${version}`, '@skeld/openapi must peer on the release version of core');
           let any = false;
-          for (const { output, folder, name, mayBeAbsent } of packages) {
-            const pkg = JSON.parse(readFileSync(`${folder}/package.json`, 'utf8'));
+          for (const [index, { output, name, mayBeAbsent }] of packages.entries()) {
+            const pkg = manifests[index];
             assert.equal(pkg.name, name);
             assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
             assert.equal(pkg.repository.url, 'git+https://github.com/skeld-dev/skeld.git');
@@ -118,11 +127,12 @@ jobs:
             exit 1
           fi
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsc -b packages/core packages/auth
+      - run: pnpm exec tsc -b packages/core packages/auth packages/openapi
       - name: Pack and verify the exact release artifacts
         env:
           PACK_CORE: ${{ needs.validate.outputs.core }}
           PACK_AUTH: ${{ needs.validate.outputs.auth }}
+          PACK_OPENAPI: ${{ needs.validate.outputs.openapi }}
         run: |
           mkdir release
           if [ "$PACK_CORE" = true ]; then
@@ -130,6 +140,9 @@ jobs:
           fi
           if [ "$PACK_AUTH" = true ]; then
             pnpm --filter @skeld/auth pack --pack-destination "$GITHUB_WORKSPACE/release"
+          fi
+          if [ "$PACK_OPENAPI" = true ]; then
+            pnpm --filter @skeld/openapi pack --pack-destination "$GITHUB_WORKSPACE/release"
           fi
           node tools/check-pack-markers.ts release/*.tgz
           cd release
@@ -208,3 +221,9 @@ jobs:
         run: |
           sha256sum --check SHA256SUMS
           npm publish ./skeld-auth-*.tgz --access public --tag latest --provenance --ignore-scripts --registry https://registry.npmjs.org
+      - name: Publish verified openapi tarball with trusted publishing
+        if: needs.validate.outputs.openapi == 'true'
+        working-directory: release
+        run: |
+          sha256sum --check SHA256SUMS
+          npm publish ./skeld-openapi-*.tgz --access public --tag latest --provenance --ignore-scripts --registry https://registry.npmjs.org

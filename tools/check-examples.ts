@@ -1,4 +1,4 @@
-// Does:  Runs the example clients and the auth walkthrough and checks their refusals, logs and shutdown.
+// Does:  Runs the example clients, the auth walkthrough and the OpenAPI generation, and checks what each produces.
 // Holds: Each server uses a free loopback port and is closed or killed before the check leaves it.
 
 import assert from 'node:assert/strict';
@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { CSRF_TOKEN_HEADER } from '@skeld/core/gate';
 
 const root = join(import.meta.dirname, '..');
 
@@ -180,7 +181,42 @@ function checkAuthWalkthrough(): void {
   process.stdout.write(`ok auth: walkthrough passed, ${checks} checks\n`);
 }
 
+// Does:  Runs the OpenAPI example's generation script and checks its session, CSRF and API-key alternatives.
+function checkOpenApi(): void {
+  const cwd = join(root, 'examples', 'openapi');
+  const run = spawnSync(process.execPath, ['--conditions=skeld-source', 'generate.ts'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  assert.equal(run.status, 0, `openapi: ${run.stderr}`);
+  const document: unknown = JSON.parse(run.stdout);
+  assert.ok(typeof document === 'object' && document !== null);
+  assert.equal(Reflect.get(document, 'openapi'), '3.1.2');
+  const components: unknown = Reflect.get(document, 'components');
+  assert.ok(typeof components === 'object' && components !== null);
+  assert.deepEqual(Reflect.get(components, 'securitySchemes'), {
+    apiKey: { type: 'http', scheme: 'bearer', description: 'An API key issued by the service.' },
+    csrf: { type: 'apiKey', in: 'header', name: CSRF_TOKEN_HEADER },
+    session: { type: 'apiKey', in: 'cookie', name: '__Host-notes' },
+  });
+  const paths: unknown = Reflect.get(document, 'paths');
+  assert.ok(typeof paths === 'object' && paths !== null);
+  const note: unknown = Reflect.get(paths, '/notes/{id}');
+  assert.ok(typeof note === 'object' && note !== null);
+  const security = (method: string): unknown => {
+    const operation: unknown = Reflect.get(note, method);
+    assert.ok(typeof operation === 'object' && operation !== null);
+    return Reflect.get(operation, 'security');
+  };
+  assert.deepEqual(security('get'), [{ session: [] }, { apiKey: [] }]);
+  assert.deepEqual(security('put'), [{ csrf: [], session: [] }, { apiKey: [] }]);
+  const diagnostics = run.stderr.split('\n').filter((line) => line !== '').length;
+  process.stdout.write(`ok openapi: document generated, ${diagnostics} diagnostics\n`);
+}
+
 await checkExample('hello');
 await checkExample('logging');
 await checkExample('service');
 checkAuthWalkthrough();
+checkOpenApi();

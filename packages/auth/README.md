@@ -4,7 +4,13 @@ Access control and authentication building blocks for Skeld services: route poli
 
 Your application keeps its users, credentials and identity mapping; auth enforces each route's declared access before the handler runs and calls back into your code for every decision about a user.
 
-**Not released.** Version 0.2.0 is built and tested in this repository beside `@skeld/core`, its only dependency, and is not published to npm. Inside the repository a workspace package depends on it with `"@skeld/auth": "workspace:*"`. It needs Node 26.12 or later.
+## Install
+
+```sh
+npm install @skeld/auth
+```
+
+Requires Node.js 26.12+ and an ES module project. Its one dependency is `@skeld/core`, at the exact version it was released with.
 
 - [Add authentication to a service](../../docs/guides/auth.md): from the store to a working service.
 - [The application's obligations](../../docs/guides/auth-obligations.md): what auth relies on your code to do.

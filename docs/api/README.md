@@ -1,6 +1,6 @@
 # API reference
 
-skeld's packages publish their public API as entry points, such as `@skeld/core/server`. Import from these subpaths; neither package has a root export.
+skeld's packages publish their public API as entry points, such as `@skeld/core/server`. Import from these subpaths. Core and auth have no root export; `@skeld/openapi` has one, `@skeld/openapi` itself.
 
 ## Core API
 
@@ -23,7 +23,7 @@ skeld's packages publish their public API as entry points, such as `@skeld/core/
 
 ## Auth API
 
-`@skeld/auth` is not released; it exists only in this repository. Start with [Add authentication to a service](../guides/auth.md).
+`@skeld/auth` adds access control and authentication. Start with [Add authentication to a service](../guides/auth.md).
 
 | Entry point                                    | Use it for                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------- |
@@ -40,4 +40,13 @@ skeld's packages publish their public API as entry points, such as `@skeld/core/
 | [oidc](auth/oidc.md)                           | OpenID Connect sign-in                                              |
 | [password](auth/password.md)                   | Argon2id hashing and verification helpers                           |
 
-The pages in `core/` and `auth/` are generated. Change the public source documentation and run `pnpm run api-docs`; do not edit those pages by hand. For a learning path, start at the [documentation home](../README.md).
+## OpenAPI API
+
+`@skeld/openapi` generates OpenAPI documents from a contract. Start with [Publish an OpenAPI document](../guides/openapi.md).
+
+| Entry point                               | Use it for                                                      |
+| ----------------------------------------- | --------------------------------------------------------------- |
+| [openapi](openapi/openapi.md)             | `createOpenApi`, its options, its result and the document types |
+| [openapi-error](openapi/openapi-error.md) | The error a refused generation throws                           |
+
+The pages in `core/`, `auth/` and `openapi/` are generated. Change the public source documentation and run `pnpm run api-docs`; do not edit those pages by hand. For a learning path, start at the [documentation home](../README.md).

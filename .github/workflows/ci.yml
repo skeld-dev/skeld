@@ -88,9 +88,9 @@ jobs:
         run: |
           PIPX_HOME="$HOME/.local/share/pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install semgrep==1.182.1
           "$HOME/.local/bin/semgrep" --version
-      - name: Semgrep rules on core and auth sources
+      - name: Semgrep rules on core, auth and openapi sources
         run: |
-          "$HOME/.local/bin/semgrep" scan --metrics=off --project-root . --config .semgrep --error packages/core/src packages/auth/src
+          "$HOME/.local/bin/semgrep" scan --metrics=off --project-root . --config .semgrep --error packages/core/src packages/auth/src packages/openapi/src
 
   codeql:
     name: CodeQL

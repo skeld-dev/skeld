@@ -31,6 +31,7 @@ Read these in order, or jump to the task you are working on:
 | [Troubleshoot](guides/troubleshooting.md)                        | Diagnose startup failures, refused requests, missing logs, and invalid responses                                  |
 | [Add authentication](guides/auth.md)                             | Declare route access, decide it with policies, and sign people in with sessions, API keys, JWTs or OpenID Connect |
 | [Meet the application's obligations](guides/auth-obligations.md) | Sign people in, change credentials and keep grants in the order auth relies on                                    |
+| [Publish an OpenAPI document](guides/openapi.md)                 | Generate OpenAPI 3.1.2 from a contract, describe its security and read what it cannot say                         |
 
 These explanations connect the guides: [the request lifecycle](concepts/request-lifecycle.md) shows when each stage runs; [security boundaries](concepts/security-boundaries.md) names what skeld enforces and what the application must supply. The [core threat model](concepts/threat-model.md) maps actors, data flows and trust boundaries to STRIDE threats, controls and residual responsibilities.
 
@@ -38,8 +39,9 @@ These explanations connect the guides: [the request lifecycle](concepts/request-
 
 - [API reference](api/README.md): signatures and rules generated from the public source documentation.
 - [Logging](logging/logging.md): options, delivery behavior, and limits; [record format](logging/record-format.md), [events](logging/events.md), [error disclosure](logging/errors.md), and [Collector ingestion](logging/collector.md).
-- [Runnable examples](../examples/README.md): hello, classified logging, a scoped task service, and [authentication](../examples/auth/README.md).
+- [Runnable examples](../examples/README.md): hello, classified logging, a scoped task service, [authentication](../examples/auth/README.md) and [OpenAPI generation](../examples/openapi/README.md).
 - [Core behavior reference](reference/core.md): runtime requirements for each entry point and a compact feature reference.
-- [Auth behavior reference](reference/auth.md): `@skeld/auth` options, routes, refusals, events, store outcomes, and what is not included. The package is not released yet.
+- [Auth behavior reference](reference/auth.md): `@skeld/auth` options, routes, refusals, events, store outcomes, and what is not included.
+- [OpenAPI behavior reference](reference/openapi.md): `@skeld/openapi` options, mappings, limits and refusals.
 
 To improve skeld or its documentation, see the repository's [contribution guide](../CONTRIBUTING.md).
