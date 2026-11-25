@@ -4,11 +4,13 @@
 
 Your application keeps its users, their passwords and the mapping from external identities to users. Auth never stores or looks up a user. It calls back into your code when it needs a decision, and it leaves you a short list of [obligations](auth-obligations.md) that only the application can meet.
 
-`@skeld/auth` 0.2.0 is not released: it is not on npm and exists only in this repository, beside `@skeld/core`, its one dependency. A workspace package uses it the way [`examples/auth`](../../examples/auth/README.md) does:
+Install it in an ES module project:
 
-```json
-{ "dependencies": { "@skeld/auth": "workspace:*", "@skeld/core": "workspace:*" } }
+```sh
+npm install @skeld/auth
 ```
+
+Its one dependency is `@skeld/core`, at the exact version it was released with. [`examples/auth`](../../examples/auth/README.md) is a complete service.
 
 It needs Node 26.12 or later. The SQLite store uses Node's built-in `node:sqlite`; the PostgreSQL store uses a `pg` Pool that your application creates.
 
@@ -170,7 +172,7 @@ await Promise.race([once(process, 'SIGINT'), once(process, 'SIGTERM')]);
 await server.close();
 ```
 
-Save it as `service.ts` in a workspace package that depends on both packages and start it with `node --conditions=skeld-source service.ts` (the condition runs the packages from source, as the repository's own examples do). It creates `auth.db` in the current folder and prints the password it generated for `ada`:
+Save it as `service.ts` in an ES module project with both packages installed and start it with `node service.ts`; inside this repository, `node --conditions=skeld-source service.ts` runs the packages from source, as its examples do. It creates `auth.db` in the current folder and prints the password it generated for `ada`:
 
 ```text
 listening on http://127.0.0.1:3000; the password of ada is WV-_x2JLdDToUAJQ

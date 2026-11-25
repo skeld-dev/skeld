@@ -6,6 +6,7 @@
   "devDependencies": {
     "@skeld/auth": "workspace:*",
     "@skeld/core": "workspace:*",
+    "@skeld/openapi": "workspace:*",
     "typescript": "7.0.2"
   }
 }

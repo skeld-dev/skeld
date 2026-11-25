@@ -32,7 +32,7 @@ For each exception, identify the data it admits or exposes, the caller allowed t
 
 ## Keep the application boundary separate
 
-The service still owns authentication, authorization, tenant isolation, database queries, output use in other contexts, durable storage, and abuse controls. The unreleased `@skeld/auth` supplies a gate, policies, sessions and limits for the first three; [its obligations](../guides/auth-obligations.md) list what stays with the application. A validated string is not automatically safe to concatenate into SQL, a shell command, or HTML. Use the receiving system's appropriate API and escaping rules.
+The service still owns authentication, authorization, tenant isolation, database queries, output use in other contexts, durable storage, and abuse controls. `@skeld/auth` supplies a gate, policies, sessions and limits for the first three; [its obligations](../guides/auth-obligations.md) list what stays with the application. A validated string is not automatically safe to concatenate into SQL, a shell command, or HTML. Use the receiving system's appropriate API and escaping rules.
 
 Authorization must follow the resource being accessed. A valid task ID establishes the ID's shape; it does not establish that the current user owns that task. Likewise, a request ID is useful for correlation and useless as an access credential.
 

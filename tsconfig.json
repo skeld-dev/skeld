@@ -11,10 +11,16 @@
       "path": "./packages/auth"
     },
     {
+      "path": "./packages/openapi"
+    },
+    {
       "path": "./examples/auth"
     },
     {
       "path": "./examples/hello"
+    },
+    {
+      "path": "./examples/openapi"
     },
     {
       "path": "./examples/logging"

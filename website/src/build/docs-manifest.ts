@@ -33,6 +33,13 @@ const groups = [
     ],
   ],
   [
+    'Publish OpenAPI',
+    [
+      ['guides/openapi', 'Publish an OpenAPI document'],
+      ['reference/openapi', 'OpenAPI behavior reference'],
+    ],
+  ],
+  [
     'Understand the model',
     [
       ['concepts/request-lifecycle', 'Request lifecycle'],
@@ -79,6 +86,8 @@ const groups = [
       ['api/auth/jwt', 'JWT'],
       ['api/auth/oidc', 'OpenID Connect'],
       ['api/auth/password', 'Passwords'],
+      ['api/openapi/openapi', 'OpenAPI'],
+      ['api/openapi/openapi-error', 'OpenAPI errors'],
     ],
   ],
 ] as const;
@@ -89,6 +98,8 @@ export const docDefinitions: DocDefinition[] = groups.flatMap(([group, entries])
     url: `/docs/${path.replace(/README$/, '').replace(/\/$/, '')}${path === 'README' ? '' : '/'}`,
     label,
     group,
-    ...(path.startsWith('api/core/') || path.startsWith('api/auth/') ? { parent: '/docs/api/' } : {}),
+    ...(path.startsWith('api/core/') || path.startsWith('api/auth/') || path.startsWith('api/openapi/')
+      ? { parent: '/docs/api/' }
+      : {}),
   })),
 );

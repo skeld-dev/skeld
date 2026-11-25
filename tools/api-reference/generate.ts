@@ -20,7 +20,7 @@ interface Page {
 const usage = 'usage: node tools/api-reference/generate.ts [--package <dir>] [--out <dir>] [--check] | --help\n';
 const biome = join(root, 'node_modules/.bin/biome');
 const defaultOut = join(root, 'docs/api');
-const defaultPackages = [join(root, 'packages/core'), join(root, 'packages/auth')];
+const defaultPackages = [join(root, 'packages/core'), join(root, 'packages/auth'), join(root, 'packages/openapi')];
 
 function parseArgs(args: readonly string[]): Options | 'help' | undefined {
   if (args.length === 1 && args[0] === '--help') {
@@ -130,10 +130,11 @@ async function packagePages(packageDir: string, out: string): Promise<Page[] | R
   const folder = join(out, result.packageFolder);
   const pages: Page[] = [];
   for (const entry of result.entries) {
-    if (entry.subpath === '.' || !entry.subpath.startsWith('./')) {
+    if (entry.subpath !== '.' && !entry.subpath.startsWith('./')) {
       return { refused: `export ${entry.subpath} of ${result.packageName} has no page name` };
     }
-    const name = `${entry.subpath.slice(2)}.md`;
+    // Why: A root export has no subpath to name its page, so the page takes the package's folder name.
+    const name = `${entry.subpath === '.' ? result.packageFolder : entry.subpath.slice(2)}.md`;
     const page = format(
       { path: join(folder, name), text: renderPage(result.packageName, entry) },
       join(defaultOut, result.packageFolder, name),

@@ -1,4 +1,4 @@
-// Does:  Compiles the packed core and auth declarations and the ts blocks of the checked pages under es2025 alone.
+// Does:  Compiles each packed package's declarations and the ts blocks of the checked pages under es2025 alone.
 // Holds: Exit 0 only when every subpath with types and every ts block of each page compiles in a fresh consumer folder.
 
 import { spawn } from 'node:child_process';
@@ -35,8 +35,14 @@ const typeRoot = join(root, 'node_modules/@types');
 const packages = [
   { name: '@skeld/core', folder: 'core', built: join(root, 'packages/core/dist/log/log.d.ts') },
   { name: '@skeld/auth', folder: 'auth', built: join(root, 'packages/auth/dist/server/auth.d.ts') },
+  { name: '@skeld/openapi', folder: 'openapi', built: join(root, 'packages/openapi/dist/openapi/openapi.d.ts') },
 ] as const;
-const defaultPages = ['docs/logging/logging.md', 'docs/guides/auth.md', 'docs/guides/auth-obligations.md'];
+const defaultPages = [
+  'docs/logging/logging.md',
+  'docs/guides/auth.md',
+  'docs/guides/auth-obligations.md',
+  'docs/guides/openapi.md',
+];
 const usage = 'usage: node tools/check-consumer-lib.ts [--page <markdown file>] [--packed-dir <directory>] | --help\n';
 const diagnosticPattern = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
 const typesConditions: ReadonlySet<string> = new Set(['types', 'import', 'node', 'default']);

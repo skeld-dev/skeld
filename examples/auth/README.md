@@ -103,7 +103,7 @@ Interrupted at any point after step 1, the subject stays disabled, every old ses
 
 ### Trusting the local provider
 
-auth has no per-provider certificate option in 0.2.0. The local provider serves `https` with a certificate made for each run, and the service process trusts it because `with-local-provider.ts` starts the service as a child process with `NODE_EXTRA_CA_CERTS` naming that certificate. `NODE_EXTRA_CA_CERTS` must be set before Node starts, and it extends the default trust of the whole process, not one provider's ([Node documentation](https://nodejs.org/api/cli.html#node_extra_ca_certsfile)). Per-provider trust is not supported. Certificate and hostname verification stay on: nothing sets `NODE_TLS_REJECT_UNAUTHORIZED` or `rejectUnauthorized: false`.
+auth has no per-provider certificate option. The local provider serves `https` with a certificate made for each run, and the service process trusts it because `with-local-provider.ts` starts the service as a child process with `NODE_EXTRA_CA_CERTS` naming that certificate. `NODE_EXTRA_CA_CERTS` must be set before Node starts, and it extends the default trust of the whole process, not one provider's ([Node documentation](https://nodejs.org/api/cli.html#node_extra_ca_certsfile)). Per-provider trust is not supported. Certificate and hostname verification stay on: nothing sets `NODE_TLS_REJECT_UNAUTHORIZED` or `rejectUnauthorized: false`.
 
 ## What this example does not show or claim
 

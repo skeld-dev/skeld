@@ -44,7 +44,7 @@ function parseArgs(args: readonly string[]): Options | 'help' | undefined {
         ? [resolve(named)]
         : entry !== undefined
           ? [packageFolder('@skeld/core')]
-          : [packageFolder('@skeld/core'), join(root, 'packages/auth')],
+          : [packageFolder('@skeld/core'), join(root, 'packages/auth'), join(root, 'packages/openapi')],
     entry: entry === undefined ? undefined : resolve(entry),
   };
 }
@@ -53,19 +53,22 @@ function packageFolder(name: string): string {
   return dirname(fileURLToPath(import.meta.resolve(`${name}/package.json`)));
 }
 
-// Does:  The folders of the workspace packages a package depends on, whose values its examples may also import.
+// Does:  The folders of the workspace packages a package depends on or peers with, whose values examples may import.
 function dependencyFolders(packageDir: string): string[] {
   const manifest: unknown = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'));
-  if (typeof manifest !== 'object' || manifest === null || !('dependencies' in manifest)) {
+  if (typeof manifest !== 'object' || manifest === null) {
     return [];
   }
-  const { dependencies } = manifest;
-  if (typeof dependencies !== 'object' || dependencies === null) {
-    return [];
+  const names = new Set<string>();
+  for (const field of ['dependencies', 'peerDependencies']) {
+    const listed: unknown = Reflect.get(manifest, field);
+    if (typeof listed === 'object' && listed !== null) {
+      for (const name of Object.keys(listed)) {
+        names.add(name);
+      }
+    }
   }
-  return Object.keys(dependencies)
-    .filter((name) => name.startsWith('@skeld/'))
-    .map(packageFolder);
+  return [...names].filter((name) => name.startsWith('@skeld/')).map(packageFolder);
 }
 
 function flatten(symbols: readonly PublicSymbol[]): PublicSymbol[] {

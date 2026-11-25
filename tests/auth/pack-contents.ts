@@ -1,4 +1,4 @@
-// Does:  Proves the packed core and auth tarballs ship the contracted subpaths and run in a consumer.
+// Does:  Proves the packed core, auth and openapi tarballs ship the contracted subpaths and run in a consumer.
 // Holds: Packing, unpacking and installing happen in a folder outside the repository, which is removed at the end.
 
 import { spawnSync } from 'node:child_process';
@@ -74,21 +74,22 @@ const scratch = mkdtempSync(join(tmpdir(), 'skeld-v09-pack-'));
 try {
   const tarDir = join(scratch, 'tarballs');
   mkdirSync(tarDir);
-  const packed = ['@skeld/core', '@skeld/auth'].map((name) =>
+  const packed = ['@skeld/core', '@skeld/auth', '@skeld/openapi'].map((name) =>
     run('pnpm', ['--filter', name, 'pack', '--pack-destination', tarDir], root),
   );
   report.check(
-    'pnpm pack of both packages succeeds',
+    'pnpm pack of the three packages succeeds',
     packed.every((result) => result.status === 0),
     packed.map((result) => String(result.status)).join(','),
   );
   const tarballs = readdirSync(tarDir).sort();
   const coreTar = tarballs.find((name) => name.startsWith('skeld-core-'));
   const authTar = tarballs.find((name) => name.startsWith('skeld-auth-'));
-  if (coreTar === undefined || authTar === undefined) {
+  const openapiTar = tarballs.find((name) => name.startsWith('skeld-openapi-'));
+  if (coreTar === undefined || authTar === undefined || openapiTar === undefined) {
     throw new Error(`tarballs: ${tarballs.join(',')}`);
   }
-  // Why: All distribution checks inspect the same two artifacts; none repacks the workspace.
+  // Why: All distribution checks inspect the same packed artifacts; none repacks the workspace.
   const markers = run('node', ['tools/check-pack-markers.ts', join(tarDir, coreTar), join(tarDir, authTar)], root);
   report.check(
     'the marker and export checks pass on both prepared artifacts',
@@ -189,6 +190,37 @@ try {
       return value === undefined || (typeof value === 'object' && value !== null && Object.keys(value).length === 0);
     }),
     JSON.stringify([coreManifest.dependencies, coreManifest.peerDependencies, coreManifest.optionalDependencies]),
+  );
+
+  const openapiDir = join(scratch, 'openapi');
+  unpack(openapiTar, openapiDir);
+  const openapiFiles = filesUnder(openapiDir).map((file) => relative(join(openapiDir, 'package'), file));
+  const openapiManifest = manifestOf(openapiDir);
+  const peers = openapiManifest.peerDependencies;
+  report.check(
+    '@skeld/openapi has no runtime or optional dependency, and its one peer is @skeld/core at a published range',
+    openapiManifest.dependencies === undefined &&
+      openapiManifest.optionalDependencies === undefined &&
+      typeof peers === 'object' &&
+      peers !== null &&
+      JSON.stringify(Object.keys(peers)) === '["@skeld/core"]' &&
+      /^\^?\d+\.\d+\.\d+$/.test(String(Object.values(peers)[0])),
+    JSON.stringify([openapiManifest.dependencies, peers, openapiManifest.optionalDependencies]),
+  );
+  const openapiExports = exportsOf(openapiManifest);
+  const openapiTargets = ['.', './openapi-error'].map((key) => openapiExports.get(key));
+  report.check(
+    '@skeld/openapi exports the root and ./openapi-error, each with a default and a types target in the tarball',
+    [...openapiExports.keys()].sort().join(',') === '.,./openapi-error,./package.json' &&
+      openapiTargets.every(
+        (conditions) =>
+          conditions !== undefined &&
+          typeof conditions.default === 'string' &&
+          typeof conditions.types === 'string' &&
+          openapiFiles.includes(conditions.default.replace(/^\.\//, '')) &&
+          openapiFiles.includes(conditions.types.replace(/^\.\//, '')),
+      ),
+    [...openapiExports.keys()].join(','),
   );
 
   const consumer = join(scratch, 'consumer');

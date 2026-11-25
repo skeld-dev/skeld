@@ -6,6 +6,7 @@
   "dependencies": {
     "@skeld/auth": "workspace:*",
     "@skeld/core": "workspace:*",
+    "@skeld/openapi": "workspace:*",
     "autocannon": "8.0.0"
   }
 }

@@ -1,8 +1,14 @@
 # Releases and hosting
 
-The public repository is `skeld-dev/skeld`. Two workspaces are published to npm: `packages/core` as
-`@skeld/core`, whose first public development version is `0.1.0`, and `packages/auth` as `@skeld/auth`,
-first published at `0.2.0`. Other workspaces are private.
+The public repository is `skeld-dev/skeld`. Three workspaces are published to npm: `packages/core` as
+`@skeld/core`, whose first public development version is `0.1.0`, `packages/auth` as `@skeld/auth`,
+first published at `0.2.0`, and `packages/openapi` as `@skeld/openapi`, whose first version is `0.3.0`.
+Other workspaces are private.
+
+The three packages share one version, and a release bumps all of them, changed or not. Below 1.0 a caret
+range covers one minor version only, so openapi's peer range on core (`^0.3.0`) would exclude the next core
+minor, and auth depends on the exact core version it was packed with. **Publish npm release** refuses to
+run when the three versions differ or when openapi's peer range is not `^` and that version.
 Website deployment is independent of package releases.
 
 ## GitHub setup
@@ -108,32 +114,36 @@ normal workflow publications use the trusted identity. Keep account 2FA enabled.
 
 A maintainer must configure trusted publishing for `@skeld/auth` on npmjs.com before the first release
 that publishes it; the workflow holds no token, so without that configuration the auth publish fails.
+The same holds for `@skeld/openapi`: its npm placeholder and its trusted publisher must exist before the
+first release that publishes it, or its publish step fails.
 npm's documentation describes the setup from the package's settings page and does not say whether a
-name that has never been published can be configured there. If npm offers no settings for `@skeld/auth`
+name that has never been published can be configured there. If npm offers no settings for a new name
 yet, bootstrap it from a verified local archive as was done for core. npm also requires a new
 configuration's first successful publish within 2 days, or the configuration expires
 ([trusted publisher configuration expiry](https://docs.npmjs.com/trusted-publishers/)).
 
 ## Release procedure
 
-1. Update the version in `packages/core/package.json`, `packages/auth/package.json` or both to a new stable
-   version and merge the reviewed PR after CI. The packed auth depends on the exact core version in the
-   workspace, so an auth release that needs a new core releases core with it.
-2. **Publish npm release** starts automatically on `main` when either manifest changes. It validates the
-   repository and each package's name, access and version against npm, and decides per package whether
-   to publish. A version already on npm is skipped; registry errors fail. `@skeld/auth` may be absent from
-   the registry; `@skeld/core` may not.
+1. Update the version in `packages/core/package.json`, `packages/auth/package.json` and
+   `packages/openapi/package.json` to the same new stable version, and openapi's peer range on core to `^`
+   and that version, then merge the reviewed PR after CI. The packed auth depends on the exact core version
+   in the workspace; openapi names core as a peer dependency with that caret range.
+2. **Publish npm release** starts automatically on `main` when any of the three manifests changes. It
+   validates the repository and each package's name, access and version against npm, and decides per
+   package whether to publish. A version already on npm is skipped; registry errors fail. `@skeld/auth` and
+   `@skeld/openapi` may be absent from the registry; `@skeld/core` may not.
 3. The tests do not run again. The "Protect main" ruleset requires a pull request, a passing `Checks` status
    and a branch up to date with `main`, with no bypass actors, so the merged commit is the tree that passed.
    Packaging requires no open CodeQL alerts on `main`, from the weekly scan. Documented false positives remain
    visible in GitHub as dismissed or suppressed alerts.
-4. A clean build job builds both packages, packs each one that will be published, checks recorder exclusion
+4. A clean build job builds the three packages, packs each one that will be published, checks recorder exclusion
    and exports on those exact tarballs, and uploads them as one artifact with one SHA-256 checksum file.
-5. A separate publishing job verifies the checksums and publishes core first, then auth, with npm provenance
-   and lifecycle scripts disabled. It neither checks out source nor installs project dependencies. If core's
-   publish fails, auth is not published. Before publishing auth it reads the `@skeld/core` version named in the
-   packed auth manifest and refuses unless that exact version was published earlier in the same run or is
-   already on npm.
+5. A separate publishing job verifies the checksums and publishes core first, then auth, then openapi, with
+   npm provenance and lifecycle scripts disabled. It neither checks out source nor installs project
+   dependencies. If a publish fails, the packages after it are not published. Before publishing auth it reads
+   the `@skeld/core` version named in the packed auth manifest and refuses unless that exact version was
+   published earlier in the same run or is already on npm. Openapi has no such step: the workflow does not
+   check that a published core satisfies its peer range.
 6. Verify installation and the short package READMEs on npm. An optional GitHub release/tag can point to
    the workflow's source commit and attach its archives/checksums. Tags do not trigger npm publication.
 
@@ -142,8 +152,8 @@ other branches. A version npm already accepted is skipped, so a rerun after a pa
 only what is missing; inspect the registry artifact before treating an ambiguous publish failure as success.
 Never reuse an already-published version.
 
-Each package README is a short npm landing page. Detailed behavior lives in `docs/reference/core.md`
-and `docs/reference/auth.md`; `pnpm run reference-check` keeps the core reference example synchronized
+Each package README is a short npm landing page. Detailed behavior lives in `docs/reference/core.md`,
+`docs/reference/auth.md` and `docs/reference/openapi.md`; `pnpm run reference-check` keeps the core reference example synchronized
 with `examples/hello`.
 
 ## Cloudflare Workers Builds

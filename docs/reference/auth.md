@@ -2,7 +2,7 @@
 
 `@skeld/auth` supplies the gate that enforces route access on a skeld server, policies and grants, sessions with CSRF tokens, shared limits, API keys, JWT verification, Argon2id password helpers and a generic OpenID Connect client, over SQLite or PostgreSQL. Applications own users, credentials and the mapping from identities to users.
 
-Version 0.2.0 is not released; it exists only in this repository. It needs Node 26.12 or later (`engines`: `node >=26.12.0`) and depends only on `@skeld/core`. For a guided introduction, read [Add authentication to a service](../guides/auth.md) and [the application's obligations](../guides/auth-obligations.md). Exact signatures are in the [API reference](../api/README.md#auth-api).
+Install it with `npm install @skeld/auth`. It needs Node 26.12 or later (`engines`: `node >=26.12.0`) and depends only on `@skeld/core`. For a guided introduction, read [Add authentication to a service](../guides/auth.md) and [the application's obligations](../guides/auth-obligations.md). Exact signatures are in the [API reference](../api/README.md#auth-api).
 
 ## Subpaths
 
@@ -310,7 +310,7 @@ Auth registers ten events at boot. Each writes a record in category `security` a
 
 ## Not included
 
-Auth 0.2.0 is building blocks around an application that owns its accounts. These are outside its scope by design, not missing parts of it; an application supplies them, or uses another library or identity service:
+Auth is building blocks around an application that owns its accounts. These are outside its scope by design, not missing parts of it; an application supplies them, or uses another library or identity service:
 
 - Sign-up, email or phone verification, password reset and account recovery.
 - Sending mail or messages of any kind.

@@ -5,7 +5,8 @@
   "type": "module",
   "dependencies": {
     "@skeld/auth": "workspace:*",
-    "@skeld/core": "workspace:*"
+    "@skeld/core": "workspace:*",
+    "@skeld/openapi": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "26.6.6",

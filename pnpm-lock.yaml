@@ -200,6 +200,9 @@ importers:
       '@skeld/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@skeld/openapi':
+        specifier: workspace:*
+        version: link:../packages/openapi
       autocannon:
         specifier: 8.0.0
         version: 8.0.0
@@ -232,6 +235,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
 
+  examples/openapi:
+    dependencies:
+      '@skeld/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@skeld/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@skeld/openapi':
+        specifier: workspace:*
+        version: link:../../packages/openapi
+
   examples/service:
     dependencies:
       '@skeld/core':
@@ -246,6 +261,12 @@ importers:
 
   packages/core: {}
 
+  packages/openapi:
+    devDependencies:
+      '@skeld/core':
+        specifier: workspace:*
+        version: link:../core
+
   tests:
     dependencies:
       '@skeld/auth':
@@ -254,6 +275,9 @@ importers:
       '@skeld/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@skeld/openapi':
+        specifier: workspace:*
+        version: link:../packages/openapi
     devDependencies:
       '@types/node':
         specifier: 26.6.6
@@ -276,6 +300,9 @@ importers:
       '@skeld/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@skeld/openapi':
+        specifier: workspace:*
+        version: link:../packages/openapi
       typescript:
         specifier: 7.0.2
         version: 7.0.2

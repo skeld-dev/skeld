@@ -1,4 +1,4 @@
-// Does:  Checks that the packed tarballs of core and auth carry every export target and no diagnostic recorder.
+// Does:  Checks that each package's packed tarball carries every export target and no diagnostic recorder.
 // Holds: The tarball is unpacked in memory under a byte and an entry limit; nothing from it is written or run.
 
 import { spawn } from 'node:child_process';
@@ -19,7 +19,7 @@ type Unpacked = { readonly entries: readonly Entry[] } | { readonly refused: str
 interface Target {
   readonly name: string;
   readonly folder: string;
-  readonly marker: string;
+  readonly marker: string | null;
 }
 
 // Why: The tarball is untrusted input to this tool, so its unpacked size and entry count are bounded.
@@ -32,6 +32,8 @@ const targetList: readonly Target[] = [
   { name: '@skeld/core', folder: 'packages/core', marker: 'skeld:diag-recorder' },
   // Why: Auth's recorder exports no marker constant; the name of the snapshot file it writes is in no shipped file.
   { name: '@skeld/auth', folder: 'packages/auth', marker: 'auth-snapshot.jsonl' },
+  // Why: Openapi has no diagnostic recorder, so its packed manifest must map no #diag at all.
+  { name: '@skeld/openapi', folder: 'packages/openapi', marker: null },
 ];
 
 const nodeShipped: ReadonlySet<string> = new Set(['node', 'import', 'module-sync', 'node-addons', 'default']);
@@ -104,6 +106,9 @@ function parseManifest(text: string): unknown {
 
 function selfTest(target: Target): boolean {
   const { marker } = target;
+  if (marker === null) {
+    return true;
+  }
   const folderPath = join(root, target.folder);
   const manifestPath = join(folderPath, 'package.json');
   const entry = diagEntry(parseManifest(readFileSync(manifestPath, 'utf8')));
@@ -224,7 +229,9 @@ async function check(tarball: string, label: string, expected: Target | undefine
   const before = problems;
   const entry = diagEntry(manifest);
   const version = isRecord(manifest) && typeof manifest.version === 'string' ? manifest.version : '(no version)';
-  if (entry === undefined) {
+  if (target.marker === null) {
+    report('P1', entry === undefined ? [] : [`${name}: package/package.json maps #diag`], `${name}: maps no #diag`);
+  } else if (entry === undefined) {
     fail('P1', `${name}: package/package.json does not map #diag; P2 to P6 skipped`);
   } else {
     ok('P1', `${name}: package/package.json maps #diag`);

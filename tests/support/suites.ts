@@ -49,6 +49,7 @@ export const suites = {
     'auth/password-helpers.ts',
     'auth/session-csrf.ts',
     'auth/store-heap.ts',
+    'openapi/no-private-text.ts',
   ],
   database: [
     'auth/credential-change.ts',
@@ -89,7 +90,7 @@ export const suites = {
 } as const;
 
 export const allScripts: readonly string[] = Object.values(suites).flat();
-export const categories = ['security', 'browser', 'lifecycle', 'contracts', 'schema', 'logging', 'auth'];
+export const categories = ['security', 'browser', 'lifecycle', 'contracts', 'schema', 'logging', 'auth', 'openapi'];
 
 export function selectScripts(mode: string): readonly string[] {
   if (mode === 'all' || mode === 'full') {

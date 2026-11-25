@@ -1,0 +1,17 @@
+{
+  "name": "@skeld/example-openapi",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26.12.0"
+  },
+  "scripts": {
+    "generate": "node --conditions=skeld-source generate.ts"
+  },
+  "dependencies": {
+    "@skeld/auth": "workspace:*",
+    "@skeld/core": "workspace:*",
+    "@skeld/openapi": "workspace:*"
+  }
+}
