@@ -6,7 +6,7 @@ Reviewed on November 13, 2026 against source revision `80e9731`, with `@skeld/co
 
 ## Scope and assumptions
 
-The scope includes the Node HTTP/1.1 server, contract compilation, request validation, response serialization, browser policies, the typed fetch client, structured logging, and startup and shutdown. Authentication is the next module; core does not currently provide accounts, sessions, authorization or tenant isolation.
+The scope includes the Node HTTP/1.1 server, contract compilation, request validation, response serialization, browser policies, the typed fetch client, structured logging, and startup and shutdown. Core does not provide accounts, sessions or tenant isolation. The gate ([`@skeld/core/gate`](../api/core/gate.md), added in 0.2.0) and the `@skeld/auth` package came after this review and are not assessed here.
 
 The model assumes:
 
@@ -16,7 +16,7 @@ The model assumes:
 - Node, the operating system and the installed framework are trusted dependencies. A compromised maintainer, package, runtime or host defeats that assumption and needs controls outside this library.
 - TLS, reverse proxies, ingress restrictions, aggregate traffic limits, databases and log retention belong to the deployment. An optional proxy must preserve HTTP framing and sanitize forwarding headers. The proxy-to-core hop needs its own network protection.
 
-The website, npm/GitHub account security, a particular application's business rules, and a future authentication module need separate models. Their interfaces are included here where they affect core; their protections are not claimed as implemented by core. The development diagnostic recorder is excluded from the published package and is not the production logger.
+The website, npm/GitHub account security, a particular application's business rules, and the `@skeld/auth` package need separate models. Their interfaces are included here where they affect core; their protections are not claimed as implemented by core. The development diagnostic recorder is excluded from the published package and is not the production logger.
 
 ## Assets and adversaries
 
