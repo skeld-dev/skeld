@@ -53,7 +53,7 @@ time, total time and the ten slowest scripts.
 Quick mode runs the two generated-schema checks with `--schemas 200`. Full and the standalone `schema` category
 keep 4,000 generated schemas. These selections do not change product configuration or shorten product deadlines.
 
-`database`, `auth` and `full` require `SKELD_TEST_PG_URL`, a PostgreSQL 18 connection string for a role allowed
+`database`, `auth` and `full` require `SKELD_TEST_PG_URL`, a PostgreSQL 19 connection string for a role allowed
 to create disposable databases. Missing configuration fails before any scripts start. Full runs store-dependent
 integrations on both adapters; protocol and callback behavior runs on SQLite once.
 

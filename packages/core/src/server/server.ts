@@ -9,11 +9,13 @@ import { resolveLog } from '../log/options.ts';
 import { createServerLog } from '../log/server-log.ts';
 import { BootError } from './boot-error.ts';
 import { bootPlugins } from './boot.ts';
+import { createScopeEvents } from './events.ts';
 import { dispose } from './disposal.ts';
 import { createHttpServer } from './listen.ts';
 import { resolveListenOptions, resolveServerOptions, resolveTrustProxy } from './options.ts';
+import { callRoutesCallbacks } from './routes-callbacks.ts';
 import { buildRuntime } from './runtime.ts';
-import { createScope, createScopeState } from './scope.ts';
+import { createRootState, createScope } from './scope.ts';
 import type { AccessTypes, NoAccess } from '../gate/types.ts';
 import type { LogStats } from '../log/types.ts';
 import type { HttpServerHandle, ListeningAddress, ListenOptions, Server, ServerOptions } from './types.ts';
@@ -73,8 +75,8 @@ export function createServer(options: ServerOptions = {}): Server {
   const resolved = resolveServerOptions(options);
   const gate = resolveGate(options.gate);
   const trustProxy = resolveTrustProxy(options.trustProxy);
-  const log = createServerLog(resolveLog(options.log), gate !== null);
-  const root = createScopeState('root', null, log.logger(null));
+  const log = createServerLog(resolveLog(options.log));
+  const root = createRootState(log.logger(null), createScopeEvents(log), resolved.pluginCloseTimeoutMs);
   let listenCalled = false;
   let closing = false;
   let closed: Promise<void> | null = null;
@@ -126,6 +128,7 @@ export function createServer(options: ServerOptions = {}): Server {
     if (closing) {
       throw new BootError('SERVER_CLOSED', 'Server closed during startup', null, null);
     }
+    callRoutesCallbacks(root);
     const gates = { gated: gate !== null, bound: bindRoutes(gate, root, resolved) };
     const built = buildRuntime(root, resolved, trustProxy, () => closing, log, gates);
     runtime = built;

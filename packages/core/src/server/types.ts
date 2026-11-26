@@ -5,8 +5,8 @@ import type { HttpError } from '../contract/http-error.ts';
 import type { ContractRoutes, Empty, OutgoingCookie, RouteDefinition, RouteInfo } from '../contract/types.ts';
 import type { ResolvedCors } from '../cors/policy.ts';
 import type { ResolvedCsrf } from '../csrf/policy.ts';
-import type { AccessTypes, Gate, NoAccess } from '../gate/types.ts';
-import type { Classified, Logger, LogOptions, LogStats, RequestPart } from '../log/types.ts';
+import type { AccessTypes, Gate, NoAccess, SecurityEvent } from '../gate/types.ts';
+import type { Classified, Logger, LogOptions, LogStats, RequestPart, Severity } from '../log/types.ts';
 import type { Infer, Schema, Wire } from '../schema/types.ts';
 
 /**
@@ -503,6 +503,20 @@ export interface Scope<A extends AccessTypes = NoAccess> {
   readonly signal: AbortSignal;
   /** The server's logger, the same in every scope, plugins included; its records carry no request id. */
   readonly log: Logger;
+  /** Time each `onClose` callback has to settle, in milliseconds: the server's `pluginCloseTimeoutMs`. */
+  readonly closeTimeoutMs: number;
+  /**
+   * Registers a security event and returns its writer; the scopes share 64 names per server, apart from the gate's.
+   * Names follow `GateBoot.event`'s rules; a name repeated with another severity throws `TypeError`.
+   * @example const server = createServer(); const denied = server.event('app.denied', 'warn'); denied(server.log);
+   */
+  event(name: string, severity: Severity): SecurityEvent;
+  /**
+   * Registers a callback `listen` calls once, before binding, with the routes this scope's hooks reach, frozen.
+   * A throw or a returned value makes `listen` reject with BootError `PLUGIN_FAILED`.
+   * @example const server = createServer(); server.onRoutes((routes) => console.log(routes.length));
+   */
+  onRoutes(callback: (routes: readonly RouteInfo[]) => void): void;
   /**
    * Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.
    * Each callback runs once under pluginCloseTimeoutMs; registration after sealing throws REGISTRATION_CLOSED.

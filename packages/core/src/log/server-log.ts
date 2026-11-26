@@ -90,8 +90,7 @@ function engineRecord(
   };
 }
 
-// Holds: Only a server with a gate keeps a map of its loggers; without one, logger() adds nothing per call.
-export function createServerLog(resolved: ResolvedLog, gated = false): ServerLog {
+export function createServerLog(resolved: ResolvedLog): ServerLog {
   if (!resolved.enabled) {
     return DISABLED;
   }
@@ -103,7 +102,7 @@ export function createServerLog(resolved: ResolvedLog, gated = false): ServerLog
   });
   let closing: Promise<void> | null = null;
   const securitySeverities = new Map<string, Severity>();
-  const loggers = gated ? new WeakMap<object, RequestLog | null>() : null;
+  const loggers = new WeakMap<object, RequestLog | null>();
   const suppression = createSuppression((event, route, refused) => {
     const spec = summarySpec(event);
     if (spec === null) {
@@ -229,7 +228,7 @@ export function createServerLog(resolved: ResolvedLog, gated = false): ServerLog
     },
     // Holds: Only a logger this server made writes, so a record can never claim another server's request.
     security(event, severity, logger, fields) {
-      if (loggers === null || typeof logger !== 'object' || logger === null || !loggers.has(logger)) {
+      if (typeof logger !== 'object' || logger === null || !loggers.has(logger)) {
         return;
       }
       const request = loggers.get(logger) ?? null;
@@ -247,7 +246,7 @@ export function createServerLog(resolved: ResolvedLog, gated = false): ServerLog
     },
     logger(request) {
       const made = createLogger(outlet, request);
-      loggers?.set(made, request);
+      loggers.set(made, request);
       return made;
     },
     stats,

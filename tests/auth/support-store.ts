@@ -94,7 +94,7 @@ export function pgBase(): URL {
   const text = process.env.SKELD_TEST_PG_URL;
   if (text === undefined || text === '') {
     throw new Error(
-      'SKELD_TEST_PG_URL is not set: a PostgreSQL 18 fixture is required and a missing one fails the run',
+      'SKELD_TEST_PG_URL is not set: a PostgreSQL 19 fixture is required and a missing one fails the run',
     );
   }
   return new URL(text);

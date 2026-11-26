@@ -6,6 +6,7 @@
   "dependencies": {
     "@skeld/auth": "workspace:*",
     "@skeld/core": "workspace:*",
+    "@skeld/data": "workspace:*",
     "@skeld/openapi": "workspace:*"
   },
   "devDependencies": {

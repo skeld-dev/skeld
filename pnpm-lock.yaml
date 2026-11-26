@@ -261,6 +261,12 @@ importers:
 
   packages/core: {}
 
+  packages/data:
+    dependencies:
+      '@skeld/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/openapi:
     devDependencies:
       '@skeld/core':
@@ -275,6 +281,9 @@ importers:
       '@skeld/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@skeld/data':
+        specifier: workspace:*
+        version: link:../packages/data
       '@skeld/openapi':
         specifier: workspace:*
         version: link:../packages/openapi
@@ -300,6 +309,9 @@ importers:
       '@skeld/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@skeld/data':
+        specifier: workspace:*
+        version: link:../packages/data
       '@skeld/openapi':
         specifier: workspace:*
         version: link:../packages/openapi

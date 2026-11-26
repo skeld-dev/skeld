@@ -9,17 +9,18 @@ import { createServer } from '@skeld/core/server';
 import { handleRequest } from '../../packages/core/src/lifecycle/handle-request.ts';
 import { resolveLog } from '../../packages/core/src/log/options.ts';
 import { createServerLog } from '../../packages/core/src/log/server-log.ts';
+import { createScopeEvents } from '../../packages/core/src/server/events.ts';
 import { createHttpServer } from '../../packages/core/src/server/listen.ts';
 import { resolveServerOptions } from '../../packages/core/src/server/options.ts';
 import { buildRuntime } from '../../packages/core/src/server/runtime.ts';
-import { createScope, createScopeState } from '../../packages/core/src/server/scope.ts';
+import { createScope, createRootState } from '../../packages/core/src/server/scope.ts';
 
 const contract = defineContract({ pending: { method: 'GET', path: '/pending', responses: { 204: null } } });
 
 async function retention(stage: 'handler' | 'hook', disconnect: boolean): Promise<void> {
   const options = resolveServerOptions({ handlerTimeoutMs: 60_000, closeTimeoutMs: 10 });
   const log = createServerLog(resolveLog(false));
-  const root = createScopeState('root', null, log.logger(null));
+  const root = createRootState(log.logger(null), createScopeEvents(log), options.pluginCloseTimeoutMs);
   const scope = createScope(root);
   const entered = Promise.withResolvers<AbortSignal>();
   const unblock = Promise.withResolvers<void>();

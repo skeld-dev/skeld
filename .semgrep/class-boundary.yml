@@ -17,6 +17,7 @@ rules:
           - pattern: class $C { ... }
           - pattern: class { ... }
       - pattern-not: class $C extends Error { ... }
+      - pattern-not: class $C extends HttpError { ... }
   - id: lifecycle-record-class-method
     languages: [ typescript ]
     severity: ERROR
