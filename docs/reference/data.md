@@ -19,7 +19,7 @@ The package has no root export.
 | `@skeld/data/limit`        | `limitRoutes`, `installLimitTable`; the types `LimitOptions`, `LimitRule`, `LimitScope`                                     |
 | `@skeld/data/package.json` | the manifest                                                                                                                |
 
-Core gained three `Scope` members that the database's plugin and the limiter use: `closeTimeoutMs`, `event` and `onRoutes` (see [Scope](../api/core/server.md#scope)).
+The database's plugin and the limiter use three `Scope` members of core: `closeTimeoutMs`, `event` and `onRoutes` (see [Scope](../api/core/server.md#scope)).
 
 ## Options
 
@@ -229,7 +229,7 @@ The plugin registers the pool's cleanup with `scope.onClose`, so `server.close()
 
 The 429 is sent with `context.send`; the 503 is a thrown `HttpError` with the `DataError` as its `cause` where there is one. Unavailable means the charge rejected, passed `chargeTimeoutMs`, or the request's `clientAddress` is not an IP address. A charge ended by the request's own abort answers 503 and writes no record. A charge that timed out or lost its connection may have counted; nothing is refunded or retried.
 
-- **What is counted.** A request that reaches `onRequest` on a rule's route: after routing, the cross-site check and a gate's identify step, before the body is read. A HEAD request counts against its GET route. Unrouted paths, CORS preflights, and requests refused before `onRequest` are not counted.
+- **What is counted.** A request that reaches `onRequest` on a rule's route: after routing, the cross-site check and, when the server identifies callers as `@skeld/auth` does, that step; before the body is read. A HEAD request counts against its GET route. Unrouted paths, CORS preflights, and requests refused before `onRequest` are not counted.
 - **The key.** SHA-256 of the rule's name, a zero byte and the counted address: an IPv4 address, the first four groups of an IPv6 address, or the IPv4 address inside an IPv4-mapped one. No address is stored.
 - **The count.** A fixed window per rule and address, charged in one statement on the database's clock. A refused request is counted too, up to `max + 1`, and the window's end does not move. A changed `max` applies at the next charge; a renamed rule starts from nothing.
 - **The cache.** Each process remembers up to 10,000 refused keys until their window ends and refuses them without a statement; at the bound the oldest leaves.
@@ -259,8 +259,8 @@ Both have an index on `expires_at`. On PostgreSQL `installLimitTable` needs the 
 
 ## Compatibility tested
 
-What the repository's proofs and the example exercise, on Linux with Node 26.13.0:
+What the repository's proofs and the example exercise, on Linux with Node 26.13:
 
 - **PostgreSQL:** 19, over TCP on loopback with TLS from a local authority. PostgreSQL 18 and older are not tested.
-- **SQLite:** the version bundled with Node 26.13.0, on a file and on `':memory:'`.
+- **SQLite:** the version bundled with Node 26.13, on a file and on `':memory:'`.
 - **Not tested:** any managed provider (Amazon RDS, Supabase, Neon or another), and any connection pooler (PgBouncer, Supavisor, RDS Proxy).

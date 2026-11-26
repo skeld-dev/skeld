@@ -2,7 +2,7 @@
 
 `@skeld/data` connects a skeld service to PostgreSQL or SQLite behind one API. Queries are written only with the `sql` tagged template, so every value you interpolate is sent as a parameter and never as query text. A query that names a row schema returns rows checked against it; one that names none returns columns typed `unknown`. Transactions and reserved connections are callbacks, so a connection is always given back. Every database failure is a `DataError` with a code from a fixed list and a fixed message, and what the database said about it is kept out of responses and logs.
 
-On PostgreSQL, data speaks the protocol itself over `node:net` and `node:tls`, and the connection is always TLS with the server's certificate verified, unless your code turns that off by name. SQLite runs through Node's built-in `node:sqlite`. It also gives you a rate limiter, [`limitRoutes`](#limit-requests-per-client-address), whose counts live in one of these databases, and [`toPgPool`](#run-auths-postgresql-store-on-the-same-pool), so `@skeld/auth`'s PostgreSQL store can run on the same connections.
+On PostgreSQL, data speaks the protocol itself over `node:net` and `node:tls`, and every TLS connection has the server's certificate and host name verified. The one thing your code can ask for, by name, is a connection without TLS. SQLite runs through Node's built-in `node:sqlite`. It also gives you a rate limiter, [`limitRoutes`](#limit-requests-per-client-address), whose counts live in one of these databases, and [`toPgPool`](#run-auths-postgresql-store-on-the-same-pool), so `@skeld/auth`'s PostgreSQL store can run on the same connections.
 
 It is not an ORM, a query builder or a migration tool. You write the SQL, and your migrations are SQL you run on a [reserved connection](#reserve-a-connection-for-migrations-and-locks).
 
@@ -395,7 +395,7 @@ const db = createPostgresDatabase({ url: new Secret(process.env.DATABASE_URL ?? 
 export const store = createPostgresStore({ pool: toPgPool(db) });
 ```
 
-`toPgPool` gives `@skeld/auth/postgres` the pool shape it takes, running on the database's own connections and bounds, so your queries and auth's share `maxConnections`. Auth's `maxClients` defaults to half of it. Register `db.plugin` on the server: plugins run before the gate boots, so the pool is open when auth's gate attaches to the store. `store.install()` needs the pool open too, so call it from a plugin registered after `db.plugin`. `toPgPool` throws `BootError` `INVALID_OPTION` for a SQLite database.
+`toPgPool` gives `@skeld/auth/postgres` the pool shape it takes, running on the database's own connections and bounds, so your queries and auth's share `maxConnections`. Auth's `maxClients` defaults to half of it. Register `db.plugin` on the server: plugins run before authentication starts, so the pool is open when auth connects to its store. `store.install()` needs the pool open too, so call it from a plugin registered after `db.plugin`. `toPgPool` throws `BootError` `INVALID_OPTION` for a SQLite database.
 
 ## Handle failures
 
