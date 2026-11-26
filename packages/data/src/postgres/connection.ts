@@ -11,10 +11,33 @@ import type { TransactionOptions } from '../database/types.ts';
 import type { SessionResult } from '../session/types.ts';
 import type { Parameter } from '../sql/types.ts';
 import type { PostgresConnection } from './connection-types.ts';
-import { Breach, dataRowFields, errorFields, Fields, type Frame, MessageReader } from './reader.ts';
-import { type Started, StartupFailure, StartupProgress, startSession } from './startup.ts';
+import {
+  Breach,
+  createMessageReader,
+  dataRowFields,
+  errorFields,
+  type Fields,
+  type Frame,
+  fieldsOf,
+  readByte,
+  readBytes,
+  readDone,
+  readInt16,
+  readInt32,
+  readString,
+  readUint16,
+} from './reader.ts';
+import {
+  createStartupProgress,
+  type Started,
+  StartupFailure,
+  type StartupProgress,
+  startSession,
+  startupStage,
+} from './startup.ts';
 import type { PostgresTarget } from './target.ts';
 import { openTransport, type Transport, TransportFailure } from './transport.ts';
+import { ROW_COST, VALUE_COST } from '../session/result-cost.ts';
 import { decodeValue } from './values.ts';
 import { cancelRequest, cycleBytes, extendedCycle, query, terminate } from './wire.ts';
 
@@ -23,6 +46,13 @@ const CONNECT_MESSAGE_BYTES = 65_536;
 // Why: Bind carries its parameter count in 16 bits (protocol-message-formats, Bind).
 const MAX_PARAMETERS = 65_535;
 const TRACKED = ['client_encoding', 'DateStyle', 'TimeZone'] as const;
+
+// Why: Begin text is built only from these phrases, so no caller value ever reaches the SQL text.
+const ISOLATION: ReadonlyMap<unknown, string> = new Map([
+  ['read committed', 'isolation level read committed'],
+  ['repeatable read', 'isolation level repeatable read'],
+  ['serializable', 'isolation level serializable'],
+]);
 
 type Status = 'idle' | 'transaction' | 'failed' | 'closed';
 type CycleKind = 'extended' | 'simple' | 'script';
@@ -91,184 +121,116 @@ class LinkEnded extends Error {
   }
 }
 
-// Does:  Queues inbound frames during startup, so the sign-in can await each server message in turn.
-class Inbox {
-  readonly #frames: Frame[] = [];
-  #waiter: { resolve: (frame: Frame) => void; reject: (error: LinkEnded) => void } | null = null;
-  #ended: LinkEnded | null = null;
-
-  push(frame: Frame): void {
-    if (this.#waiter === null) {
-      this.#frames.push(frame);
-    } else {
-      this.#waiter.resolve(frame);
-      this.#waiter = null;
-    }
-  }
-
-  end(reason: Reason): void {
-    this.#ended ??= new LinkEnded(reason);
-    this.#waiter?.reject(this.#ended);
-    this.#waiter = null;
-  }
-
-  next(): Promise<Frame> {
-    const frame = this.#frames.shift();
-    if (frame !== undefined) {
-      return Promise.resolve(frame);
-    }
-    if (this.#ended !== null) {
-      return Promise.reject(this.#ended);
-    }
-    return new Promise((resolve, reject) => {
-      this.#waiter = { resolve, reject };
-    });
-  }
-
-  drain(): Frame[] {
-    return this.#frames.splice(0);
-  }
+interface Inbox {
+  readonly push: (frame: Frame) => void;
+  readonly end: (reason: Reason) => void;
+  readonly next: () => Promise<Frame>;
+  readonly drain: () => Frame[];
 }
 
-// Does:  Implements a PostgreSQL connection over an open transport: startup first, then one cycle at a time.
-class Connection implements PostgresConnection {
-  readonly #target: PostgresTarget;
-  readonly #socket: Socket;
-  readonly #stream: Socket | TLSSocket;
-  readonly #reader = new MessageReader(CONNECT_MESSAGE_BYTES);
-  readonly #closing = new AbortController();
-  readonly closed: Promise<void>;
-  #inbox: Inbox | null = new Inbox();
-  #started: Started | null = null;
-  #status: Status = 'idle';
-  #cycle: Cycle | null = null;
-  #doomed = false;
-  #drifted = false;
-  #cancelling = false;
-  #cancelStream: Socket | TLSSocket | null = null;
-
-  constructor(target: PostgresTarget, transport: Transport) {
-    this.#target = target;
-    this.#socket = transport.socket;
-    this.#stream = transport.stream;
-    this.closed = new Promise((resolve) => {
-      this.#stream.once('close', () => {
-        this.#onClose();
-        resolve();
+// Does:  Queues inbound frames during startup, so the sign-in can await each server message in turn.
+function createInbox(): Inbox {
+  const frames: Frame[] = [];
+  let waiter: { resolve: (frame: Frame) => void; reject: (error: LinkEnded) => void } | null = null;
+  let ended: LinkEnded | null = null;
+  return Object.freeze({
+    push: (frame: Frame): void => {
+      if (waiter === null) {
+        frames.push(frame);
+      } else {
+        waiter.resolve(frame);
+        waiter = null;
+      }
+    },
+    end: (reason: Reason): void => {
+      ended ??= new LinkEnded(reason);
+      waiter?.reject(ended);
+      waiter = null;
+    },
+    next: (): Promise<Frame> => {
+      const frame = frames.shift();
+      if (frame !== undefined) {
+        return Promise.resolve(frame);
+      }
+      if (ended !== null) {
+        return Promise.reject(ended);
+      }
+      return new Promise((resolve, reject) => {
+        waiter = { resolve, reject };
       });
-    });
-    this.#stream.on('data', (chunk: Buffer) => this.#onData(chunk));
-  }
+    },
+    drain: (): Frame[] => frames.splice(0),
+  });
+}
 
-  get protocol(): '3.2' | '3.0' {
-    return this.#started?.protocol ?? '3.2';
-  }
+interface Opened {
+  readonly connection: PostgresConnection;
+  readonly startup: (certificate: TLSSocket | null, progress: StartupProgress) => Promise<Started>;
+}
 
-  get status(): Status {
-    return this.#status;
-  }
+// Does:  Builds a PostgreSQL connection over an open transport: startup first, then one cycle at a time.
+function createConnection(target: PostgresTarget, transport: Transport): Opened {
+  const socket: Socket = transport.socket;
+  const stream: Socket | TLSSocket = transport.stream;
+  const reader = createMessageReader(CONNECT_MESSAGE_BYTES);
+  const closing = new AbortController();
+  let inbox: Inbox | null = createInbox();
+  let started: Started | null = null;
+  let status: Status = 'idle';
+  let cycle: Cycle | null = null;
+  let doomed = false;
+  let drifted = false;
+  let cancelling = false;
+  let cancelStream: Socket | TLSSocket | null = null;
 
-  get reusable(): boolean {
-    return this.#status === 'idle' && !this.#doomed && !this.#drifted && this.#cycle === null;
-  }
+  const destroy = (): void => {
+    doomed = true;
+    status = 'closed';
+    closing.abort();
+    cancelStream?.destroy();
+    stream.destroy();
+    socket.destroy();
+  };
 
-  async startup(certificate: TLSSocket | null, progress: StartupProgress): Promise<Started> {
-    const inbox = this.#inbox;
-    if (inbox === null) {
-      throw new TypeError('A PostgreSQL connection starts once');
-    }
-    const link = { next: () => inbox.next(), write: (data: Buffer) => this.#stream.write(data) };
-    const started = await startSession(link, this.#target, certificate, progress);
-    this.#started = started;
-    this.#inbox = null;
-    this.#reader.limit = this.#target.bounds.maxResultBytes;
-    for (const frame of inbox.drain()) {
-      this.#receive(frame);
-    }
-    return started;
-  }
-
-  run(text: string, parameters: readonly Parameter[], signal: AbortSignal): Promise<SessionResult> {
-    if (parameters.length > MAX_PARAMETERS || cycleBytes(text, parameters) > this.#target.bounds.maxParameterBytes) {
-      return this.#refuse(signal, 'PARAMETERS_TOO_LARGE');
-    }
-    return this.#begin('extended', text, signal, () => extendedCycle(text, parameters));
-  }
-
-  simple(text: string, signal: AbortSignal): Promise<SessionResult> {
-    return this.#scriptLike('simple', text, signal);
-  }
-
-  async script(text: string, signal: AbortSignal): Promise<void> {
-    await this.#scriptLike('script', text, signal);
-  }
-
-  async begin(options: TransactionOptions, signal: AbortSignal): Promise<void> {
-    const modes = [
-      ...(options.isolation === undefined ? [] : [`isolation level ${options.isolation}`]),
-      ...(options.readOnly === true ? ['read only'] : []),
-    ];
-    await this.run(modes.length === 0 ? 'begin' : `begin ${modes.join(', ')}`, [], signal);
-  }
-
-  async commit(signal: AbortSignal): Promise<'committed' | 'rolled-back'> {
-    const result = await this.run('commit', [], signal);
-    return result.command === 'COMMIT' ? 'committed' : 'rolled-back';
-  }
-
-  async rollback(signal: AbortSignal): Promise<void> {
-    await this.run('rollback', [], signal);
-  }
-
-  restore(): boolean {
-    return false;
-  }
-
-  end(): void {
-    if (this.#status === 'closed') {
+  const settle = (outcome: SessionResult | DataError): void => {
+    const current = cycle;
+    if (current === null) {
       return;
     }
-    this.#doomed = true;
-    this.#stream.end(terminate(), () => this.destroy());
-  }
-
-  destroy(): void {
-    this.#doomed = true;
-    this.#status = 'closed';
-    this.#closing.abort();
-    this.#cancelStream?.destroy();
-    this.#stream.destroy();
-    this.#socket.destroy();
-  }
-
-  #scriptLike(kind: 'simple' | 'script', text: string, signal: AbortSignal): Promise<SessionResult> {
-    if (Buffer.byteLength(text, 'utf8') > this.#target.bounds.maxParameterBytes) {
-      return this.#refuse(signal, 'PARAMETERS_TOO_LARGE');
+    cycle = null;
+    current.signal.removeEventListener('abort', onAbort);
+    if (outcome instanceof DataError) {
+      current.reject(outcome);
+    } else {
+      current.resolve(outcome);
     }
-    return this.#begin(kind, text, signal, () => query(text));
-  }
+  };
 
-  #refuse(signal: AbortSignal, code: 'PARAMETERS_TOO_LARGE' | 'INVALID_QUERY'): Promise<never> {
-    return Promise.reject(new DataError(signal.aborted ? 'CANCELLED' : code));
-  }
+  const fail = (error: DataError): void => {
+    settle(error);
+    destroy();
+  };
 
-  #begin(kind: CycleKind, text: string, signal: AbortSignal, encode: () => Buffer): Promise<SessionResult> {
+  const refuse = (signal: AbortSignal, code: 'PARAMETERS_TOO_LARGE' | 'INVALID_QUERY'): Promise<never> =>
+    Promise.reject(new DataError(signal.aborted ? 'CANCELLED' : code));
+
+  const begin = (kind: CycleKind, text: string, signal: AbortSignal, encode: () => Buffer): Promise<SessionResult> => {
     if (signal.aborted) {
       return Promise.reject(new DataError('CANCELLED'));
     }
-    if (this.#cycle !== null) {
+    if (cycle !== null) {
       throw new TypeError('A PostgreSQL connection runs one cycle at a time');
     }
-    if (this.#status === 'closed' || this.#doomed) {
+    if (status === 'closed' || doomed) {
       return Promise.reject(failed('CONNECTION_LOST', 'lost'));
     }
     // Why: A NUL would end the text field early and the rest would be read as further message fields.
     if (text.includes('\0')) {
-      return this.#refuse(signal, 'INVALID_QUERY');
+      return refuse(signal, 'INVALID_QUERY');
     }
     const bytes = encode();
     return new Promise((resolve, reject) => {
-      const cycle: Cycle = {
+      cycle = {
         kind,
         text,
         signal,
@@ -283,86 +245,42 @@ class Connection implements PostgresConnection {
         rowCount: null,
         error: null,
       };
-      this.#cycle = cycle;
-      signal.addEventListener('abort', this.#onAbort, { once: true });
-      this.#stream.write(bytes);
+      signal.addEventListener('abort', onAbort, { once: true });
+      stream.write(bytes);
     });
-  }
+  };
 
-  #settle(outcome: SessionResult | DataError): void {
-    const cycle = this.#cycle;
-    if (cycle === null) {
-      return;
+  const scriptLike = (kind: 'simple' | 'script', text: string, signal: AbortSignal): Promise<SessionResult> => {
+    if (Buffer.byteLength(text, 'utf8') > target.bounds.maxParameterBytes) {
+      return refuse(signal, 'PARAMETERS_TOO_LARGE');
     }
-    this.#cycle = null;
-    cycle.signal.removeEventListener('abort', this.#onAbort);
-    if (outcome instanceof DataError) {
-      cycle.reject(outcome);
-    } else {
-      cycle.resolve(outcome);
-    }
-  }
+    return begin(kind, text, signal, () => query(text));
+  };
 
-  #fail(error: DataError): void {
-    this.#settle(error);
-    this.destroy();
-  }
-
-  #onData(chunk: Buffer): void {
-    const breach = this.#reader.push(chunk, (frame) => {
-      if (this.#inbox !== null) {
-        this.#inbox.push(frame);
-      } else {
-        this.#receive(frame);
-      }
-      return this.#status !== 'closed' && !this.#stream.destroyed;
-    });
-    if (breach === null) {
-      return;
+  const run = (text: string, parameters: readonly Parameter[], signal: AbortSignal): Promise<SessionResult> => {
+    if (parameters.length > MAX_PARAMETERS || cycleBytes(text, parameters) > target.bounds.maxParameterBytes) {
+      return refuse(signal, 'PARAMETERS_TOO_LARGE');
     }
-    if (this.#inbox !== null) {
-      this.#inbox.end('violation');
-      this.destroy();
-    } else if (breach === 'long') {
-      this.#fail(failed('RESULT_TOO_LARGE', 'result-bound'));
-    } else {
-      this.#fail(failed('PROTOCOL_VIOLATION', 'violation'));
-    }
-  }
-
-  #onClose(): void {
-    this.#status = 'closed';
-    this.#inbox?.end('closed');
-    this.#settle(failed('CONNECTION_LOST', 'lost'));
-  }
-
-  readonly #onAbort = (): void => {
-    const cycle = this.#cycle;
-    if (cycle === null) {
-      return;
-    }
-    this.#doomed = true;
-    this.#settle(new DataError('CANCELLED'));
-    void this.#cancel();
+    return begin('extended', text, signal, () => extendedCycle(text, parameters));
   };
 
   // Does:  Dials the statement's own peer under the same TLS rules, sends the key as received, then closes the socket.
   // Holds: The statement's socket is destroyed whatever the cancel's outcome, and the cancel is counted once.
-  async #cancel(): Promise<void> {
-    const started = this.#started;
-    const address = this.#socket.remoteAddress;
-    const port = this.#socket.remotePort;
-    if (this.#cancelling || started === null || address === undefined || port === undefined) {
-      this.destroy();
+  const cancel = async (): Promise<void> => {
+    const key = started;
+    const address = socket.remoteAddress;
+    const port = socket.remotePort;
+    if (cancelling || key === null || address === undefined || port === undefined) {
+      destroy();
       return;
     }
-    this.#cancelling = true;
-    const bound = AbortSignal.timeout(this.#target.bounds.connectTimeoutMs);
-    const signal = AbortSignal.any([bound, this.#closing.signal]);
+    cancelling = true;
+    const bound = AbortSignal.timeout(target.bounds.connectTimeoutMs);
+    const signal = AbortSignal.any([bound, closing.signal]);
     let outcome: 'processed' | 'failed' | 'timeout' = 'failed';
     try {
-      const transport = await openTransport(address, port, this.#target, signal);
-      this.#cancelStream = transport.stream;
+      const dialled = await openTransport(address, port, target, signal);
+      cancelStream = dialled.stream;
       outcome = await new Promise((resolve) => {
         const abort = (): void => resolve(bound.aborted ? 'timeout' : 'failed');
         if (signal.aborted) {
@@ -370,101 +288,46 @@ class Connection implements PostgresConnection {
           return;
         }
         signal.addEventListener('abort', abort, { once: true });
-        transport.stream.once('close', () => {
+        dialled.stream.once('close', () => {
           signal.removeEventListener('abort', abort);
           resolve('processed');
         });
-        transport.stream.write(cancelRequest(started.processId, started.key));
+        dialled.stream.write(cancelRequest(key.processId, key.key));
       });
-      transport.stream.destroy();
+      dialled.stream.destroy();
     } catch (error) {
       if (!(error instanceof TransportFailure)) {
         throw error;
       }
       outcome = bound.aborted ? 'timeout' : 'failed';
     } finally {
-      this.#cancelStream = null;
+      cancelStream = null;
       count('data.pg.cancel', outcome);
-      this.destroy();
+      destroy();
     }
-  }
+  };
 
-  #receive(frame: Frame): void {
-    if (this.#doomed) {
+  const onAbort = (): void => {
+    if (cycle === null) {
       return;
     }
-    try {
-      this.#dispatch(frame);
-    } catch (error) {
-      if (!(error instanceof Breach)) {
-        throw error;
-      }
-      this.#fail(failed('PROTOCOL_VIOLATION', 'violation'));
-    }
-  }
+    doomed = true;
+    settle(new DataError('CANCELLED'));
+    void cancel();
+  };
 
-  #dispatch(frame: Frame): void {
-    const fields = new Fields(frame.body);
-    switch (frame.type) {
-      case typeOf('N'):
-      case typeOf('A'):
-        return;
-      case typeOf('S'):
-        this.#parameterStatus(fields);
-        return;
-      case typeOf('E'):
-        this.#error(errorFields(frame.body));
-        return;
-      default:
-        break;
-    }
-    const cycle = this.#cycle;
-    if (cycle === null) {
-      throw new Breach();
-    }
-    switch (frame.type) {
-      case typeOf('1'):
-      case typeOf('2'):
-      case typeOf('n'):
-      case typeOf('I'):
-        fields.done();
-        return;
-      case typeOf('T'):
-        this.#rowDescription(cycle, fields);
-        return;
-      case typeOf('D'):
-        this.#dataRow(cycle, frame.body);
-        return;
-      case typeOf('C'):
-        this.#commandComplete(cycle, fields);
-        return;
-      case typeOf('Z'):
-        this.#ready(cycle, fields);
-        return;
-      case typeOf('G'):
-      case typeOf('H'):
-      case typeOf('W'):
-        // Why: Data speaks no copy sub-protocol, so a copy response leaves the connection in a state it cannot leave.
-        this.#fail(failed('INVALID_QUERY', 'copy'));
-        return;
-      default:
-        throw new Breach();
-    }
-  }
-
-  #parameterStatus(fields: Fields): void {
-    const name = fields.string();
-    const value = fields.string();
-    fields.done();
+  const parameterStatus = (fields: Fields): void => {
+    const name = readString(fields);
+    const value = readString(fields);
+    readDone(fields);
     const tracked = TRACKED.find((setting) => setting === name);
-    if (tracked !== undefined && this.#started?.settings.get(tracked) !== value) {
-      this.#drifted = true;
+    if (tracked !== undefined && started?.settings.get(tracked) !== value) {
+      drifted = true;
     }
-  }
+  };
 
-  #error(fields: ReadonlyMap<string, string>): void {
+  const serverError = (fields: ReadonlyMap<string, string>): void => {
     const severity = fields.get('V');
-    const cycle = this.#cycle;
     if (severity === 'ERROR' && cycle !== null) {
       cycle.error ??= new DataError('QUERY_FAILED', {
         ...sqlStateOf(fields),
@@ -477,75 +340,235 @@ class Connection implements PostgresConnection {
     }
     const detail = serverDetail(fields, cycle?.text ?? null);
     // Why: An error while idle or a FATAL ends the session; the server closes it next.
-    this.#fail(markReason(new DataError('CONNECTION_LOST', { ...sqlStateOf(fields), detail }), 'server'));
-  }
+    fail(markReason(new DataError('CONNECTION_LOST', { ...sqlStateOf(fields), detail }), 'server'));
+  };
 
-  #rowDescription(cycle: Cycle, fields: Fields): void {
-    const total = fields.uint16();
+  const rowDescription = (current: Cycle, fields: Fields): void => {
+    const total = readUint16(fields);
     const columns: string[] = [];
     const types: number[] = [];
     for (let index = 0; index < total; index += 1) {
-      columns.push(fields.string());
-      fields.int32();
-      fields.int16();
-      types.push(fields.int32());
-      fields.bytes(8);
+      columns.push(readString(fields));
+      readInt32(fields);
+      readInt16(fields);
+      types.push(readInt32(fields));
+      readBytes(fields, 8);
     }
-    fields.done();
-    cycle.columns = columns;
-    cycle.types = types;
-    cycle.rows = [];
-    cycle.bytes = 0;
-    cycle.current = true;
-  }
+    readDone(fields);
+    current.columns = columns;
+    current.types = types;
+    current.rows = [];
+    current.bytes = 0;
+    current.current = true;
+  };
 
-  #dataRow(cycle: Cycle, body: Buffer): void {
-    if (!cycle.current) {
+  const dataRow = (current: Cycle, body: Buffer): void => {
+    if (!current.current) {
       throw new Breach();
     }
-    cycle.bytes += body.length;
-    if (cycle.bytes > this.#target.bounds.maxResultBytes) {
-      this.#fail(failed('RESULT_TOO_LARGE', 'result-bound'));
+    const values = dataRowFields(body, current.columns.length);
+    // Why: A script keeps no row, so only the reader's per-message bound applies to what it receives.
+    if (current.kind === 'script') {
       return;
     }
-    const values = dataRowFields(body, cycle.columns.length);
-    if (cycle.kind === 'script') {
+    const columns = current.columns.length;
+    // Why: The bound counts a kept row's memory: the row, each value, and the values' bytes without DataRow framing.
+    current.bytes += ROW_COST + columns * VALUE_COST + (body.length - 2 - 4 * columns);
+    if (current.bytes > target.bounds.maxResultBytes) {
+      fail(failed('RESULT_TOO_LARGE', 'result-bound'));
       return;
     }
-    cycle.rows.push(
-      values.map((value, index) => (value === null ? null : decodeValue(cycle.types[index] ?? 0, value))),
+    current.rows.push(
+      values.map((value, index) => (value === null ? null : decodeValue(current.types[index] ?? 0, value))),
     );
-  }
+  };
 
-  #commandComplete(cycle: Cycle, fields: Fields): void {
-    const tag = commandTag(fields.string());
-    fields.done();
+  const commandComplete = (current: Cycle, fields: Fields): void => {
+    const tag = commandTag(readString(fields));
+    readDone(fields);
     // Why: The result is the last statement's, so a statement that returned no rows leaves no columns and no rows.
-    if (!cycle.current) {
-      cycle.columns = [];
-      cycle.types = [];
-      cycle.rows = [];
+    if (!current.current) {
+      current.columns = [];
+      current.types = [];
+      current.rows = [];
     }
-    cycle.current = false;
-    cycle.command = tag.command;
-    cycle.rowCount = tag.rowCount;
-  }
+    current.current = false;
+    current.command = tag.command;
+    current.rowCount = tag.rowCount;
+  };
 
-  #ready(cycle: Cycle, fields: Fields): void {
-    const status = STATUS.get(fields.byte());
-    fields.done();
-    if (status === undefined) {
+  const ready = (current: Cycle, fields: Fields): void => {
+    const reported = STATUS.get(readByte(fields));
+    readDone(fields);
+    if (reported === undefined) {
       throw new Breach();
     }
-    this.#status = status;
-    if (cycle.error !== null) {
-      this.#settle(cycle.error);
+    status = reported;
+    if (current.error !== null) {
+      settle(current.error);
       return;
     }
-    const columns = Object.freeze(cycle.columns);
-    const rows = Object.freeze(cycle.rows.map((row) => Object.freeze(row)));
-    this.#settle({ command: cycle.command, rowCount: cycle.rowCount, columns, rows });
-  }
+    const columns = Object.freeze(current.columns);
+    const rows = Object.freeze(current.rows.map((row) => Object.freeze(row)));
+    settle({ command: current.command, rowCount: current.rowCount, columns, rows });
+  };
+
+  const dispatch = (frame: Frame): void => {
+    const fields = fieldsOf(frame.body);
+    switch (frame.type) {
+      case typeOf('N'):
+      case typeOf('A'):
+        return;
+      case typeOf('S'):
+        parameterStatus(fields);
+        return;
+      case typeOf('E'):
+        serverError(errorFields(frame.body));
+        return;
+      default:
+        break;
+    }
+    const current = cycle;
+    if (current === null) {
+      throw new Breach();
+    }
+    switch (frame.type) {
+      case typeOf('1'):
+      case typeOf('2'):
+      case typeOf('n'):
+      case typeOf('I'):
+        readDone(fields);
+        return;
+      case typeOf('T'):
+        rowDescription(current, fields);
+        return;
+      case typeOf('D'):
+        dataRow(current, frame.body);
+        return;
+      case typeOf('C'):
+        commandComplete(current, fields);
+        return;
+      case typeOf('Z'):
+        ready(current, fields);
+        return;
+      case typeOf('G'):
+      case typeOf('H'):
+      case typeOf('W'):
+        // Why: Data speaks no copy sub-protocol, so a copy response leaves the connection in a state it cannot leave.
+        fail(failed('INVALID_QUERY', 'copy'));
+        return;
+      default:
+        throw new Breach();
+    }
+  };
+
+  const receive = (frame: Frame): void => {
+    if (doomed) {
+      return;
+    }
+    try {
+      dispatch(frame);
+    } catch (error) {
+      if (!(error instanceof Breach)) {
+        throw error;
+      }
+      fail(failed('PROTOCOL_VIOLATION', 'violation'));
+    }
+  };
+
+  const deliver = (frame: Frame): boolean => {
+    if (inbox !== null) {
+      inbox.push(frame);
+    } else {
+      receive(frame);
+    }
+    return status !== 'closed' && !stream.destroyed;
+  };
+
+  const onData = (chunk: Buffer): void => {
+    const breach = reader.push(chunk, deliver);
+    if (breach === null) {
+      return;
+    }
+    if (inbox !== null) {
+      inbox.end('violation');
+      destroy();
+    } else if (breach === 'long') {
+      fail(failed('RESULT_TOO_LARGE', 'result-bound'));
+    } else {
+      fail(failed('PROTOCOL_VIOLATION', 'violation'));
+    }
+  };
+
+  const closed = new Promise<void>((resolve) => {
+    stream.once('close', () => {
+      status = 'closed';
+      inbox?.end('closed');
+      settle(failed('CONNECTION_LOST', 'lost'));
+      resolve();
+    });
+  });
+  stream.on('data', onData);
+
+  const connection: PostgresConnection = Object.freeze({
+    get protocol(): '3.2' | '3.0' {
+      return started?.protocol ?? '3.2';
+    },
+    get status(): Status {
+      return status;
+    },
+    get reusable(): boolean {
+      return status === 'idle' && !doomed && !drifted && cycle === null;
+    },
+    closed,
+    run,
+    simple: (text: string, signal: AbortSignal): Promise<SessionResult> => scriptLike('simple', text, signal),
+    script: async (text: string, signal: AbortSignal): Promise<void> => {
+      await scriptLike('script', text, signal);
+    },
+    begin: async (options: TransactionOptions, signal: AbortSignal): Promise<void> => {
+      const isolation = options.isolation === undefined ? null : ISOLATION.get(options.isolation);
+      if (isolation === undefined) {
+        return refuse(signal, 'INVALID_QUERY');
+      }
+      const modes = [...(isolation === null ? [] : [isolation]), ...(options.readOnly === true ? ['read only'] : [])];
+      await run(modes.length === 0 ? 'begin' : `begin ${modes.join(', ')}`, [], signal);
+    },
+    commit: async (signal: AbortSignal): Promise<'committed' | 'rolled-back'> => {
+      const result = await run('commit', [], signal);
+      return result.command === 'COMMIT' ? 'committed' : 'rolled-back';
+    },
+    rollback: async (signal: AbortSignal): Promise<void> => {
+      await run('rollback', [], signal);
+    },
+    restore: (): boolean => false,
+    end: (): void => {
+      if (status === 'closed') {
+        return;
+      }
+      doomed = true;
+      stream.end(terminate(), () => destroy());
+    },
+    destroy,
+  });
+
+  const startup = async (certificate: TLSSocket | null, progress: StartupProgress): Promise<Started> => {
+    const queued = inbox;
+    if (queued === null) {
+      throw new TypeError('A PostgreSQL connection starts once');
+    }
+    const link = { next: () => queued.next(), write: (data: Buffer) => stream.write(data) };
+    const opened = await startSession(link, target, certificate, progress);
+    started = opened;
+    inbox = null;
+    reader.setLimit(target.bounds.maxResultBytes);
+    for (const frame of queued.drain()) {
+      receive(frame);
+    }
+    return opened;
+  };
+
+  return { connection, startup };
 }
 
 function connectFailure(error: unknown): DataError {
@@ -578,28 +601,28 @@ export async function openPostgresConnection(target: PostgresTarget, signal: Abo
   const token = startSpan('data.pg.connect');
   const bound = AbortSignal.timeout(target.bounds.connectTimeoutMs);
   const either = AbortSignal.any([signal, bound]);
-  const progress = new StartupProgress();
-  let connection: Connection | null = null;
-  const abort = (): void => connection?.destroy();
+  const progress = createStartupProgress();
+  let opened: Opened | null = null;
+  const abort = (): void => opened?.connection.destroy();
   try {
     const transport = await openTransport(target.host, target.port, target, either);
-    connection = new Connection(target, transport);
+    opened = createConnection(target, transport);
     either.addEventListener('abort', abort, { once: true });
     if (either.aborted) {
-      connection.destroy();
+      opened.connection.destroy();
     }
-    const started = await connection.startup(transport.certificate, progress);
+    const started = await opened.startup(transport.certificate, progress);
     count('data.pg.protocol', started.protocol);
     count('data.pg.mechanism', started.mechanism);
     count('data.pg.key_bytes', String(started.key.length));
-    return connection;
+    return opened.connection;
   } catch (error) {
-    connection?.destroy();
+    opened?.connection.destroy();
     if (signal.aborted) {
       throw new DataError('CANCELLED');
     }
-    const failure = classify(error, progress.stage, bound.aborted);
-    count('data.connect.failed', failure.stage ?? progress.stage);
+    const failure = classify(error, startupStage(progress), bound.aborted);
+    count('data.connect.failed', failure.stage ?? startupStage(progress));
     throw failure;
   } finally {
     either.removeEventListener('abort', abort);

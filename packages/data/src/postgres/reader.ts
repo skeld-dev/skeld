@@ -8,87 +8,102 @@ export interface Frame {
 
 export type FrameBreach = 'short' | 'long';
 
+export interface MessageReader {
+  setLimit(bytes: number): void;
+  push(chunk: Buffer, deliver: (frame: Frame) => boolean): FrameBreach | null;
+}
+
 // Does:  Splits a byte stream into messages, copying a body only when it spans chunks.
-export class MessageReader {
-  #limit: number;
-  readonly #header = Buffer.alloc(5);
-  #headerFilled = 0;
-  #type = 0;
+export function createMessageReader(initialLimit: number): MessageReader {
+  let limit = initialLimit;
+  const header = Buffer.alloc(5);
+  let headerFilled = 0;
+  let type = 0;
+  let declared = 0;
   // Why: -1 while a header is being read; otherwise the body's length, judged before any of it is kept.
-  #bodyLength = -1;
-  #body: Buffer | null = null;
-  #bodyFilled = 0;
+  let bodyLength = -1;
+  let body: Buffer | null = null;
+  let bodyFilled = 0;
 
-  constructor(limit: number) {
-    this.#limit = limit;
-  }
+  const finish = (whole: Buffer, deliver: (frame: Frame) => boolean): boolean => {
+    bodyLength = -1;
+    body = null;
+    bodyFilled = 0;
+    return deliver({ type, body: whole });
+  };
 
-  // Why: Until ReadyForQuery a message is held to the connect bound, afterwards to maxResultBytes.
-  set limit(bytes: number) {
-    this.#limit = bytes;
-  }
+  // Does:  Takes header bytes from the chunk; returns the next offset, with declared set once all five are in.
+  const takeHeader = (chunk: Buffer, offset: number): number => {
+    if (headerFilled === 0 && chunk.length - offset >= 5) {
+      type = chunk.readUInt8(offset);
+      declared = chunk.readInt32BE(offset + 1);
+      headerFilled = 5;
+      return offset + 5;
+    }
+    const taken = Math.min(5 - headerFilled, chunk.length - offset);
+    chunk.copy(header, headerFilled, offset, offset + taken);
+    headerFilled += taken;
+    if (headerFilled === 5) {
+      type = header.readUInt8(0);
+      declared = header.readInt32BE(1);
+    }
+    return offset + taken;
+  };
+
+  // Does:  Takes body bytes from the chunk; returns the next offset, or -1 when deliver asked to stop.
+  const takeBody = (chunk: Buffer, offset: number, deliver: (frame: Frame) => boolean): number => {
+    const wanted = bodyLength - bodyFilled;
+    const available = chunk.length - offset;
+    if (body === null && available >= wanted) {
+      return finish(chunk.subarray(offset, offset + wanted), deliver) ? offset + wanted : -1;
+    }
+    body ??= Buffer.allocUnsafe(bodyLength);
+    const taken = Math.min(wanted, available);
+    chunk.copy(body, bodyFilled, offset, offset + taken);
+    bodyFilled += taken;
+    if (bodyFilled === bodyLength && !finish(body, deliver)) {
+      return -1;
+    }
+    return offset + taken;
+  };
 
   // Does:  Delivers each whole message in the chunk; stops at the first breach, or when deliver returns false.
-  push(chunk: Buffer, deliver: (frame: Frame) => boolean): FrameBreach | null {
+  const push = (chunk: Buffer, deliver: (frame: Frame) => boolean): FrameBreach | null => {
     let offset = 0;
     while (offset < chunk.length) {
-      const available = chunk.length - offset;
-      if (this.#bodyLength === -1) {
-        let length: number;
-        if (this.#headerFilled === 0 && available >= 5) {
-          this.#type = chunk.readUInt8(offset);
-          length = chunk.readInt32BE(offset + 1);
-          offset += 5;
-        } else {
-          const taken = Math.min(5 - this.#headerFilled, available);
-          chunk.copy(this.#header, this.#headerFilled, offset, offset + taken);
-          this.#headerFilled += taken;
-          offset += taken;
-          if (this.#headerFilled < 5) {
-            return null;
-          }
-          this.#headerFilled = 0;
-          this.#type = this.#header.readUInt8(0);
-          length = this.#header.readInt32BE(1);
-        }
-        if (length < 4) {
-          return 'short';
-        }
-        if (length > this.#limit) {
-          return 'long';
-        }
-        this.#bodyLength = length - 4;
-        if (this.#bodyLength === 0 && !this.#finish(EMPTY, deliver)) {
+      if (bodyLength !== -1) {
+        offset = takeBody(chunk, offset, deliver);
+        if (offset === -1) {
           return null;
         }
         continue;
       }
-      const wanted = this.#bodyLength - this.#bodyFilled;
-      if (this.#body === null && available >= wanted) {
-        offset += wanted;
-        if (!this.#finish(chunk.subarray(offset - wanted, offset), deliver)) {
-          return null;
-        }
-        continue;
+      offset = takeHeader(chunk, offset);
+      if (headerFilled < 5) {
+        return null;
       }
-      this.#body ??= Buffer.allocUnsafe(this.#bodyLength);
-      const taken = Math.min(wanted, available);
-      chunk.copy(this.#body, this.#bodyFilled, offset, offset + taken);
-      this.#bodyFilled += taken;
-      offset += taken;
-      if (this.#bodyFilled === this.#bodyLength && !this.#finish(this.#body, deliver)) {
+      headerFilled = 0;
+      if (declared < 4) {
+        return 'short';
+      }
+      if (declared > limit) {
+        return 'long';
+      }
+      bodyLength = declared - 4;
+      if (bodyLength === 0 && !finish(EMPTY, deliver)) {
         return null;
       }
     }
     return null;
-  }
+  };
 
-  #finish(body: Buffer, deliver: (frame: Frame) => boolean): boolean {
-    this.#bodyLength = -1;
-    this.#body = null;
-    this.#bodyFilled = 0;
-    return deliver({ type: this.#type, body });
-  }
+  return Object.freeze({
+    // Why: Until ReadyForQuery a message is held to the connect bound, afterwards to maxResultBytes.
+    setLimit: (bytes: number): void => {
+      limit = bytes;
+    },
+    push,
+  });
 }
 
 const EMPTY = Buffer.alloc(0);
@@ -106,107 +121,104 @@ export function decodeText(bytes: Uint8Array): string {
   }
 }
 
-// Does:  Reads the fields of one message body in order; any read past the end or unterminated string is a Breach.
-export class Fields {
-  readonly #body: Buffer;
-  #offset = 0;
+// Does:  Holds the read position in one message body; the read functions below advance it or raise a Breach.
+export interface Fields {
+  readonly body: Buffer;
+  offset: number;
+}
 
-  constructor(body: Buffer) {
-    this.#body = body;
+export function fieldsOf(body: Buffer): Fields {
+  return { body, offset: 0 };
+}
+
+function need(fields: Fields, length: number): void {
+  if (length < 0 || fields.offset + length > fields.body.length) {
+    throw new Breach();
   }
+}
 
-  get remaining(): number {
-    return this.#body.length - this.#offset;
+export function readByte(fields: Fields): number {
+  need(fields, 1);
+  const value = fields.body.readUInt8(fields.offset);
+  fields.offset += 1;
+  return value;
+}
+
+export function readInt16(fields: Fields): number {
+  need(fields, 2);
+  const value = fields.body.readInt16BE(fields.offset);
+  fields.offset += 2;
+  return value;
+}
+
+export function readUint16(fields: Fields): number {
+  need(fields, 2);
+  const value = fields.body.readUInt16BE(fields.offset);
+  fields.offset += 2;
+  return value;
+}
+
+export function readInt32(fields: Fields): number {
+  need(fields, 4);
+  const value = fields.body.readInt32BE(fields.offset);
+  fields.offset += 4;
+  return value;
+}
+
+export function readBytes(fields: Fields, length: number): Buffer {
+  need(fields, length);
+  const value = fields.body.subarray(fields.offset, fields.offset + length);
+  fields.offset += length;
+  return value;
+}
+
+export function readRest(fields: Fields): Buffer {
+  return readBytes(fields, fields.body.length - fields.offset);
+}
+
+// Does:  Reads one NUL-terminated UTF-8 string; a missing terminator or invalid UTF-8 is a Breach.
+export function readString(fields: Fields): string {
+  const end = fields.body.indexOf(0, fields.offset);
+  if (end === -1) {
+    throw new Breach();
   }
+  const value = decodeText(fields.body.subarray(fields.offset, end));
+  fields.offset = end + 1;
+  return value;
+}
 
-  byte(): number {
-    this.#need(1);
-    const value = this.#body.readUInt8(this.#offset);
-    this.#offset += 1;
-    return value;
-  }
-
-  int16(): number {
-    this.#need(2);
-    const value = this.#body.readInt16BE(this.#offset);
-    this.#offset += 2;
-    return value;
-  }
-
-  uint16(): number {
-    this.#need(2);
-    const value = this.#body.readUInt16BE(this.#offset);
-    this.#offset += 2;
-    return value;
-  }
-
-  int32(): number {
-    this.#need(4);
-    const value = this.#body.readInt32BE(this.#offset);
-    this.#offset += 4;
-    return value;
-  }
-
-  bytes(length: number): Buffer {
-    this.#need(length);
-    const value = this.#body.subarray(this.#offset, this.#offset + length);
-    this.#offset += length;
-    return value;
-  }
-
-  rest(): Buffer {
-    return this.bytes(this.remaining);
-  }
-
-  string(): string {
-    const end = this.#body.indexOf(0, this.#offset);
-    if (end === -1) {
-      throw new Breach();
-    }
-    const value = decodeText(this.#body.subarray(this.#offset, end));
-    this.#offset = end + 1;
-    return value;
-  }
-
-  done(): void {
-    if (this.remaining !== 0) {
-      throw new Breach();
-    }
-  }
-
-  #need(length: number): void {
-    if (length < 0 || this.#offset + length > this.#body.length) {
-      throw new Breach();
-    }
+export function readDone(fields: Fields): void {
+  if (fields.offset !== fields.body.length) {
+    throw new Breach();
   }
 }
 
 // Does:  Reads a DataRow's fields, each null or its bytes, after checking the count and every field length.
 // Holds: The count equals the RowDescription's, every length is -1 or fits the message, and nothing is left over.
 export function dataRowFields(body: Buffer, columns: number): (Buffer | null)[] {
-  const fields = new Fields(body);
-  if (fields.uint16() !== columns) {
+  const fields = fieldsOf(body);
+  if (readUint16(fields) !== columns) {
     throw new Breach();
   }
   const values: (Buffer | null)[] = [];
   for (let index = 0; index < columns; index += 1) {
-    const length = fields.int32();
+    const length = readInt32(fields);
     if (length < -1) {
       throw new Breach();
     }
-    values.push(length === -1 ? null : fields.bytes(length));
+    values.push(length === -1 ? null : readBytes(fields, length));
   }
-  fields.done();
+  readDone(fields);
   return values;
 }
 
 // Does:  Reads an ErrorResponse or NoticeResponse body into its fields by their one-byte codes.
 export function errorFields(body: Buffer): ReadonlyMap<string, string> {
-  const fields = new Fields(body);
+  const fields = fieldsOf(body);
   const found = new Map<string, string>();
-  for (let code = fields.byte(); code !== 0; code = fields.byte()) {
-    found.set(String.fromCharCode(code), fields.string());
+  for (let code = readByte(fields); code !== 0; code = readByte(fields)) {
+    found.set(String.fromCharCode(code), readString(fields));
   }
-  fields.done();
+  readDone(fields);
   return found;
 }

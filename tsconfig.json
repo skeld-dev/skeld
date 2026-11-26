@@ -20,6 +20,9 @@
       "path": "./examples/auth"
     },
     {
+      "path": "./examples/data"
+    },
+    {
       "path": "./examples/hello"
     },
     {

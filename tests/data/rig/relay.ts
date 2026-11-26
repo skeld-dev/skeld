@@ -20,6 +20,8 @@ export interface RelayConnection {
   backendKeyBytes: number[];
   cancelKeyBytes: number[];
   messageTypes: string[];
+  frontendTypes: string[];
+  alpn: string | false | null;
   error: string | null;
 }
 
@@ -228,9 +230,15 @@ export async function startRelay(mode: RelayMode): Promise<Relay> {
 
   const wire = (client: Socket, server: Socket, entry: RelayConnection): void => {
     const framer = new Framer();
+    const frontFramer = new Framer();
     forward(client, server, entry, (chunk) => {
       if (marked) {
         entry.toServer += chunk.length;
+      }
+      if (mode !== 'observe') {
+        for (const front of frontFramer.push(chunk)) {
+          entry.frontendTypes.push(String.fromCharCode(front[0] ?? 0));
+        }
       }
       return chunk;
     });
@@ -299,6 +307,7 @@ export async function startRelay(mode: RelayMode): Promise<Relay> {
     });
     adopt(secure, entry);
     await once(secure, 'secure');
+    entry.alpn = secure.alpnProtocol;
 
     const head = await readExactly(secure, 4);
     const length = head.readUInt32BE(0);
@@ -329,6 +338,8 @@ export async function startRelay(mode: RelayMode): Promise<Relay> {
       backendKeyBytes: [],
       cancelKeyBytes: [],
       messageTypes: [],
+      frontendTypes: [],
+      alpn: null,
       error: null,
     };
     connections.push(entry);

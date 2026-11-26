@@ -43,6 +43,8 @@ const auth: readonly Job[] = [
   'docs',
   'examples',
 ];
+// Why: Only examples/data and tests/data import @skeld/data, so beyond its own scripts it needs no auth or site job.
+const data: readonly Job[] = ['static', 'codeql', 'quick', 'database', 'tooling', 'docs', 'examples'];
 // Why: tests/support/support-log.ts and tests/logging/log-destination.ts run scripts from benchmarks/logging.
 const benchmarks: readonly Job[] = ['static', 'quick', 'extended'];
 // Why: The site build resolves links to these files (website/src/build/docs-links.ts) and reads LICENSE.
@@ -106,12 +108,17 @@ function pathJobs(path: string, scripts: ReadonlyMap<string, TestJob>): readonly
     case 'website':
       return ['static', 'website'];
     case 'examples':
-      return ['static', 'codeql', 'docs', 'examples', 'website'];
+      return next === 'data' ? [...data, 'website'] : ['static', 'codeql', 'docs', 'examples', 'website'];
     case 'benchmarks':
       return benchmarks;
     case 'tests':
-      return testJobs(path.slice('tests/'.length), scripts);
+      return next === 'data'
+        ? [...new Set([...data, ...testJobs(path.slice('tests/'.length), scripts)])]
+        : testJobs(path.slice('tests/'.length), scripts);
     case 'packages':
+      if (next === 'data') {
+        return [...new Set([...data, ...testJobs('data/', scripts)])];
+      }
       return next === 'core' || next === 'auth' ? auth : everything;
     case '.semgrep':
       return ['static', 'codeql'];

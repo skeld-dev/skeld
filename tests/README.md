@@ -16,6 +16,7 @@ repeated runs and machine-speed timing windows do not belong here.
 | `schema/`    | Validation and serialization agreement; shared schema corpora live beside these checks         |
 | `logging/`   | Redaction, injection, correlation, suppression, sinks and log shutdown                         |
 | `auth/`      | Gate, sessions, grants, credentials, JWT/OIDC, stores, races, bounds and package contents      |
+| `data/`      | Query values and types, limits, sign-in, pool, cancel, transactions and hostile servers        |
 | `support/`   | Shared compiler, wire, child-process and reporting helpers; no standalone tests                |
 
 File a test under the behavior it protects. A CSRF attack belongs in `browser/`; a secret leaking through a
@@ -30,7 +31,8 @@ From the repository root, after `pnpm install`:
 
 ```sh
 pnpm test quick                # routine checks; SQLite only, no PostgreSQL or browser
-pnpm test database             # store integrations on both adapters; requires SKELD_TEST_PG_URL
+pnpm test database             # store and data integrations on both adapters; requires SKELD_TEST_PG_URL and the PostgreSQL 19 pair
+pnpm test data                 # the nine data scripts; requires SKELD_TEST_PG19_URL and SKELD_TEST_PG19_CA
 pnpm test protocol             # JWT/OIDC/TLS, including Chromium; SQLite only
 pnpm test extended             # real deadlines, fault injection, failing log destinations; SQLite only
 pnpm test tooling              # package artifacts
@@ -54,15 +56,19 @@ Quick mode runs the two generated-schema checks with `--schemas 200`. Full and t
 keep 4,000 generated schemas. These selections do not change product configuration or shorten product deadlines.
 
 `database`, `auth` and `full` require `SKELD_TEST_PG_URL`, a PostgreSQL 19 connection string for a role allowed
-to create disposable databases. Missing configuration fails before any scripts start. Full runs store-dependent
-integrations on both adapters; protocol and callback behavior runs on SQLite once.
+to create disposable databases. `database`, `data` and `full` also require `SKELD_TEST_PG19_URL` and
+`SKELD_TEST_PG19_CA`: the superuser's URL of the TLS proof server and the path of its authority certificate, written
+by `node tests/data/rig/start-postgres.ts <env-file>`. Missing configuration fails before any scripts start and names
+the variable. Full runs store-dependent integrations on both adapters; protocol and callback behavior runs on SQLite once.
+The data scripts of the runtime group (`hostile-server.ts`, `query-values.ts`, `query-types.ts`, `sensitivity.ts`,
+`limit.ts`) need no server and run in `quick`; the four of the database group need the PostgreSQL 19 pair.
 
 For individual auth scripts, `SKELD_TEST_STORES=sqlite|postgres|both` selects adapters explicitly; the default is
 `both`. The runner sets it according to its selected mode, so an inherited environment cannot silently downgrade
 a full run.
 
 Categories are topic selections, not cost groups: `pnpm test security`, `browser`, `lifecycle`, `contracts`,
-`schema`, `logging` or `auth`. The no-codegen check gets its required Node flag. Diagnostic mode gives each
+`schema`, `logging`, `auth`, `openapi` or `data`. The no-codegen check gets its required Node flag. Diagnostic mode gives each
 script a fresh directory and removes it afterward.
 
 For a single script, build first, then run it directly:

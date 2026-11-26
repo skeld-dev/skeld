@@ -32,6 +32,7 @@ Read these in order, or jump to the task you are working on:
 | [Add authentication](guides/auth.md)                             | Declare route access, decide it with policies, and sign people in with sessions, API keys, JWTs or OpenID Connect |
 | [Meet the application's obligations](guides/auth-obligations.md) | Sign people in, change credentials and keep grants in the order auth relies on                                    |
 | [Publish an OpenAPI document](guides/openapi.md)                 | Generate OpenAPI 3.1.2 from a contract, describe its security and read what it cannot say                         |
+| [Store data in PostgreSQL or SQLite](guides/data.md)             | Query a database through tagged SQL, run transactions and migrations, and limit requests per client address       |
 
 These explanations connect the guides: [the request lifecycle](concepts/request-lifecycle.md) shows when each stage runs; [security boundaries](concepts/security-boundaries.md) names what skeld enforces and what the application must supply. The [core threat model](concepts/threat-model.md) maps actors, data flows and trust boundaries to STRIDE threats, controls and residual responsibilities.
 
@@ -43,5 +44,6 @@ These explanations connect the guides: [the request lifecycle](concepts/request-
 - [Core behavior reference](reference/core.md): runtime requirements for each entry point and a compact feature reference.
 - [Auth behavior reference](reference/auth.md): `@skeld/auth` options, routes, refusals, events, store outcomes, and what is not included.
 - [OpenAPI behavior reference](reference/openapi.md): `@skeld/openapi` options, mappings, limits and refusals.
+- [Data behavior reference](reference/data.md): `@skeld/data` options, the connection URL, error codes, value tables and the limiter.
 
 To improve skeld or its documentation, see the repository's [contribution guide](../CONTRIBUTING.md).

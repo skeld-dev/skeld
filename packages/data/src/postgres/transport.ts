@@ -1,5 +1,5 @@
 // Does:  Opens the byte stream to a PostgreSQL server: the socket, the TLS request and the verified TLS handshake.
-// Holds: Under verification every handshake rejects an unverified chain and checks the URL's host on every call.
+// Holds: Every handshake rejects an unverified chain and checks the URL's host; no setting turns either off.
 
 import { connect as connectTcp, type Socket } from 'node:net';
 import { checkServerIdentity, connect as connectTls, type TLSSocket } from 'node:tls';
@@ -30,8 +30,8 @@ export class TransportFailure extends Error {
   readonly stage: ConnectStage;
   readonly reason: Reason;
 
-  constructor(stage: ConnectStage, reason: Reason, cause?: unknown) {
-    super('transport failed', cause === undefined ? undefined : { cause });
+  constructor(stage: ConnectStage, reason: Reason) {
+    super('transport failed');
     this.stage = stage;
     this.reason = reason;
   }
@@ -53,7 +53,7 @@ function openSocket(host: string, port: number, signal: AbortSignal): Promise<So
       reject(failure);
     };
     const abort = (): void => fail(new TransportFailure('socket', 'timeout'));
-    const error = (cause: unknown): void => fail(new TransportFailure('socket', socketReason(cause), cause));
+    const error = (cause: unknown): void => fail(new TransportFailure('socket', socketReason(cause)));
     socket.once('error', error);
     socket.once('connect', () => {
       signal.removeEventListener('abort', abort);
@@ -81,7 +81,7 @@ function requestTls(socket: Socket, signal: AbortSignal): Promise<void> {
       }
     };
     const abort = (): void => settle(new TransportFailure('tls', 'timeout'));
-    const error = (cause: unknown): void => settle(new TransportFailure('tls', 'closed', cause));
+    const error = (): void => settle(new TransportFailure('tls', 'closed'));
     const ended = (): void => settle(new TransportFailure('tls', 'closed'));
     const readable = (): void => {
       const answer: Buffer | null = socket.read(1);
@@ -148,13 +148,13 @@ function tlsReason(cause: unknown): Reason {
 
 function handshake(socket: Socket, target: PostgresTarget, signal: AbortSignal): Promise<TLSSocket> {
   return new Promise((resolve, reject) => {
-    const verified = target.transport === 'verified';
     // Why: With neither servername nor host Node checks the name localhost, so the URL's host is always named.
     const identity = target.address ? { host: target.host } : { servername: target.host };
     const secure = connectTls({
       socket,
       ...identity,
-      ...(verified ? { rejectUnauthorized: true, checkServerIdentity: verifyHost } : { rejectUnauthorized: false }),
+      rejectUnauthorized: true,
+      checkServerIdentity: verifyHost,
       ...(target.ca === null ? {} : { ca: [...target.ca] }),
       ALPNProtocols: ['postgresql'],
     });
@@ -168,7 +168,7 @@ function handshake(socket: Socket, target: PostgresTarget, signal: AbortSignal):
       reject(failure);
     };
     const abort = (): void => fail(new TransportFailure('tls', 'timeout'));
-    const error = (cause: unknown): void => fail(new TransportFailure('tls', tlsReason(cause), cause));
+    const error = (cause: unknown): void => fail(new TransportFailure('tls', tlsReason(cause)));
     const closed = (): void => fail(new TransportFailure('tls', 'handshake'));
     secure.once('error', error);
     secure.once('close', closed);

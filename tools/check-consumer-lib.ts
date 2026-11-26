@@ -36,12 +36,14 @@ const packages = [
   { name: '@skeld/core', folder: 'core', built: join(root, 'packages/core/dist/log/log.d.ts') },
   { name: '@skeld/auth', folder: 'auth', built: join(root, 'packages/auth/dist/server/auth.d.ts') },
   { name: '@skeld/openapi', folder: 'openapi', built: join(root, 'packages/openapi/dist/openapi/openapi.d.ts') },
+  { name: '@skeld/data', folder: 'data', built: join(root, 'packages/data/dist/database/database.d.ts') },
 ] as const;
 const defaultPages = [
   'docs/logging/logging.md',
   'docs/guides/auth.md',
   'docs/guides/auth-obligations.md',
   'docs/guides/openapi.md',
+  'docs/guides/data.md',
 ];
 const usage = 'usage: node tools/check-consumer-lib.ts [--page <markdown file>] [--packed-dir <directory>] | --help\n';
 const diagnosticPattern = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;

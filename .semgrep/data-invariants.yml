@@ -1,0 +1,268 @@
+rules:
+  - id: data-sqlite-outside-adapter
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      node:sqlite is imported outside packages/data/src/sqlite/, the one module that may open a SQLite
+      database (ADR-107).
+    paths:
+      include:
+        - "/packages/data/src/"
+      exclude:
+        - "/packages/data/src/sqlite/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?sqlite$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/107-build-skeld-data-as-one-workspace-with-its-own-diag-map-and-semgrep-rules.md"
+  - id: data-socket-modules-outside-postgres
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      node:net or node:tls is imported outside packages/data/src/postgres/, the one module that may open
+      or hold a socket; src/limit/ is judged by data-limit-net-beyond-address-tests (ADR-107, ADR-112).
+    paths:
+      include:
+        - "/packages/data/src/"
+      exclude:
+        - "/packages/data/src/postgres/"
+        - "/packages/data/src/limit/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?(net|tls)$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/107-build-skeld-data-as-one-workspace-with-its-own-diag-map-and-semgrep-rules.md"
+        - ".project/adr/112-let-the-limiter-import-isipv4-and-isipv6-from-node-net.md"
+  - id: data-fs-outside-file-and-recorder
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      node:fs is imported outside packages/data/src/sqlite/file.ts and packages/data/src/diag/recorder/,
+      the only data modules that touch the file system (ADR-107).
+    paths:
+      include:
+        - "/packages/data/src/"
+      exclude:
+        - "/packages/data/src/sqlite/file.ts"
+        - "/packages/data/src/diag/recorder/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?(fs|fs/promises)$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/107-build-skeld-data-as-one-workspace-with-its-own-diag-map-and-semgrep-rules.md"
+  - id: data-imports-beyond-allowed
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      packages/data/src imports something other than a @skeld/core subpath, #diag, a relative file or one
+      of node:net, node:tls, node:crypto, node:sqlite, node:fs and node:util (the recorder's alone, held by
+      data-process-io-outside-recorder); data has @skeld/core as its only dependency (ADR-107).
+    paths:
+      include:
+        - "/packages/data/src/"
+      exclude:
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(?!\.{1,2}/|#diag$|@skeld/core/|node:(net|tls|crypto|sqlite|fs|util)$)
+    metadata:
+      category: security
+      references:
+        - ".project/adr/107-build-skeld-data-as-one-workspace-with-its-own-diag-map-and-semgrep-rules.md"
+  - id: data-process-io-outside-recorder
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      process.env, process.stdout, process.stderr, console or node:util is used in packages/data/src
+      outside the diagnostic recorder; data takes its configuration from its options and writes records
+      only through core's log (ADR-107).
+    paths:
+      include:
+        - "/packages/data/src/"
+      exclude:
+        - "/packages/data/src/diag/recorder/"
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern-either:
+      - pattern: process.env
+      - pattern: process['env']
+      - pattern: process.stdout
+      - pattern: process['stdout']
+      - pattern: process.stderr
+      - pattern: process['stderr']
+      - pattern: "{ ..., env, ... } = process"
+      - pattern: "{ ..., stdout, ... } = process"
+      - pattern: "{ ..., stderr, ... } = process"
+      - pattern: "{ ..., env: $V, ... } = process"
+      - pattern: "{ ..., stdout: $V, ... } = process"
+      - pattern: "{ ..., stderr: $V, ... } = process"
+      - pattern: console.$M(...)
+      - patterns:
+          - pattern-either:
+              - pattern: import '$MOD';
+              - pattern: import $X from '$MOD';
+              - pattern: import * as $X from '$MOD';
+              - pattern: import { ... } from '$MOD';
+              - pattern: import $X, { ... } from '$MOD';
+              - pattern: import $X = require('$MOD');
+              - pattern: import('$MOD')
+              - pattern: require('$MOD')
+              - pattern: export * from '$MOD';
+              - pattern: export * as $X from '$MOD';
+              - pattern: export { ... } from '$MOD';
+              - pattern: $P.getBuiltinModule('$MOD')
+          - metavariable-regex:
+              metavariable: $MOD
+              regex: ^(node:)?util$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/107-build-skeld-data-as-one-workspace-with-its-own-diag-map-and-semgrep-rules.md"
+  - id: data-expanded-sql-read
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      expandedSQL is read in packages/data/src; it holds the statement with its bound values written in,
+      which must never reach a record or an error (ADR-107).
+    paths:
+      include:
+        - "/packages/data/src/"
+      exclude:
+        - "**/dist/**"
+        - "**/.tsout/**"
+    pattern-either:
+      - pattern: $X.expandedSQL
+      - pattern: $X['expandedSQL']
+      - pattern: "{ ..., expandedSQL, ... } = $X"
+      - pattern: "{ ..., expandedSQL: $V, ... } = $X"
+    metadata:
+      category: security
+      references:
+        - ".project/adr/107-build-skeld-data-as-one-workspace-with-its-own-diag-map-and-semgrep-rules.md"
+  - id: data-statement-text-built-from-values
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      A template literal with a substitution or a + concatenation is passed as the text of run, script,
+      simple, prepare or exec; statement text comes from sql`...` and values travel as parameters (ADR-107).
+    paths:
+      include:
+        - "/packages/data/src/"
+      exclude:
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: $S.$M(`...${$E}...`, ...)
+          - pattern: $S.$M($A + $B, ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(run|script|simple|prepare|exec)$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/107-build-skeld-data-as-one-workspace-with-its-own-diag-map-and-semgrep-rules.md"
+  - id: data-limit-net-beyond-address-tests
+    languages: [ typescript ]
+    severity: ERROR
+    message: >-
+      Under packages/data/src/limit/, node:tls is imported, or node:net is imported other than as the named
+      import of isIPv4, isIPv6 or both, the two functions that open no socket (ADR-107, ADR-112).
+    paths:
+      include:
+        - "/packages/data/src/limit/"
+      exclude:
+        - "**/dist/**"
+        - "**/.tsout/**"
+    patterns:
+      - pattern-either:
+          - pattern: import '$MOD';
+          - pattern: import $X from '$MOD';
+          - pattern: import * as $X from '$MOD';
+          - pattern: import { ... } from '$MOD';
+          - pattern: import $X, { ... } from '$MOD';
+          - pattern: import $X = require('$MOD');
+          - pattern: import('$MOD')
+          - pattern: require('$MOD')
+          - pattern: export * from '$MOD';
+          - pattern: export * as $X from '$MOD';
+          - pattern: export { ... } from '$MOD';
+          - pattern: $P.getBuiltinModule('$MOD')
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?(net|tls)$
+      - pattern-not-regex: (?m)^import \{ (isIPv4|isIPv6|isIPv4, isIPv6|isIPv6, isIPv4) \} from 'node:net';$
+    metadata:
+      category: security
+      references:
+        - ".project/adr/107-build-skeld-data-as-one-workspace-with-its-own-diag-map-and-semgrep-rules.md"
+        - ".project/adr/112-let-the-limiter-import-isipv4-and-isipv6-from-node-net.md"

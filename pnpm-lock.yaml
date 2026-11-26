@@ -223,6 +223,18 @@ importers:
         specifier: 8.23.1
         version: 8.23.1
 
+  examples/data:
+    dependencies:
+      '@skeld/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@skeld/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@skeld/data':
+        specifier: workspace:*
+        version: link:../../packages/data
+
   examples/hello:
     dependencies:
       '@skeld/core':

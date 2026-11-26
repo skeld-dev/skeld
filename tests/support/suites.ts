@@ -50,6 +50,11 @@ export const suites = {
     'auth/session-csrf.ts',
     'auth/store-heap.ts',
     'openapi/no-private-text.ts',
+    'data/hostile-server.ts',
+    'data/query-values.ts',
+    'data/query-types.ts',
+    'data/sensitivity.ts',
+    'data/limit.ts',
   ],
   database: [
     'auth/credential-change.ts',
@@ -58,6 +63,10 @@ export const suites = {
     'auth/store-install.ts',
     'auth/store-outage.ts',
     'auth/store-unknown-outcome.ts',
+    'data/tls-and-sign-in.ts',
+    'data/pool-cancel-shutdown.ts',
+    'data/transactions.ts',
+    'data/auth-store.ts',
   ],
   protocol: [
     'auth/jwt.ts',
@@ -90,7 +99,17 @@ export const suites = {
 } as const;
 
 export const allScripts: readonly string[] = Object.values(suites).flat();
-export const categories = ['security', 'browser', 'lifecycle', 'contracts', 'schema', 'logging', 'auth', 'openapi'];
+export const categories = [
+  'security',
+  'browser',
+  'lifecycle',
+  'contracts',
+  'schema',
+  'logging',
+  'auth',
+  'openapi',
+  'data',
+];
 
 export function selectScripts(mode: string): readonly string[] {
   if (mode === 'all' || mode === 'full') {

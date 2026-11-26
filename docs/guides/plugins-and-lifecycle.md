@@ -43,11 +43,19 @@ Hooks can terminate a request early through their supported APIs. An early raw r
 
 Register `scope.onClose(() => resource.close())` immediately after acquisition, before another `await`. This gives failed startup a way to release resources already acquired, as well as giving normal shutdown a cleanup path.
 
-In [tasks.ts](../../examples/service/tasks.ts), the resource is a small `Map`. Its cleanup is registered next to its creation and clears it at shutdown. A database plugin would register the actual connection pool's disposer in the same place.
+In [tasks.ts](../../examples/service/tasks.ts), the resource is a small `Map`. Its cleanup is registered next to its creation and clears it at shutdown. The database plugin of [`@skeld/data`](data.md) does the same with its connection pool: it opens the pool, then registers the pool's close.
 
 `scope.signal` aborts when close or failed-startup rollback begins. HTTP work drains before disposers run. Disposers run once in reverse registration order, each with its own `pluginCloseTimeoutMs` deadline, 10 seconds by default. Every registered disposer is attempted; cleanup failures or timeouts cause `close()` to reject with an `AggregateError`. Repeated calls share completion.
 
+A cleanup that works in steps can read `scope.closeTimeoutMs`, the time it has (the server's `pluginCloseTimeoutMs`), and split it: the database plugin waits 0.4 of it for connections in use and cancels their statements for 0.1 more before closing every connection.
+
 Cancellation is cooperative. A deadline cannot interrupt a synchronous loop or reclaim a resource acquired after a timed-out plugin continues running. Check cancellation around long initialization work and use cancellation support provided by the resource API.
+
+## Check the final routes and write security events
+
+A plugin that acts on other plugins' routes, such as a rate limiter, can check them before the server starts. `scope.onRoutes(callback)` is called once at `listen`, after every plugin has run and before any route is bound, with the routes the scope's hooks reach. A throw stops the boot with `PLUGIN_FAILED`. `limitRoutes` from `@skeld/data/limit` uses it to refuse a rule that names a route the server does not serve.
+
+`scope.event(name, severity)` registers a security event, such as `data.limit.refused` at `warn`, and returns a writer that records it on the logger you pass, so a request's record carries its id. Register events while the plugin runs; a server's scopes share 64 names. The [core reference](../reference/core.md#plugin-resource-ownership) has the rules for both.
 
 ## Bound shared state as well as requests
 

@@ -102,7 +102,7 @@ if (ready.includes(false)) {
   process.exit(1);
 }
 
-process.stdout.write('Semgrep: project rules on core, auth and openapi sources\n');
+process.stdout.write('Semgrep: project rules on core, auth, openapi and data sources\n');
 const semgrep = run('semgrep', [
   'scan',
   '--metrics=off',
@@ -114,6 +114,7 @@ const semgrep = run('semgrep', [
   'packages/core/src',
   'packages/auth/src',
   'packages/openapi/src',
+  'packages/data/src',
 ]);
 
 process.stdout.write('CodeQL: building databases\n');

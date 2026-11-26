@@ -44,7 +44,12 @@ function parseArgs(args: readonly string[]): Options | 'help' | undefined {
         ? [resolve(named)]
         : entry !== undefined
           ? [packageFolder('@skeld/core')]
-          : [packageFolder('@skeld/core'), join(root, 'packages/auth'), join(root, 'packages/openapi')],
+          : [
+              packageFolder('@skeld/core'),
+              join(root, 'packages/auth'),
+              join(root, 'packages/openapi'),
+              join(root, 'packages/data'),
+            ],
     entry: entry === undefined ? undefined : resolve(entry),
   };
 }

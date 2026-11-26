@@ -4,17 +4,18 @@ Start with hello, then follow one request through the logging example. The servi
 
 For a guided walkthrough and the reasoning behind the APIs, use the [documentation](../docs/README.md). These folders contain the complete programs those guides refer to.
 
-| Example                      | Learn                                                                                  | Default port |
-| ---------------------------- | -------------------------------------------------------------------------------------- | ------------ |
-| [hello](hello/README.md)     | Declare routes once; implement a server and call it with a typed client                | 3000         |
-| [logging](logging/README.md) | Follow request IDs, classify log fields, and log a caught error without its message    | 3001         |
-| [service](service/README.md) | Compose a plugin with scoped hooks, bounded state, declared errors and cleanup         | 3002         |
-| [auth](auth/README.md)       | Sign in with sessions, policies, API keys, JWT and OIDC; see what the application owns | a free one   |
-| [openapi](openapi/README.md) | Generate an OpenAPI document whose security names come from the auth configuration     | none         |
+| Example                      | Learn                                                                                   | Default port |
+| ---------------------------- | --------------------------------------------------------------------------------------- | ------------ |
+| [hello](hello/README.md)     | Declare routes once; implement a server and call it with a typed client                 | 3000         |
+| [logging](logging/README.md) | Follow request IDs, classify log fields, and log a caught error without its message     | 3001         |
+| [service](service/README.md) | Compose a plugin with scoped hooks, bounded state, declared errors and cleanup          | 3002         |
+| [auth](auth/README.md)       | Sign in with sessions, policies, API keys, JWT and OIDC; see what the application owns  | a free one   |
+| [openapi](openapi/README.md) | Generate an OpenAPI document whose security names come from the auth configuration      | none         |
+| [data](data/README.md)       | Query with a row schema, transfer in a transaction, limit a route; SQLite or PostgreSQL | 3004         |
 
 ## Run from this repository
 
-Use the Node version in [`.nvmrc`](../.nvmrc), then run `pnpm install` from the repository root. Each example has two commands: `start` in one terminal and `call` in another. The individual READMEs give the exact commands and expected results. The auth example differs: `pnpm --filter @skeld/example-auth run walkthrough` drives the service through every check and exits, `run start` starts the server alone, and it needs `openssl` on the `PATH`; see its [README](auth/README.md). The openapi example starts no server: `pnpm --filter @skeld/example-openapi run generate` prints a document and exits. Stop a server with Ctrl-C; it closes through skeld and flushes its logger.
+Use the Node version in [`.nvmrc`](../.nvmrc), then run `pnpm install` from the repository root. Each example has two commands: `start` in one terminal and `call` in another. The individual READMEs give the exact commands and expected results. The auth example differs: `pnpm --filter @skeld/example-auth run walkthrough` drives the service through every check and exits, `run start` starts the server alone, and it needs `openssl` on the `PATH`; see its [README](auth/README.md). The openapi example starts no server: `pnpm --filter @skeld/example-openapi run generate` prints a document and exits. The data example has a `walkthrough` that runs the service on a temporary SQLite file and exits, and `run start` for the server alone; see its [README](data/README.md). Stop a server with Ctrl-C; it closes through skeld and flushes its logger.
 
 All servers bind to `127.0.0.1`. To choose another port, set `PORT` for the server and the matching `BASE_URL` for the client:
 
@@ -37,7 +38,7 @@ The servers write JSON log lines; clients print human-readable results in their 
 3. Try the invalid requests in each guide. Check the status and whether the handler's record appears.
 4. Change a response body or a client call to disagree with the contract, then run `pnpm run check` to see the type error. Restore the change afterward.
 
-Hello, logging and service use only Node and public `@skeld/core` imports; auth adds `@skeld/auth`, and `pg` in its PostgreSQL store file; openapi adds `@skeld/openapi` and `@skeld/auth`. None requires a database, account, credential or external service. The task store is bounded and temporary; the logging example previews JSON syntax and does not authenticate its demonstration key. Neither is a deployed application with identity or durable storage.
+Hello, logging and service use only Node and public `@skeld/core` imports; auth adds `@skeld/auth`, and `pg` in its PostgreSQL store file; openapi adds `@skeld/openapi` and `@skeld/auth`; data adds `@skeld/data`, and `@skeld/auth` for its PostgreSQL store. None requires an account, credential or external service. Data keeps its records in a SQLite file of its own; PostgreSQL is optional and used only when `DATABASE_URL` is set. The task store is bounded and temporary; the logging example previews JSON syntax and does not authenticate its demonstration key. Neither is a deployed application with identity or durable storage.
 
 ## Copy into your project
 

@@ -88,9 +88,9 @@ jobs:
         run: |
           PIPX_HOME="$HOME/.local/share/pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install semgrep==1.182.1
           "$HOME/.local/bin/semgrep" --version
-      - name: Semgrep rules on core, auth and openapi sources
+      - name: Semgrep rules on core, auth, openapi and data sources
         run: |
-          "$HOME/.local/bin/semgrep" scan --metrics=off --project-root . --config .semgrep --error packages/core/src packages/auth/src packages/openapi/src
+          "$HOME/.local/bin/semgrep" scan --metrics=off --project-root . --config .semgrep --error packages/core/src packages/auth/src packages/openapi/src packages/data/src
 
   codeql:
     name: CodeQL
@@ -169,18 +169,31 @@ jobs:
           run_install: false
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Start PostgreSQL 18
+      - name: Start PostgreSQL 19
         run: |
           password="$(openssl rand -hex 24)"
           echo "::add-mask::$password"
           POSTGRES_PASSWORD="$password" docker run -d --name skeld-pg -e POSTGRES_PASSWORD \
-            -p 127.0.0.1:54329:5432 --tmpfs /var/lib/postgresql postgres:18-alpine > /dev/null
+            -p 127.0.0.1:54329:5432 --tmpfs /var/lib/postgresql postgres:19-alpine > /dev/null
           for _ in $(seq 60); do
             docker exec skeld-pg pg_isready -q -h 127.0.0.1 -U postgres && break
             sleep 1
           done
           docker exec skeld-pg pg_isready -h 127.0.0.1 -U postgres
           echo "SKELD_TEST_PG_URL=postgres://postgres:$password@127.0.0.1:54329/postgres" >> "$GITHUB_ENV"
+      # Why: The script writes the URL only to a file outside the checkout, so the password is masked before its lines reach the environment.
+      - name: Start PostgreSQL 19 with TLS
+        run: |
+          env_file="$RUNNER_TEMP/skeld-data-pg.env"
+          node tests/data/rig/start-postgres.ts "$env_file"
+          url="$(grep '^SKELD_TEST_PG19_URL=postgres://postgres:' "$env_file" | cut -d= -f2-)"
+          password="${url#postgres://postgres:}"
+          password="${password%%@*}"
+          test -n "$password"
+          echo "::add-mask::$password"
+          grep -q '^SKELD_TEST_PG19_CA=/' "$env_file"
+          cat "$env_file" >> "$GITHUB_ENV"
+          rm "$env_file"
       - name: Database tests
         run: pnpm test database
 

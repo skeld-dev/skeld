@@ -12,10 +12,7 @@ export interface Database {
   readonly engine: 'postgres' | 'sqlite';
   /** Opens the pool at boot and closes it at shutdown; register it before any work that queries. */
   readonly plugin: (scope: Pick<Scope, 'signal' | 'log' | 'onClose' | 'closeTimeoutMs' | 'event'>) => Promise<void>;
-  /**
-   * Binds work to an owner, whose signal cancels it and whose logger takes its records.
-   * @example db.for(request).query(sql`select 1`)
-   */
+  /** Binds work to an owner, whose signal cancels it and whose logger takes its records. */
   for(owner: Owner): BoundDatabase;
   /** Counts the pool's connections and waiters now. */
   stats(): PoolStats;
@@ -31,44 +28,30 @@ export interface Owner {
 
 /** A handle that runs queries. */
 export interface Queryable {
-  /**
-   * Runs a query and returns its rows, each column typed `unknown`.
-   * @example await db.for(request).query(sql`select id from users`)
-   */
+  /** Runs a query and returns its rows, each column typed `unknown`. */
   query(query: Query): Promise<readonly Row[]>;
   /**
    * Runs a query and returns its rows checked against a row schema, with the schema's keys only.
    * Rejects with `DataError` `ROW_INVALID`, and no rows, when any row fails its schema.
-   * @example await db.for(request).query(sql`select id from users`, object({ id: integer() }))
    */
   query<S extends ObjectSchema>(query: Query, row: S): Promise<readonly Infer<S>[]>;
 }
 
 /** A database bound to an owner. */
 export interface BoundDatabase extends Queryable {
-  /**
-   * Runs a callback in a transaction, committed when it resolves and rolled back when it rejects.
-   * @example await db.for(request).transaction(async (tx) => tx.query(sql`select 1`))
-   */
+  /** Runs a callback in a transaction, committed when it resolves and rolled back when it rejects. */
   transaction<T>(run: (tx: Queryable) => Promise<T>, options?: TransactionOptions): Promise<T>;
-  /**
-   * Holds one connection for the callback's duration.
-   * @example await db.for(scope).reserve(async (connection) => connection.script('select 1'))
-   */
+  /** Holds one connection for the callback's duration. */
   reserve<T>(run: (connection: ReservedConnection) => Promise<T>): Promise<T>;
 }
 
 /** One connection held for a callback. */
 export interface ReservedConnection extends Queryable {
-  /**
-   * Runs a callback in a transaction on this connection.
-   * @example await connection.transaction(async (tx) => tx.query(sql`select 1`))
-   */
+  /** Runs a callback in a transaction on this connection. */
   transaction<T>(run: (tx: Queryable) => Promise<T>, options?: TransactionOptions): Promise<T>;
   /**
    * Runs text of several statements with no parameters; never pass it a request's value.
    * Text over `maxParameterBytes` is refused with `DataError` `PARAMETERS_TOO_LARGE`.
-   * @example await connection.script('create table t (id int8); create index on t (id)')
    */
   script(text: string): Promise<void>;
 }
@@ -92,6 +75,6 @@ export interface PoolStats {
   readonly open: number;
   /** Connections held by work. */
   readonly checkedOut: number;
-  /** Callers waiting for a connection. */
+  /** Callers waiting for a connection, those whose connection is still opening included. */
   readonly waiting: number;
 }

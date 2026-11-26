@@ -13,7 +13,7 @@ const CANCEL_REQUEST_CODE = 80_877_102;
 // Why: The type id of bytea; a Uint8Array parameter is declared so the server reads its binary form as bytea only.
 const BYTEA_OID = 17;
 
-export class NulInField extends Error {}
+class NulInField extends Error {}
 
 function cstring(text: string): Buffer {
   if (text.includes('\0')) {

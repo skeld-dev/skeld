@@ -5,10 +5,10 @@ import type { Secret } from '@skeld/core/secret';
 
 /**
  * The options of `createPostgresDatabase`; an unknown key is refused with BootError `INVALID_OPTION`.
- * Each bound is a positive integer, a timer at most 2,147,483,647.
+ * Each bound is a positive integer: a timer at most 2,147,483,647 ms, a byte bound at most 1 GiB.
  */
 export interface PostgresOptions {
-  /** `postgres://user[:password]@host[:port][/database][?name=value]`; TLS is verified unless `insecure` says otherwise. */
+  /** `postgres://user[:password]@host[:port][/database][?name=value]`; TLS is verified unless `insecure` is `'plaintext'`. */
   readonly url: Secret<string>;
   /** How TLS is verified and whether channel binding is required. */
   readonly tls?: {
@@ -17,11 +17,14 @@ export interface PostgresOptions {
     /** Whether channel binding is used when the server offers it or required (default `'when-offered'`). */
     readonly channelBinding?: 'when-offered' | 'required';
   };
-  /** Turns off TLS or its verification and writes `data.insecure` at boot; refused beside a URL `sslmode`. */
-  readonly insecure?: 'plaintext' | 'unverified-tls';
+  /** Connects without TLS and writes `data.insecure` at boot; a boot error beside a URL `sslmode`. */
+  readonly insecure?: 'plaintext';
   /** Connections open at most (default 10); callers wait beyond it. */
   readonly maxConnections?: number;
-  /** Callers waiting at most (default 50); one more is refused with `POOL_FULL`. */
+  /**
+   * Callers waiting beyond `maxConnections` at most (default 50); one more is refused with `POOL_FULL`.
+   * A caller for whom the pool can still open a connection waits for it and is not counted.
+   */
   readonly maxWaiters?: number;
   /** Time to wait for a connection, queueing and connecting, in milliseconds (default 5,000); then `POOL_TIMEOUT`. */
   readonly acquireTimeoutMs?: number;
@@ -29,8 +32,14 @@ export interface PostgresOptions {
   readonly connectTimeoutMs?: number;
   /** A connection's lifetime, in milliseconds, plus 0 to 20 % (default 1,800,000); it closes at its next return. */
   readonly maxLifetimeMs?: number;
-  /** Bytes of one result or inbound message at most (default 16 MiB); then `RESULT_TOO_LARGE`. */
+  /**
+   * Memory one result may hold, 288 bytes a row and 48 a value plus the values' own bytes (default 16 MiB, up to 1 GiB).
+   * Also the largest inbound message; over either, `RESULT_TOO_LARGE`.
+   */
   readonly maxResultBytes?: number;
-  /** Bytes of a statement's parameters or a script's text at most (default 4 MiB); then `PARAMETERS_TOO_LARGE`. */
+  /**
+   * UTF-8 bytes of a query's text plus its parameters, or of a script's text, at most (default 4 MiB, up to 1 GiB).
+   * Over it, `PARAMETERS_TOO_LARGE` is raised and nothing is sent.
+   */
   readonly maxParameterBytes?: number;
 }

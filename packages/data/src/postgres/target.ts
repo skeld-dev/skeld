@@ -1,5 +1,5 @@
 // Does:  Parses a PostgreSQL database's options into the frozen target its connections are opened from.
-// Holds: No refusal message holds any value from the URL, and nothing here reads the process environment.
+// Holds: No refusal holds text from the URL, naming a parameter by a fixed list or position; no PG variable is read.
 
 import { isIP } from 'node:net';
 import { BootError } from '@skeld/core/boot-error';
@@ -8,7 +8,7 @@ import { type ResolvedBounds, resolveBounds } from '../options/bounds.ts';
 import type { PostgresOptions } from './types.ts';
 import { PROTOCOL_3_2, startupMessage } from './wire.ts';
 
-export type TransportMode = 'verified' | 'unverified' | 'plaintext';
+export type TransportMode = 'verified' | 'plaintext';
 
 export interface PostgresTarget {
   readonly host: string;
@@ -73,6 +73,9 @@ const KNOWN_NAMES: ReadonlySet<string> = new Set([
   'target_session_attrs',
   'load_balance_hosts',
 ]);
+
+const UNSUPPORTED =
+  'is not supported: use only sslmode, channel_binding or application_name, and percent-encode special characters in the password';
 
 const DNS_NAME = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.?$/;
 const PORT = /^[0-9]{1,5}$/;
@@ -172,12 +175,17 @@ interface Parameters {
 
 function parseQuery(search: string): Parameters {
   const seen = new Map<string, string>();
-  for (const pair of search === '' ? [] : search.split('&')) {
+  const pairs = search === '' ? [] : search.split('&');
+  for (const [index, pair] of pairs.entries()) {
     const equals = pair.indexOf('=');
     const name = decode(equals === -1 ? pair : pair.slice(0, equals), 'a parameter name');
     const allowed = name === 'sslmode' || name === 'channel_binding' || name === 'application_name';
+    if (!allowed && KNOWN_NAMES.has(name)) {
+      throw refuseUrl(`parameter ${name}`, 'is not supported');
+    }
+    // Why: An unencoded @ then ? in a password puts its tail where a name is read, so only the position is shown.
     if (!allowed) {
-      throw refuseUrl(KNOWN_NAMES.has(name) ? `parameter ${name}` : 'a parameter', 'is not supported');
+      throw refuseUrl(`parameter ${index + 1} of the query`, UNSUPPORTED);
     }
     if (equals === -1) {
       throw refuseUrl(`parameter ${name}`, 'has no value');
@@ -240,10 +248,7 @@ function parseInsecure(insecure: unknown): TransportMode {
   if (insecure === 'plaintext') {
     return 'plaintext';
   }
-  if (insecure === 'unverified-tls') {
-    return 'unverified';
-  }
-  throw refuse('insecure', "must be 'plaintext' or 'unverified-tls'");
+  throw refuse('insecure', "must be 'plaintext'");
 }
 
 export function parsePostgresTarget(options: PostgresOptions): PostgresTarget {
