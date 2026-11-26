@@ -1,0 +1,78 @@
+{
+  "name": "@skeld/data",
+  "version": "0.4.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skeld-dev/skeld.git",
+    "directory": "packages/data"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=26.12.0"
+  },
+  "files": [
+    "dist",
+    "!dist/diag/recorder",
+    "!dist/**/*.d.ts.map",
+    "LICENSE",
+    "README.md"
+  ],
+  "imports": {
+    "#diag": {
+      "skeld-diag": {
+        "skeld-source": "./src/diag/recorder/recorder.ts",
+        "default": "./dist/diag/recorder/recorder.js"
+      },
+      "skeld-source": "./src/diag/empty.ts",
+      "default": "./dist/diag/empty.js"
+    }
+  },
+  "exports": {
+    "./sql": {
+      "skeld-source": "./src/sql/sql.ts",
+      "types": "./dist/sql/sql.d.ts",
+      "default": "./dist/sql/sql.js"
+    },
+    "./postgres": {
+      "skeld-source": "./src/postgres/postgres.ts",
+      "types": "./dist/postgres/postgres.d.ts",
+      "default": "./dist/postgres/postgres.js"
+    },
+    "./sqlite": {
+      "skeld-source": "./src/sqlite/sqlite.ts",
+      "types": "./dist/sqlite/sqlite.d.ts",
+      "default": "./dist/sqlite/sqlite.js"
+    },
+    "./database": {
+      "skeld-source": "./src/database/database.ts",
+      "types": "./dist/database/database.d.ts",
+      "default": "./dist/database/database.js"
+    },
+    "./data-error": {
+      "skeld-source": "./src/data-error/data-error.ts",
+      "types": "./dist/data-error/data-error.d.ts",
+      "default": "./dist/data-error/data-error.js"
+    },
+    "./pg-pool": {
+      "skeld-source": "./src/pg-pool/pg-pool.ts",
+      "types": "./dist/pg-pool/pg-pool.d.ts",
+      "default": "./dist/pg-pool/pg-pool.js"
+    },
+    "./limit": {
+      "skeld-source": "./src/limit/limit.ts",
+      "types": "./dist/limit/limit.d.ts",
+      "default": "./dist/limit/limit.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@skeld/core": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Database access for Skeld services: tagged SQL queries, PostgreSQL and SQLite connections, transactions and rate limits.",
+  "homepage": "https://skeld.dev"
+}

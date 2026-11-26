@@ -39,13 +39,15 @@
         "logging/*.ts",
         "schema/*.ts",
         "auth/*.ts",
-        "openapi/*.ts"
+        "openapi/*.ts",
+        "data/*.ts",
+        "data/rig/*.ts"
       ],
       "ignoreBinaries": ["prlimit"]
     },
     "tools": {
       "entry": ["*.ts"],
-      "ignoreDependencies": ["@skeld/auth", "@skeld/openapi"]
+      "ignoreDependencies": ["@skeld/auth", "@skeld/data", "@skeld/openapi"]
     }
   }
 }

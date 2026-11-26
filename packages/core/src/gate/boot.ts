@@ -15,7 +15,7 @@ import { GateFault } from './gate.ts';
 import type { Gate, GateBoot, GateRoute, NoAccess, SecurityEvent } from './types.ts';
 
 const FINDING_UNITS = 200;
-const MAX_EVENTS = 64;
+export const MAX_EVENTS = 64;
 const EVENT_UNITS = 64;
 const EVENT_NAME = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 const SEVERITIES: ReadonlySet<unknown> = new Set(['debug', 'info', 'warn', 'error', 'fatal'] satisfies Severity[]);
@@ -49,8 +49,15 @@ function bootFailed(cause: unknown): BootError {
   return new BootError('GATE_FAILED', `${GATE_FAILED}: ${component}: ${printable(finding)}`, null, null, { cause });
 }
 
-function isEventName(name: unknown): name is string {
-  return typeof name === 'string' && name.length <= EVENT_UNITS && !name.startsWith('skeld.') && EVENT_NAME.test(name);
+// Does:  Checks a security event's name grammar and severity, for the gate's registry and the scopes' alike.
+export function isEventRegistration(name: unknown, severity: unknown): name is string {
+  return (
+    typeof name === 'string' &&
+    name.length <= EVENT_UNITS &&
+    !name.startsWith('skeld.') &&
+    EVENT_NAME.test(name) &&
+    SEVERITIES.has(severity)
+  );
 }
 
 // Does:  Checks the gate option at creation: absent, or an object with boot and bind functions.
@@ -101,7 +108,7 @@ export async function bootGate(
       if (!booting) {
         throw new TypeError('GateBoot.event is callable only inside boot');
       }
-      if (!isEventName(name) || !SEVERITIES.has(severity) || names.has(name) || names.size >= MAX_EVENTS) {
+      if (!isEventRegistration(name, severity) || names.has(name) || names.size >= MAX_EVENTS) {
         refused = true;
         throw new TypeError('GateBoot.event refused the name or the severity');
       }

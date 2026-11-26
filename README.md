@@ -30,15 +30,16 @@ Requires Node.js 26.12 or later and an ES module project (`"type": "module"` in 
 
 ## Packages
 
-| Package          | Does                                                                        | Install                      |
-| ---------------- | --------------------------------------------------------------------------- | ---------------------------- |
-| `@skeld/core`    | Contracts, schemas, the server, the typed client and logging                | `npm install @skeld/core`    |
-| `@skeld/auth`    | Decides who may call each route: sessions, API keys, JWT and OpenID Connect | `npm install @skeld/auth`    |
-| `@skeld/openapi` | Writes an OpenAPI 3.1.2 document from a contract, with no server running    | `npm install @skeld/openapi` |
+| Package          | Does                                                                                | Install                      |
+| ---------------- | ----------------------------------------------------------------------------------- | ---------------------------- |
+| `@skeld/core`    | Contracts, schemas, the server, the typed client and logging                        | `npm install @skeld/core`    |
+| `@skeld/auth`    | Decides who may call each route: sessions, API keys, JWT and OpenID Connect         | `npm install @skeld/auth`    |
+| `@skeld/openapi` | Writes an OpenAPI 3.1.2 document from a contract, with no server running            | `npm install @skeld/openapi` |
+| `@skeld/data`    | Queries PostgreSQL and SQLite through tagged SQL, with transactions and rate limits | `npm install @skeld/data`    |
 
-The three packages share one version and are released together. `@skeld/core` has no runtime dependency; `@skeld/auth` and `@skeld/openapi` need only `@skeld/core`.
+The four packages share one version and are released together. `@skeld/core` has no runtime dependency; `@skeld/auth`, `@skeld/openapi` and `@skeld/data` need only `@skeld/core`.
 
-With `@skeld/auth`, every route must say who may call it, or the server refuses to start. The caller is identified before the request body is read. `@skeld/openapi` stops with an error that says where when it cannot describe something accurately. When the server enforces a rule that OpenAPI has no way to express, it tells you which one.
+With `@skeld/auth`, every route must say who may call it, or the server refuses to start. The caller is identified before the request body is read. `@skeld/openapi` stops with an error that says where when it cannot describe something accurately. When the server enforces a rule that OpenAPI has no way to express, it tells you which one. `@skeld/data` sends every value in a query as a parameter, never as query text, verifies the certificate and host name of every TLS connection to PostgreSQL, connects without TLS only when your code asks for that by name, and keeps what the database says about a failure out of responses and logs.
 
 ## Documentation
 
@@ -47,25 +48,27 @@ The documentation is published at [skeld.dev/docs](https://skeld.dev/docs/) and 
 - [Guides](docs/README.md#learn-the-model): design a contract, handle errors in the client, classify sensitive data, connect a browser, run a service.
 - [Add authentication](docs/guides/auth.md), [the application's obligations](docs/guides/auth-obligations.md) and the [auth behavior reference](docs/reference/auth.md).
 - [Publish an OpenAPI document](docs/guides/openapi.md) and the [OpenAPI behavior reference](docs/reference/openapi.md).
+- [Store data in PostgreSQL or SQLite](docs/guides/data.md) and the [data behavior reference](docs/reference/data.md).
 - [Security boundaries](docs/concepts/security-boundaries.md) and the [threat model](docs/concepts/threat-model.md): what skeld enforces and what your application must supply.
 - [API reference](docs/api/README.md) and [logging reference](docs/logging/logging.md).
-- [Examples](examples/README.md): hello, classified logging, a service with plugins, [authentication](examples/auth/README.md) and [OpenAPI generation](examples/openapi/README.md).
+- [Examples](examples/README.md): hello, classified logging, a service with plugins, [authentication](examples/auth/README.md), [OpenAPI generation](examples/openapi/README.md) and [a service on a database](examples/data/README.md).
 
 ## Repository
 
-A pnpm workspace. The published packages are `packages/core`, `packages/auth` and `packages/openapi`.
+A pnpm workspace. The published packages are `packages/core`, `packages/auth`, `packages/openapi` and `packages/data`.
 
-| Path               | What                                                                              |
-| ------------------ | --------------------------------------------------------------------------------- |
-| `packages/core`    | `@skeld/core`                                                                     |
-| `packages/auth`    | `@skeld/auth`                                                                     |
-| `packages/openapi` | `@skeld/openapi`                                                                  |
-| `docs/`            | [guides, concepts, API and logging references](docs/README.md)                    |
-| `examples/`        | runnable [hello, logging, service, auth and openapi examples](examples/README.md) |
-| `tests/`           | [correctness checks organized by behavior](tests/README.md)                       |
-| `benchmarks/`      | [performance workloads and type-cost fixtures](benchmarks/README.md)              |
-| `website/`         | the source of skeld.dev                                                           |
-| `tools/`           | repository checks, such as the documentation example checks                       |
+| Path               | What                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `packages/core`    | `@skeld/core`                                                                           |
+| `packages/auth`    | `@skeld/auth`                                                                           |
+| `packages/openapi` | `@skeld/openapi`                                                                        |
+| `packages/data`    | `@skeld/data`                                                                           |
+| `docs/`            | [guides, concepts, API and logging references](docs/README.md)                          |
+| `examples/`        | runnable [hello, logging, service, auth, openapi and data examples](examples/README.md) |
+| `tests/`           | [correctness checks organized by behavior](tests/README.md)                             |
+| `benchmarks/`      | [performance workloads and type-cost fixtures](benchmarks/README.md)                    |
+| `website/`         | the source of skeld.dev                                                                 |
+| `tools/`           | repository checks, such as the documentation example checks                             |
 
 ## Development
 

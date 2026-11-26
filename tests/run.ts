@@ -123,6 +123,12 @@ if (list) {
 if (!local && scripts.some((script) => script.startsWith('auth/')) && !process.env.SKELD_TEST_PG_URL) {
   throw new Error('This selection requires SKELD_TEST_PG_URL; use quick for the service-free suite');
 }
+const missing19 = ['SKELD_TEST_PG19_URL', 'SKELD_TEST_PG19_CA'].filter((name) => !process.env[name]);
+if (!local && scripts.some((script) => script.startsWith('data/')) && missing19.length !== 0) {
+  throw new Error(
+    `This selection requires ${missing19.join(' and ')}; start the proof server with node tests/data/rig/start-postgres.ts <env-file>, or use quick for the service-free suite`,
+  );
+}
 const started = performance.now();
 const timings: { script: string; seconds: number }[] = [];
 for (const script of scripts) {

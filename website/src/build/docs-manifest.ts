@@ -40,6 +40,13 @@ const groups = [
     ],
   ],
   [
+    'Store data',
+    [
+      ['guides/data', 'Store data in PostgreSQL or SQLite'],
+      ['reference/data', 'Data behavior reference'],
+    ],
+  ],
+  [
     'Understand the model',
     [
       ['concepts/request-lifecycle', 'Request lifecycle'],
@@ -88,6 +95,13 @@ const groups = [
       ['api/auth/password', 'Passwords'],
       ['api/openapi/openapi', 'OpenAPI'],
       ['api/openapi/openapi-error', 'OpenAPI errors'],
+      ['api/data/sql', 'SQL queries'],
+      ['api/data/postgres', 'PostgreSQL database'],
+      ['api/data/sqlite', 'SQLite database'],
+      ['api/data/database', 'Database'],
+      ['api/data/data-error', 'Data errors'],
+      ['api/data/pg-pool', 'Auth pool'],
+      ['api/data/limit', 'Rate limits'],
     ],
   ],
 ] as const;
@@ -98,7 +112,10 @@ export const docDefinitions: DocDefinition[] = groups.flatMap(([group, entries])
     url: `/docs/${path.replace(/README$/, '').replace(/\/$/, '')}${path === 'README' ? '' : '/'}`,
     label,
     group,
-    ...(path.startsWith('api/core/') || path.startsWith('api/auth/') || path.startsWith('api/openapi/')
+    ...(path.startsWith('api/core/') ||
+    path.startsWith('api/auth/') ||
+    path.startsWith('api/openapi/') ||
+    path.startsWith('api/data/')
       ? { parent: '/docs/api/' }
       : {}),
   })),

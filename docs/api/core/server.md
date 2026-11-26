@@ -368,7 +368,7 @@ export interface ListeningAddress {
 | `port` | The bound port.                                                           |
 | `url`  | The base URL, as in `http://127.0.0.1:3000`; an IPv6 host is in brackets. |
 
-Source: `packages/core/src/server/types.ts:560`
+Source: `packages/core/src/server/types.ts:574`
 
 ## ListenOptions
 
@@ -386,7 +386,7 @@ export interface ListenOptions {
 | `port` | The TCP port, from 0 to 65535; 0 picks a free one.                     |
 | `host` | The address to bind; an empty string is refused (default `127.0.0.1`). |
 
-Source: `packages/core/src/server/types.ts:549`
+Source: `packages/core/src/server/types.ts:563`
 
 ## OnErrorHook
 
@@ -472,7 +472,7 @@ A function that declares routes, hooks and plugins on the child scope it is give
 export type Plugin<A extends AccessTypes = NoAccess> = (scope: Scope<A>) => void | Promise<void>;
 ```
 
-Source: `packages/core/src/server/types.ts:540`
+Source: `packages/core/src/server/types.ts:554`
 
 ## PreHandlerHook
 
@@ -550,7 +550,7 @@ export interface RegisterOptions {
 | ------ | ------------------------------------------------------------------------------------------------------ |
 | `name` | The plugin's name in boot errors (default the function's name, or `plugin #<n>` for an anonymous one). |
 
-Source: `packages/core/src/server/types.ts:543`
+Source: `packages/core/src/server/types.ts:557`
 
 ## ReservedHeaderName
 
@@ -752,6 +752,9 @@ Its methods throw BootError `REGISTRATION_CLOSED` once `listen` is called, or on
 export interface Scope<A extends AccessTypes = NoAccess> {
   readonly signal: AbortSignal;
   readonly log: Logger;
+  readonly closeTimeoutMs: number;
+  event(name: string, severity: Severity): SecurityEvent;
+  onRoutes(callback: (routes: readonly RouteInfo[]) => void): void;
   onClose(callback: () => void | Promise<void>): void;
   routes<C extends ContractRoutes>(
     contract: C,
@@ -768,15 +771,18 @@ export interface Scope<A extends AccessTypes = NoAccess> {
 }
 ```
 
-| Field             | Summary                                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------------------- |
-| `signal`          | Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work.              |
-| `log`             | The server's logger, the same in every scope, plugins included; its records carry no request id.              |
-| `onClose`         | Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.      |
-| `routes`          | Adds a contract's routes to this scope, with one handler per route.                                           |
-| `addHook`         | Adds a hook to this scope; it runs for this scope's routes and its plugins' routes, after its parents' hooks. |
-| `setErrorHandler` | Sets this scope's error handler.                                                                              |
-| `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                   |
+| Field             | Summary                                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------------- |
+| `signal`          | Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work.                |
+| `log`             | The server's logger, the same in every scope, plugins included; its records carry no request id.                |
+| `closeTimeoutMs`  | Time each `onClose` callback has to settle, in milliseconds: the server's `pluginCloseTimeoutMs`.               |
+| `event`           | Registers a security event and returns its writer; the scopes share 64 names per server, apart from the gate's. |
+| `onRoutes`        | Registers a callback `listen` calls once, before binding, with the routes this scope's hooks reach, frozen.     |
+| `onClose`         | Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.        |
+| `routes`          | Adds a contract's routes to this scope, with one handler per route.                                             |
+| `addHook`         | Adds a hook to this scope; it runs for this scope's routes and its plugins' routes, after its parents' hooks.   |
+| `setErrorHandler` | Sets this scope's error handler.                                                                                |
+| `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                     |
 
 Source: `packages/core/src/server/types.ts:501`
 
@@ -798,7 +804,7 @@ export interface Server<A extends AccessTypes = NoAccess> extends Scope<A> {
 | `close`    | Stops accepting connections and resolves once every open one has closed.                          |
 | `logStats` | Returns this server's log counts; never throws, before `listen` and after `close` too.            |
 
-Source: `packages/core/src/server/types.ts:570`
+Source: `packages/core/src/server/types.ts:584`
 
 ## ServerOptions
 
@@ -889,4 +895,4 @@ await server.listen({ port: 0 });
 await server.close();
 ```
 
-Source: `packages/core/src/server/server.ts:69`
+Source: `packages/core/src/server/server.ts:71`

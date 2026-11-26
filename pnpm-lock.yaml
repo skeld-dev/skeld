@@ -223,6 +223,18 @@ importers:
         specifier: 8.23.1
         version: 8.23.1
 
+  examples/data:
+    dependencies:
+      '@skeld/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@skeld/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@skeld/data':
+        specifier: workspace:*
+        version: link:../../packages/data
+
   examples/hello:
     dependencies:
       '@skeld/core':
@@ -261,6 +273,12 @@ importers:
 
   packages/core: {}
 
+  packages/data:
+    dependencies:
+      '@skeld/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/openapi:
     devDependencies:
       '@skeld/core':
@@ -275,6 +293,9 @@ importers:
       '@skeld/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@skeld/data':
+        specifier: workspace:*
+        version: link:../packages/data
       '@skeld/openapi':
         specifier: workspace:*
         version: link:../packages/openapi
@@ -300,6 +321,9 @@ importers:
       '@skeld/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@skeld/data':
+        specifier: workspace:*
+        version: link:../packages/data
       '@skeld/openapi':
         specifier: workspace:*
         version: link:../packages/openapi

@@ -1,6 +1,6 @@
 # API reference
 
-skeld's packages publish their public API as entry points, such as `@skeld/core/server`. Import from these subpaths. Core and auth have no root export; `@skeld/openapi` has one, `@skeld/openapi` itself.
+skeld's packages publish their public API as entry points, such as `@skeld/core/server`. Import from these subpaths. Core, auth and data have no root export; `@skeld/openapi` has one, `@skeld/openapi` itself.
 
 ## Core API
 
@@ -49,4 +49,18 @@ skeld's packages publish their public API as entry points, such as `@skeld/core/
 | [openapi](openapi/openapi.md)             | `createOpenApi`, its options, its result and the document types |
 | [openapi-error](openapi/openapi-error.md) | The error a refused generation throws                           |
 
-The pages in `core/`, `auth/` and `openapi/` are generated. Change the public source documentation and run `pnpm run api-docs`; do not edit those pages by hand. For a learning path, start at the [documentation home](../README.md).
+## Data API
+
+`@skeld/data` connects a service to PostgreSQL or SQLite. Start with [Store data in PostgreSQL or SQLite](../guides/data.md).
+
+| Entry point                      | Use it for                                                                   |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| [sql](data/sql.md)               | The `sql` template tag, quoted identifiers and the parameter types           |
+| [postgres](data/postgres.md)     | `createPostgresDatabase` and its options                                     |
+| [sqlite](data/sqlite.md)         | `createSqliteDatabase` and its options                                       |
+| [database](data/database.md)     | The database, owner, query, transaction and reserved-connection types        |
+| [data-error](data/data-error.md) | `DataError`, its codes and `exposeDetail`                                    |
+| [pg-pool](data/pg-pool.md)       | `toPgPool`, which runs `@skeld/auth`'s PostgreSQL store on a database's pool |
+| [limit](data/limit.md)           | `limitRoutes`, `installLimitTable` and the limiter's options                 |
+
+The pages in `core/`, `auth/`, `openapi/` and `data/` are generated. Change the public source documentation and run `pnpm run api-docs`; do not edit those pages by hand. For a learning path, start at the [documentation home](../README.md).

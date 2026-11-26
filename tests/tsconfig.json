@@ -17,6 +17,7 @@
     "logging/**/*.ts",
     "auth/**/*.ts",
     "openapi/**/*.ts",
+    "data/**/*.ts",
     "support/**/*.ts"
   ],
   "references": [
@@ -28,6 +29,9 @@
     },
     {
       "path": "../packages/openapi"
+    },
+    {
+      "path": "../packages/data"
     }
   ]
 }

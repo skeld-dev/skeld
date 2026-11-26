@@ -14,7 +14,13 @@
       "path": "./packages/openapi"
     },
     {
+      "path": "./packages/data"
+    },
+    {
       "path": "./examples/auth"
+    },
+    {
+      "path": "./examples/data"
     },
     {
       "path": "./examples/hello"

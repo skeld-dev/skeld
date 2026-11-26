@@ -20,7 +20,12 @@ interface Page {
 const usage = 'usage: node tools/api-reference/generate.ts [--package <dir>] [--out <dir>] [--check] | --help\n';
 const biome = join(root, 'node_modules/.bin/biome');
 const defaultOut = join(root, 'docs/api');
-const defaultPackages = [join(root, 'packages/core'), join(root, 'packages/auth'), join(root, 'packages/openapi')];
+const defaultPackages = [
+  join(root, 'packages/core'),
+  join(root, 'packages/auth'),
+  join(root, 'packages/openapi'),
+  join(root, 'packages/data'),
+];
 
 function parseArgs(args: readonly string[]): Options | 'help' | undefined {
   if (args.length === 1 && args[0] === '--help') {

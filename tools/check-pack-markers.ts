@@ -34,6 +34,8 @@ const targetList: readonly Target[] = [
   { name: '@skeld/auth', folder: 'packages/auth', marker: 'auth-snapshot.jsonl' },
   // Why: Openapi has no diagnostic recorder, so its packed manifest must map no #diag at all.
   { name: '@skeld/openapi', folder: 'packages/openapi', marker: null },
+  // Why: Data's recorder exports no marker constant; the name of the snapshot file it writes is in no shipped file.
+  { name: '@skeld/data', folder: 'packages/data', marker: 'data-snapshot.jsonl' },
 ];
 
 const nodeShipped: ReadonlySet<string> = new Set(['node', 'import', 'module-sync', 'node-addons', 'default']);

@@ -1,4 +1,4 @@
-// Does:  Proves the packed core, auth and openapi tarballs ship the contracted subpaths and run in a consumer.
+// Does:  Proves the packed core, auth, openapi and data tarballs ship the contracted subpaths and run in a consumer.
 // Holds: Packing, unpacking and installing happen in a folder outside the repository, which is removed at the end.
 
 import { spawnSync } from 'node:child_process';
@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { createReport } from './rig/report.ts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
+
+const dataSubpaths = ['sql', 'postgres', 'sqlite', 'database', 'data-error', 'pg-pool', 'limit'];
 
 const authSubpaths = [
   'server',
@@ -74,11 +76,11 @@ const scratch = mkdtempSync(join(tmpdir(), 'skeld-v09-pack-'));
 try {
   const tarDir = join(scratch, 'tarballs');
   mkdirSync(tarDir);
-  const packed = ['@skeld/core', '@skeld/auth', '@skeld/openapi'].map((name) =>
+  const packed = ['@skeld/core', '@skeld/auth', '@skeld/openapi', '@skeld/data'].map((name) =>
     run('pnpm', ['--filter', name, 'pack', '--pack-destination', tarDir], root),
   );
   report.check(
-    'pnpm pack of the three packages succeeds',
+    'pnpm pack of the four packages succeeds',
     packed.every((result) => result.status === 0),
     packed.map((result) => String(result.status)).join(','),
   );
@@ -86,7 +88,8 @@ try {
   const coreTar = tarballs.find((name) => name.startsWith('skeld-core-'));
   const authTar = tarballs.find((name) => name.startsWith('skeld-auth-'));
   const openapiTar = tarballs.find((name) => name.startsWith('skeld-openapi-'));
-  if (coreTar === undefined || authTar === undefined || openapiTar === undefined) {
+  const dataTar = tarballs.find((name) => name.startsWith('skeld-data-'));
+  if (coreTar === undefined || authTar === undefined || openapiTar === undefined || dataTar === undefined) {
     throw new Error(`tarballs: ${tarballs.join(',')}`);
   }
   // Why: All distribution checks inspect the same packed artifacts; none repacks the workspace.
@@ -221,6 +224,52 @@ try {
           openapiFiles.includes(conditions.types.replace(/^\.\//, '')),
       ),
     [...openapiExports.keys()].join(','),
+  );
+
+  const dataDir = join(scratch, 'data');
+  unpack(dataTar, dataDir);
+  const dataFiles = filesUnder(dataDir).map((file) => relative(join(dataDir, 'package'), file));
+  const dataManifest = manifestOf(dataDir);
+  const dataExports = exportsOf(dataManifest);
+  report.check(
+    '@skeld/data exports exactly the seven contracted subpaths and ./package.json',
+    [...dataExports.keys()].sort().join(',') ===
+      [...dataSubpaths.map((name) => `./${name}`), './package.json'].sort().join(','),
+    [...dataExports.keys()].join(','),
+  );
+  const dataIncomplete = [...dataExports.entries()].filter(([key, conditions]) => {
+    if (key === './package.json') {
+      return false;
+    }
+    return ['types', 'default'].some(
+      (condition) =>
+        typeof conditions[condition] !== 'string' ||
+        !dataFiles.includes(String(conditions[condition]).replace(/^\.\//, '')),
+    );
+  });
+  report.check(
+    'every data subpath has a default and a types target and both files are in the tarball',
+    dataIncomplete.length === 0,
+    dataIncomplete.map(([key]) => key).join(',') || 'all present',
+  );
+  report.check(
+    '@skeld/data depends on @skeld/core alone, at exactly the packed core version: no peer, optional or other dependency',
+    JSON.stringify(dataManifest.dependencies) === JSON.stringify({ '@skeld/core': manifestOf(coreDir).version }) &&
+      dataManifest.peerDependencies === undefined &&
+      dataManifest.optionalDependencies === undefined,
+    JSON.stringify(dataManifest.dependencies),
+  );
+  const dataRecorders = dataFiles.filter((file) => /recorder/i.test(file));
+  const dataDiag = dataFiles.filter((file) => file.startsWith('dist/diag/'));
+  report.check(
+    'no recorder file ships in @skeld/data, and dist/diag holds only the empty module and its declaration',
+    dataRecorders.length === 0 && dataDiag.sort().join(',') === 'dist/diag/empty.d.ts,dist/diag/empty.js',
+    `recorder files ${dataRecorders.length}; dist/diag: ${dataDiag.join(',')}`,
+  );
+  report.check(
+    'the published #diag target of @skeld/data is the empty module',
+    JSON.stringify(dataManifest.imports).includes('./dist/diag/empty.js'),
+    JSON.stringify(dataManifest.imports).slice(0, 200),
   );
 
   const consumer = join(scratch, 'consumer');

@@ -327,7 +327,7 @@ Auth is building blocks around an application that owns its accounts. These are 
 
 What the repository's proofs and the example exercise, on Linux with Node 26.13.0:
 
-- **Stores:** SQLite through `node:sqlite` (file and `':memory:'`), and PostgreSQL 18.7 through `pg` 8.23.1, each against the same conformance cases and behavior proofs.
+- **Stores:** SQLite through `node:sqlite` (file and `':memory:'`), and PostgreSQL 19.0 through `pg` 8.23.1, each against the same conformance cases and behavior proofs.
 - **OpenID Connect:** the generic profile on this page, against local providers over local HTTPS with certificates made for each run. No named provider (Google, Microsoft, Okta, Auth0 or any other) has been tested, and compatibility with one is not claimed.
 - **Browser:** none. The sign-in flow and its cookies are exercised by a scripted HTTP client that keeps a cookie jar; no browser engine has been tested.
 - **JWT:** RS256 and ES256 tokens from a local issuer.

@@ -1,4 +1,4 @@
-// Does:  Holds a scope's registrations (routes, hooks, error handler, child plugins) until listen builds the runtime.
+// Does:  Holds a scope's registrations (routes, hooks, error handler, route callbacks, child plugins) until listen.
 // Holds: A sealed scope refuses every registration, and one scope has at most one error handler.
 
 import { checkContract } from '../contract/checks.ts';
@@ -9,6 +9,7 @@ import type { RuntimeHandler } from '../lifecycle/types.ts';
 import type { Logger } from '../log/types.ts';
 import { BootError } from './boot-error.ts';
 import type { DisposalState } from './disposal.ts';
+import type { ScopeEvents } from './events.ts';
 import { MAX_TIMER_MS, resolveOrigins } from './options.ts';
 import type {
   ErrorHandler,
@@ -50,14 +51,19 @@ export interface ChildScope {
   readonly state: ScopeState;
 }
 
+export type RoutesCallback = (routes: readonly RouteInfo[]) => void;
+
 export interface ScopeState {
   readonly name: string;
   readonly disposal: DisposalState;
+  readonly events: ScopeEvents;
+  readonly closeTimeoutMs: number;
   readonly log: Logger;
   readonly parent: ScopeState | null;
   readonly children: ChildScope[];
   readonly routes: RouteRecord[];
   readonly hooks: HookLists;
+  readonly routesCallbacks: RoutesCallback[];
   errorHandler: ErrorHandler | null;
   sealed: boolean;
 }
@@ -66,18 +72,34 @@ interface ErasedHandlers {
   readonly [name: string]: RuntimeHandler;
 }
 
-export function createScopeState(name: string, parent: ScopeState | null, log: Logger): ScopeState {
+type ServerShared = Pick<ScopeState, 'disposal' | 'events' | 'closeTimeoutMs' | 'log'>;
+
+// Does:  Builds a scope's state; a plugin's scope shares the server's disposer stack, event registry and close limit.
+function scopeState(name: string, parent: ScopeState | null, server: ServerShared): ScopeState {
+  const { disposal, events, closeTimeoutMs, log } = server;
   return {
-    name,
-    disposal: parent?.disposal ?? { abort: new AbortController(), callbacks: [] },
+    disposal,
+    events,
+    closeTimeoutMs,
     log,
+    name,
     parent,
     children: [],
     routes: [],
     hooks: { onRequest: [], preHandler: [], onSend: [], onResponse: [], onError: [] },
+    routesCallbacks: [],
     errorHandler: null,
     sealed: false,
   };
+}
+
+export function createRootState(log: Logger, events: ScopeEvents, closeTimeoutMs: number): ScopeState {
+  return scopeState('root', null, {
+    disposal: { abort: new AbortController(), callbacks: [] },
+    events,
+    closeTimeoutMs,
+    log,
+  });
 }
 
 export function pluginName(state: ScopeState): string | null {
@@ -259,6 +281,18 @@ export function createScope(state: ScopeState): Scope {
   return {
     signal: state.disposal.abort.signal,
     log: state.log,
+    closeTimeoutMs: state.closeTimeoutMs,
+    event(name, severity) {
+      assertOpen(state, 'event');
+      return state.events.register(name, severity);
+    },
+    onRoutes(callback) {
+      assertOpen(state, 'onRoutes');
+      if (typeof callback !== 'function') {
+        throw new TypeError('onRoutes requires a function');
+      }
+      state.routesCallbacks.push(callback);
+    },
     onClose(callback) {
       assertOpen(state, 'onClose');
       if (typeof callback !== 'function') {
@@ -297,7 +331,7 @@ export function createScope(state: ScopeState): Scope {
     register(plugin, options) {
       assertOpen(state, 'register');
       const name = options?.name ?? (plugin.name === '' ? `plugin #${state.children.length + 1}` : plugin.name);
-      state.children.push({ plugin, state: createScopeState(name, state, state.log) });
+      state.children.push({ plugin, state: scopeState(name, state, state) });
     },
   };
 }

@@ -2,7 +2,7 @@
 
 `@skeld/openapi` generates an OpenAPI 3.1.2 document from a skeld contract, offline. This page lists what `createOpenApi` accepts, what it emits and when it refuses.
 
-Install it with `npm install @skeld/openapi`. It needs Node 26.12 or later (`engines`: `node >=26.12.0`), takes `@skeld/core` `^0.3.0` as a peer dependency and has no other dependency. For a guided introduction, read [Publish an OpenAPI document](../guides/openapi.md). Exact signatures are in the [API reference](../api/README.md#openapi-api).
+Install it with `npm install @skeld/openapi`. It needs Node 26.12 or later (`engines`: `node >=26.12.0`), takes `@skeld/core` `^0.4.0` as a peer dependency and has no other dependency. For a guided introduction, read [Publish an OpenAPI document](../guides/openapi.md). Exact signatures are in the [API reference](../api/README.md#openapi-api).
 
 ## Entry points
 
