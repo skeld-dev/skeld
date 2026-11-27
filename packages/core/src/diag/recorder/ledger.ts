@@ -1,5 +1,5 @@
 // Does:  Attributes boot time, allocation and garbage collection to the boot stage that was running.
-// Holds: It records during boot only; once the server is listening, a mark does nothing.
+// Holds: It records during boot only; once the root is ready, a mark does nothing.
 
 import { type PerformanceEntry, PerformanceObserver } from 'node:perf_hooks';
 import { GCProfiler, type GCProfilerResult, getHeapSpaceStatistics } from 'node:v8';

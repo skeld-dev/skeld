@@ -3,7 +3,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteInfo } from '../../contract/types.ts';
-import { nowNs, toMillis } from './clock.ts';
+import { nowNs, threadCpuUs, toMillis } from './clock.ts';
 import { config } from './config.ts';
 import { counter } from './counts.ts';
 import { raise } from './events.ts';
@@ -31,6 +31,8 @@ export interface SlotRecord {
   cpu: boolean;
   seg: number;
   segStart: number;
+  segCpu: number;
+  cpuSpent: number;
   start: number;
   endAt: number;
   rootChild: number;
@@ -70,6 +72,8 @@ function createSlot(index: number): SlotRecord {
     cpu: false,
     seg: 0,
     segStart: 0,
+    segCpu: 0,
+    cpuSpent: 0,
     start: 0,
     endAt: 0,
     rootChild: 0,
@@ -82,7 +86,13 @@ function createSlot(index: number): SlotRecord {
   };
 }
 
-export const ambient: SlotRecord = Object.assign(createSlot(SLOT_COUNT), { gen: 1, step: true, cpu: true });
+// Why: Boot work has no segments, so the ambient record stays in one that began at zero and reads raw thread CPU.
+export const ambient: SlotRecord = Object.assign(createSlot(SLOT_COUNT), {
+  gen: 1,
+  inSeg: true,
+  step: true,
+  cpu: true,
+});
 
 export const slots: readonly SlotRecord[] = [
   ...Array.from({ length: SLOT_COUNT }, (_, index) => createSlot(index)),
@@ -170,6 +180,10 @@ export function beginRequest(req: IncomingMessage, res: ServerResponse): number 
   const t = nowNs();
   record.start = t;
   record.segStart = t;
+  record.cpuSpent = 0;
+  if (record.cpu) {
+    record.segCpu = threadCpuUs();
+  }
   return slotValue(record);
 }
 
@@ -180,6 +194,9 @@ export function leaveSlot(slot: number): void {
     return;
   }
   record.inSeg = false;
+  if (record.cpu) {
+    record.cpuSpent += threadCpuUs() - record.segCpu;
+  }
   const length = (record.open ? nowNs() : record.endAt) - record.segStart;
   if (!record.syncDone) {
     record.syncDone = true;
@@ -199,7 +216,16 @@ export function resumeSlot(slot: number): void {
   record.seg += 1;
   record.inSeg = true;
   record.segStart = nowNs();
+  if (record.cpu) {
+    record.segCpu = threadCpuUs();
+  }
   state.current = record;
+}
+
+// Does:  Reads the thread CPU a CPU-sampled request has used while it was the current request, up to now.
+// Holds: Two reads inside one segment differ by exactly the thread CPU between them, as two raw reads would.
+export function activeCpuUs(record: SlotRecord): number {
+  return record.inSeg ? record.cpuSpent + threadCpuUs() - record.segCpu : record.cpuSpent;
 }
 
 export function currentSlot(): number {

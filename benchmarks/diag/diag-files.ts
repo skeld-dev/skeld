@@ -25,12 +25,13 @@ interface RunSampling {
   readonly step_n: number;
   readonly cpu_n: number;
   readonly block_ms: number;
+  readonly cpu_step_us: number | null;
 }
 
 export interface RunHeader {
   readonly format: typeof recorderFormat;
   readonly recorder: string;
-  readonly status: 'booting' | 'listening' | 'closed';
+  readonly status: 'booting' | 'listening' | 'started' | 'closed';
   readonly commit: string | null;
   readonly branch: string | null;
   readonly node: string;
@@ -366,7 +367,7 @@ function readRun(header: JsonObject, at: Place): RunHeader {
   return {
     format: oneOf(header, 'format', at, [recorderFormat]),
     recorder: stringAt(header, 'recorder', at),
-    status: oneOf(header, 'status', at, ['booting', 'listening', 'closed']),
+    status: oneOf(header, 'status', at, ['booting', 'listening', 'started', 'closed']),
     commit: stringOrNullAt(header, 'commit', at),
     branch: stringOrNullAt(header, 'branch', at),
     node: stringAt(header, 'node', at),
@@ -381,6 +382,7 @@ function readRun(header: JsonObject, at: Place): RunHeader {
       step_n: numberAt(sampling, 'step_n', samplingPlace),
       cpu_n: numberAt(sampling, 'cpu_n', samplingPlace),
       block_ms: numberAt(sampling, 'block_ms', samplingPlace),
+      cpu_step_us: numberOrNullAt(sampling, 'cpu_step_us', samplingPlace),
     },
     canary: booleanAt(header, 'canary', at),
     options: field(header, 'options', at),

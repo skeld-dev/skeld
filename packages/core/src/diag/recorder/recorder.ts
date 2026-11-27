@@ -28,7 +28,7 @@ import type {
   Track,
   Wrote,
 } from '../empty.ts';
-import { nowNs, toMillis } from './clock.ts';
+import { measureCpuStep, nowNs, toMillis } from './clock.ts';
 import { config, readSettings } from './config.ts';
 import { checkContain, watchServer } from './contain.ts';
 import { keyedCounter } from './counts.ts';
@@ -40,7 +40,7 @@ import { unwatchFloor, watchFloor } from './floor.ts';
 import { closeBoot, markBoot, openBoot } from './ledger.ts';
 import { limitState, observe } from './limits.ts';
 import { startProcessWatch, stopProcessWatch } from './process.ts';
-import { runHeader } from './run.ts';
+import { type RunFields, runHeader } from './run.ts';
 import { bootFigures, writeSnapshot } from './snapshot.ts';
 import { beginRequest, currentRouteId, currentSlot, leaveSlot, resumeSlot, routeRequest, state } from './slots.ts';
 import { endSpan, nextSpan, startSpan, trackSpan } from './spans.ts';
@@ -50,7 +50,7 @@ export type { Slot, Token } from '../empty.ts';
 export const RECORDER_MARKER = 'skeld:diag-recorder';
 
 interface RunState {
-  status: 'booting' | 'listening' | 'closed';
+  status: RunFields['status'];
   options: ResolvedServerOptions | null;
   openNs: number;
   listeningAt: number | null;
@@ -58,6 +58,7 @@ interface RunState {
   address: unknown;
   timer: NodeJS.Timeout | null;
   finalWritten: boolean;
+  cpuStepUs: number | null;
 }
 
 const SNAPSHOT_INTERVAL_MS = 1000;
@@ -71,6 +72,7 @@ const run: RunState = {
   address: null,
   timer: null,
   finalWritten: false,
+  cpuStepUs: null,
 };
 
 function runFile(options: ResolvedServerOptions): string {
@@ -85,9 +87,24 @@ function runFile(options: ResolvedServerOptions): string {
     stepN: config.stepN,
     cpuN: config.cpuN,
     blockMs: config.blockMs,
+    cpuStepUs: run.cpuStepUs,
     canary: config.canary !== null,
     options,
   });
+}
+
+// Does:  Starts the run once a root is ready: on a server after listening, on a worker when its start resolves.
+function ready(): void {
+  closeBoot();
+  bootFigures.readyMs = toMillis(nowNs() - run.openNs);
+  run.status = run.listeningAt === null ? 'started' : 'listening';
+  startProcessWatch();
+  run.timer = setInterval(() => writeSnapshot(false), SNAPSHOT_INTERVAL_MS);
+  // Why: The snapshot timer must not keep the process alive.
+  run.timer.unref();
+  if (run.options !== null) {
+    writeRunFile(runFile(run.options));
+  }
 }
 
 function writeFinal(): void {
@@ -113,6 +130,9 @@ export const count: Count = (name, countKey) => {
 
 export const event: Event = (name, subject) => {
   raise(name, subject ?? null, currentRouteId(), null);
+  if (name === 'state.ready') {
+    ready();
+  }
 };
 
 export const limit: Limit = (name, used, max) => {
@@ -135,6 +155,7 @@ export const open: Open = (options) => {
   config.canary = settings.canary;
   config.options = options;
   run.options = options;
+  run.cpuStepUs = measureCpuStep();
   run.openNs = nowNs();
   bootFigures.startedAt = Date.now();
   claimFolder(settings.dir, runFile(options));
@@ -146,21 +167,11 @@ export const open: Open = (options) => {
 export const declare: Declare = declareRoute;
 
 export const listening: Listening = (server) => {
-  closeBoot();
   state.listening = true;
-  run.status = 'listening';
   run.listeningAt = Date.now();
   run.address = server.address();
-  bootFigures.readyMs = toMillis(nowNs() - run.openNs);
   watchFloor(server);
   watchServer(server);
-  startProcessWatch();
-  run.timer = setInterval(() => writeSnapshot(false), SNAPSHOT_INTERVAL_MS);
-  // Why: The snapshot timer must not keep the process alive.
-  run.timer.unref();
-  if (run.options !== null) {
-    writeRunFile(runFile(run.options));
-  }
 };
 
 export const mark: Mark = markBoot;

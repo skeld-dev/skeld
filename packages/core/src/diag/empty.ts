@@ -8,6 +8,7 @@ import type { ResolvedServerOptions } from '../server/types.ts';
 export type Slot = number;
 export type Token = number;
 export type StageName =
+  | 'req.start'
   | 'req.preroute'
   | 'req.route.find'
   | 'req.gate.identify'
@@ -55,7 +56,10 @@ export type SpanName = StageName | StepName | ErrorSpanName | BootSpanName | 'cl
 export type TrackName =
   | 'refuse.teardown'
   | 'req.hook.on_response'
+  | 'req.settle'
+  | 'req.close'
   | 'close.total'
+  | 'close.shutdown'
   | 'client.call'
   | 'client.url'
   | 'client.headers'

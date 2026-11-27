@@ -2,7 +2,7 @@
 // Holds: A request is finished once; a finish that finds no open record is counted as diag.unowned.
 
 import type { OutgoingHttpHeaders } from 'node:http';
-import { nowNs, threadCpuUs } from './clock.ts';
+import { nowNs } from './clock.ts';
 import { config } from './config.ts';
 import { type Counter, keyedCounter } from './counts.ts';
 import { checkListeners } from './contain.ts';
@@ -10,7 +10,7 @@ import { checkWrite } from './egress.ts';
 import { limitState, observe } from './limits.ts';
 import { addSampledRequest, addSyncSelf, countSpan, recordSpan, standaloneSeries } from './series.ts';
 import { closeAll } from './spans.ts';
-import { releaseSlot, type SlotRecord, state } from './slots.ts';
+import { activeCpuUs, releaseSlot, type SlotRecord, state } from './slots.ts';
 
 export const totalSeries = standaloneSeries('req.total', true);
 const requestMs = limitState('limit.request_ms');
@@ -38,12 +38,15 @@ function openRecord(hook: string): SlotRecord | null {
   return record;
 }
 
-function finish(record: SlotRecord, status: Counter, t: number): void {
+// Does:  Reads the CPU end stamp of a request whose spans carry CPU; -1 for any other request.
+const cpuStamp = (record: SlotRecord): number => (record.step && record.cpu ? activeCpuUs(record) : -1);
+
+function finish(record: SlotRecord, status: Counter, t: number, cpu: number): void {
   const incl = t - record.start;
   record.endAt = t;
   if (record.step) {
-    closeAll(record, t, record.cpu ? threadCpuUs() : -1);
-    recordSpan(totalSeries, incl, incl - record.rootChild, -1, false, true);
+    closeAll(record, t, cpu);
+    recordSpan(totalSeries, incl, incl - record.rootChild, cpu, false, true);
     addSampledRequest(incl);
   } else {
     countSpan(totalSeries, incl);
@@ -80,13 +83,16 @@ export function finishWrote(
     return;
   }
   const t = nowNs();
+  const cpu = cpuStamp(record);
+  // Why: Both end stamps come before the egress check, so no span is charged the recorder's own check.
   checkWrite(record, status, headers, payload);
-  finish(record, statusCounter(status), t);
+  finish(record, statusCounter(status), t, cpu);
 }
 
 export function finishDestroyed(): void {
   const record = openRecord('destroyed');
   if (record !== null) {
-    finish(record, destroyedCount, nowNs());
+    const t = nowNs();
+    finish(record, destroyedCount, t, cpuStamp(record));
   }
 }

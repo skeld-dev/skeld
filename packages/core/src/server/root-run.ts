@@ -1,7 +1,7 @@
 // Does:  Runs a root's start and close: the start-once rule, the rollback of a failed boot, and the shutdown.
 // Holds: A root starts at most once, a closed root never starts, and every close call returns the same promise.
 
-import { closed as closeDiagnostics, event, open } from '#diag';
+import { closed as closeDiagnostics, end, event, open, type Token, track } from '#diag';
 import type { ServerLog } from '../log/shapes.ts';
 import { BootError } from './boot-error.ts';
 import { dispose } from './disposal.ts';
@@ -66,7 +66,7 @@ export function createRootRun(parts: RootRunParts): RootRun {
     }
   }
 
-  async function shutdown(): Promise<void> {
+  async function shutdown(span: Token): Promise<void> {
     // Why: Startup failures belong to start; shutdown must still release everything acquired before the failure.
     await startup?.then(
       () => undefined,
@@ -82,6 +82,7 @@ export function createRootRun(parts: RootRunParts): RootRun {
     // Why: Last before diag, so the closed record counts every record the transport and disposers made.
     await log.close();
     event('state.closed');
+    end(span);
     closeDiagnostics();
     if (failures.length !== 0) {
       throw new AggregateError(failures, 'Server shutdown failed');
@@ -92,9 +93,10 @@ export function createRootRun(parts: RootRunParts): RootRun {
     if (closed === null) {
       closing = true;
       root.sealed = true;
+      const span = track('close.shutdown');
       event('state.closing');
       // Why: Assign the shared promise before abort dispatch can reenter close through an author's listener.
-      closed = Promise.resolve().then(shutdown);
+      closed = Promise.resolve().then(() => shutdown(span));
       root.disposal.abort.abort();
     }
     return closed;

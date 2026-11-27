@@ -2,12 +2,13 @@
 // Holds: A span closed out of order closes those above it first and is counted as diag.span_order.
 
 import type { SpanName, TrackName } from '../empty.ts';
-import { nowNs, threadCpuUs } from './clock.ts';
+import { nowNs } from './clock.ts';
 import { config } from './config.ts';
 import { counter, keyedCounter } from './counts.ts';
 import { limitState, observe } from './limits.ts';
 import { keyedSeries, nameEntry, recordSpan, type Series } from './series.ts';
 import {
+  activeCpuUs,
   ambient,
   DEPTH_MASK,
   DEPTH_SHIFT,
@@ -48,7 +49,7 @@ const tracks: readonly TrackRecord[] = Array.from({ length: TRACK_COUNT }, (_, i
   start: 0,
   gen: 0,
 }));
-const trackState = { ring: 0, sampled: 0 };
+const trackState = { ring: 0 };
 
 export const gaugeState: { closeInflight: number | null } = { closeInflight: null };
 
@@ -76,7 +77,7 @@ function closeTop(record: SlotRecord, t: number, cpu: number): void {
   }
   const incl = t - frame.start;
   const same = frame.seg === record.seg;
-  const cpuIncl = same && frame.cpu >= 0 && cpu >= 0 ? cpu - frame.cpu : -1;
+  const cpuIncl = frame.cpu >= 0 && cpu >= 0 ? cpu - frame.cpu : -1;
   const parent = depth > 0 ? record.frames[depth - 1] : undefined;
   if (parent === undefined) {
     record.rootChild += incl;
@@ -147,7 +148,7 @@ export function startSpan(name: SpanName, key?: string | number): number {
     return 0;
   }
   const series = key === undefined ? entry.keyless : keyedSeries(entry, key);
-  return openFrame(record, frame, series, nowNs(), record.cpu && !entry.step ? threadCpuUs() : -1);
+  return openFrame(record, frame, series, nowNs(), record.cpu && !entry.step ? activeCpuUs(record) : -1);
 }
 
 function openSlotOf(token: number): SlotRecord | null {
@@ -186,7 +187,7 @@ export function endSpan(token: number): void {
   }
   const depth = (token >>> DEPTH_SHIFT) & DEPTH_MASK;
   const t = nowNs();
-  closeThrough(record, depth, t, measuresCpu(record, depth) ? threadCpuUs() : -1);
+  closeThrough(record, depth, t, measuresCpu(record, depth) ? activeCpuUs(record) : -1);
 }
 
 export function nextSpan(token: number, name: SpanName): number {
@@ -197,7 +198,7 @@ export function nextSpan(token: number, name: SpanName): number {
   const depth = (token >>> DEPTH_SHIFT) & DEPTH_MASK;
   const entry = nameEntry(name);
   const t = nowNs();
-  const cpu = measuresCpu(record, depth) || (record.cpu && !entry.step) ? threadCpuUs() : -1;
+  const cpu = measuresCpu(record, depth) || (record.cpu && !entry.step) ? activeCpuUs(record) : -1;
   closeThrough(record, depth, t, cpu);
   const frame = record.frames[depth];
   if (frame === undefined) {
@@ -209,8 +210,9 @@ export function nextSpan(token: number, name: SpanName): number {
 export function trackSpan(name: TrackName, key?: string): number {
   const entry = nameEntry(name);
   if (entry.step) {
-    const n = trackState.sampled;
-    trackState.sampled = n + 1;
+    // Why: Each name counts its own calls; a shared count lets two names called in turn sample only the first.
+    const n = entry.calls;
+    entry.calls = n + 1;
     if (n % config.stepN !== 0) {
       return 0;
     }

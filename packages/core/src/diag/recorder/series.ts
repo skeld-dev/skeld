@@ -10,6 +10,7 @@ export interface NameEntry {
   readonly step: boolean;
   readonly keyless: Series;
   readonly keyed: Map<string | number, Series>;
+  calls: number;
 }
 
 export interface Series {
@@ -39,6 +40,7 @@ export interface SpanFigures {
 }
 
 const STAGES: readonly StageName[] = [
+  'req.start',
   'req.preroute',
   'req.route.find',
   'req.hook.on_request',
@@ -63,7 +65,7 @@ const STEPS: readonly StepName[] = [
   'req.handler.arg',
   'req.respond.serialize',
 ];
-const SAMPLED_TRACKS: ReadonlySet<string> = new Set(['client.url', 'client.headers']);
+const SAMPLED_TRACKS: ReadonlySet<string> = new Set(['client.url', 'client.headers', 'req.settle', 'req.close']);
 const STEP_NAMES: ReadonlySet<string> = new Set<string>([...STEPS, 'req.validate.part', ...SAMPLED_TRACKS]);
 const ALWAYS_PRESENT: ReadonlySet<string> = new Set<string>([...STAGES, ...STEPS]);
 
@@ -108,6 +110,7 @@ export function nameEntry(name: string): NameEntry {
     step: STEP_NAMES.has(name),
     keyless: createSeries(name, name, ALWAYS_PRESENT.has(name)),
     keyed: new Map(),
+    calls: 0,
   };
   entries.set(name, created);
   return created;

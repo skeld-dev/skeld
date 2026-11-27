@@ -3,7 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { count } from '#diag';
+import { count, end, track } from '#diag';
 import { readCorrelation } from '../log/correlation.ts';
 import { type HookErrorReason, KNOWN_METHODS, type RefusalEvent } from '../log/events.ts';
 import { OTHER } from '../log/limits.ts';
@@ -17,11 +17,13 @@ const NO_CORRELATION: Correlation = Object.freeze({ inboundId: null, traceId: nu
 
 // Does:  Counts the response's close and offers the access record when the access option is on.
 function pointClosed(log: ServerLog, request: RequestLog, res: ServerResponse): void {
+  const span = track('req.close');
   const outcome = res.writableFinished ? 'completed' : 'aborted';
   count('point.closed', outcome);
   if (log.access) {
     log.ended(request, outcome, res.headersSent ? res.statusCode : null, performance.now() - request.startedAt);
   }
+  end(span);
 }
 
 // Does:  Starts a request: mints the id its response head will carry and watches the response's one close.
