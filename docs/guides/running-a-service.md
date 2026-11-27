@@ -49,6 +49,19 @@ The runnable examples handle SIGINT and SIGTERM and await `server.close()`. Foll
 
 `close()` can reject when resource cleanup fails. Make that failure visible to the process supervisor. Do not assume the final `skeld.server.closed` record proves every log was delivered: it is a snapshot before the last flush. Post-close statistics distinguish queued drops from still-pending delivery.
 
+## Run a process with no listener
+
+A migration script, a queue consumer or a scheduled job can run the service's plugins and gate without serving requests: `createWorker` from `@skeld/core/worker` boots them and opens no listener. The [worker reference](../reference/core.md#workers-plugins-without-a-listener) gives its members, the order of `start` and its refusals.
+
+Shut down through `worker.close()`. It aborts the worker's signal, runs every `onClose` callback, writes `skeld.worker.closed` and flushes the log. A script that finishes its work calls `close()` in a `finally` block. The framework adds no signal handler: a long-running worker wires SIGTERM and SIGINT to `worker.close()` itself, or a SIGTERM ends the process without running any `onClose` callback.
+
+The framework itself opens no listening socket for a worker. That promise covers only what the framework does:
+
+- A plugin can open a socket of its own; read what each plugin you register does.
+- Node's inspector starts listening on `127.0.0.1:9229` when the process receives SIGUSR1. Start the worker with `node --disable-sigusr1` to keep it closed.
+
+Deny inbound traffic to a worker at the platform as well: publish no port from its container, and give it no inbound firewall or security-group rule.
+
 ## Keep application obligations visible
 
 Before exposing a service, implement its authentication, authorization, durable storage rules, and any abuse controls it needs. [Add authentication](auth.md) covers what `@skeld/auth` supplies and what it leaves to the application. Verify origin and proxy behavior through the real deployment path, not only on loopback. Configure TLS and secret storage in that environment.

@@ -1,4 +1,4 @@
-// Does:  Boots a server's gate at listen and checks every route's access declaration, binding each route to the gate.
+// Does:  Boots a gate at listen or a worker's start; at listen checks each route's access declaration and binds it.
 // Holds: A boot message is built from a route, a cut finding or a GateFault's judged fields; no thrown text enters it.
 
 import { end, start } from '#diag';

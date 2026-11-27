@@ -72,7 +72,7 @@ With `errorFrames` on, frames are taken in these steps. A step that fails gives 
 1. The value's own `stack` is the accessor V8 gives every error of this realm. A replaced accessor, a data property, no own `stack`, or another realm's error is left uncalled.
 2. The value and its prototypes, at most 16 objects, each checked for being a Proxy before it is read: the chain ends within 16 objects with no Proxy, and the first own `name` and the first own `message` found are string data properties.
 3. That accessor is called once on the value, inside its own catch, and returns a string.
-4. The text begins with the header V8 builds from that name and message (`name: message`; the name alone when the message is empty; the message alone when the name is), then a newline. Each following line of the form `    at …` is a frame, up to the first line that is not one, and at most 10. A frame is cut at 256 units and loses the working directory at `listen`, with or without `file://`.
+4. The text begins with the header V8 builds from that name and message (`name: message`; the name alone when the message is empty; the message alone when the name is), then a newline. Each following line of the form `    at …` is a frame, up to the first line that is not one, and at most 10. A frame is cut at 256 units and loses the process's working directory, from the first record a server or worker writes, with or without `file://`.
 
 Steps 1 and 2 call no function of the value. Step 3 runs the process's stack formatter, `Error.prepareStackTrace` included. Step 4 checks syntax only: text assigned to `stack` that begins with the header passes.
 

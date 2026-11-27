@@ -28,7 +28,7 @@ Core gained the subpath `@skeld/core/gate` (`GateFault`, `CSRF_TOKEN_HEADER` and
 
 ## createAuth options
 
-`createAuth` checks nothing. The server checks every option when it boots the gate at `listen`, and a refused option makes `listen` reject with `BootError` `GATE_FAILED` (see [Boot refusals](#boot-refusals)). Every option object refuses an own key its type does not name.
+`createAuth` checks nothing. The server checks every option when it boots the gate at `listen`, and a worker at `start`; a refused option makes that call reject with `BootError` `GATE_FAILED` (see [Boot refusals](#boot-refusals)). Every option object refuses an own key its type does not name.
 
 | Option         | Type and bounds                                                                                                                                                     | Default                          |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
@@ -113,7 +113,7 @@ A policy callback that throws or answers a non-boolean, and a JWT `map` that thr
 
 ## Boot refusals
 
-`listen` rejects with a `BootError`; nothing is bound and the server does not start.
+`listen` rejects with a `BootError`; nothing is bound and the server does not start. A worker's `start` rejects with the same `GATE_FAILED` codes and messages; the three route codes never reach a worker, which refuses any route with `ROUTE_WITHOUT_LISTENER` before its gate boots.
 
 | Code                  | When                                                                              | Message                                                                      |
 | --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -159,8 +159,8 @@ Every server-side call and every operation rejects or throws `AuthError`, whose 
 
 | Code              | Message                   | When                                                                                                                             |
 | ----------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `NOT_READY`       | `auth is not ready`       | A call before the server's `listen` resolved                                                                                     |
-| `CLOSED`          | `auth is closed`          | A call after the server closed                                                                                                   |
+| `NOT_READY`       | `auth is not ready`       | A call before the gate booted, at the server's `listen` or a worker's `start`                                                    |
+| `CLOSED`          | `auth is closed`          | A call after the server or worker closed                                                                                         |
 | `INVALID_INPUT`   | `invalid input`           | A user id, scope, key, name, generation or cost outside its bound; an unknown key in a call's input object                       |
 | `UNAVAILABLE`     | `auth is unavailable`     | The platform's hash computation failed                                                                                           |
 | `CALLBACK_FAILED` | `callback failed`         | A policy callback or the JWT `map` threw, was late or answered a malformed value inside a gate step; it becomes core's fixed 500 |

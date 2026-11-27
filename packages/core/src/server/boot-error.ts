@@ -1,4 +1,4 @@
-// Does:  Defines BootError and the codes for everything that can refuse a server before it listens.
+// Does:  Defines BootError and the codes for everything that can refuse a server's listen or a worker's start.
 // Holds: Every boot refusal carries one of the listed codes, and the route or plugin it concerns when there is one.
 
 import type { RouteInfo } from '../contract/types.ts';
@@ -26,7 +26,9 @@ export type BootErrorCode =
   | 'ACCESS_WITHOUT_GATE'
   | 'ACCESS_UNDECLARED'
   | 'ACCESS_REFUSED'
-  | 'GATE_FAILED';
+  | 'GATE_FAILED'
+  | 'ROUTE_WITHOUT_LISTENER'
+  | 'ALREADY_STARTED';
 
 /**
  * The error thrown when a service cannot boot: a bad option, a refused route or plugin, or a failed listen.

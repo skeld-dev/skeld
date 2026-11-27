@@ -58,6 +58,8 @@ type EventName =
   | ErrorEvent
   | 'skeld.server.listening'
   | 'skeld.server.closed'
+  | 'skeld.worker.started'
+  | 'skeld.worker.closed'
   | 'skeld.config.public_origin'
   | 'skeld.log.dropped'
   | 'skeld.log.suppressed'
@@ -76,6 +78,8 @@ function spec(category: Category | null, severity: Severity | null): EventSpec {
 export const EVENTS: { readonly [E in EventName]: EventSpec } = Object.freeze({
   'skeld.server.listening': spec('boot', 'info'),
   'skeld.server.closed': spec('boot', 'info'),
+  'skeld.worker.started': spec('boot', 'info'),
+  'skeld.worker.closed': spec('boot', 'info'),
   'skeld.config.public_origin': spec('boot', 'warn'),
   'skeld.log.dropped': spec('boot', 'warn'),
   // Why: A summary takes the category and severity of the event it counts.

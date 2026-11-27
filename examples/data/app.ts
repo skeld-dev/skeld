@@ -1,18 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { createPostgresStore } from '@skeld/auth/postgres';
 import { HttpError } from '@skeld/core/http-error';
 import type { LogSink } from '@skeld/core/log';
-import { Secret } from '@skeld/core/secret';
 import { createServer, type Scope } from '@skeld/core/server';
 import * as t from '@skeld/core/schema';
 import type { Database } from '@skeld/data/database';
 import { installLimitTable, limitRoutes } from '@skeld/data/limit';
-import { toPgPool } from '@skeld/data/pg-pool';
-import { createPostgresDatabase } from '@skeld/data/postgres';
 import { sql } from '@skeld/data/sql';
 import { createSqliteDatabase } from '@skeld/data/sqlite';
 import { Account, bankContract } from './contract.ts';
+import { openDatabase } from './database.ts';
 
 export interface ExampleOptions {
   // 0 picks a free port.
@@ -24,20 +20,6 @@ export interface ExampleOptions {
 
 const AccountId = t.object({ id: t.string({ maxLength: 64 }) });
 
-// DATABASE_URL selects PostgreSQL over verified TLS; DATABASE_CA_FILE names the server's CA certificate (PEM)
-// when it is not one of Node's bundled roots. Without DATABASE_URL the service runs on a SQLite file.
-function openDatabase(sqlitePath: string): Database {
-  const url = process.env.DATABASE_URL;
-  if (url === undefined || url === '') {
-    return createSqliteDatabase({ path: sqlitePath });
-  }
-  const caFile = process.env.DATABASE_CA_FILE;
-  return createPostgresDatabase({
-    url: new Secret(url),
-    ...(caFile === undefined || caFile === '' ? {} : { tls: { ca: readFileSync(caFile, 'utf8') } }),
-  });
-}
-
 export async function startExample(options: ExampleOptions) {
   const db = openDatabase(options.sqlitePath);
   // On SQLite every limit charge would be a commit with an fsync on the application's file, queued behind its
@@ -48,12 +30,12 @@ export async function startExample(options: ExampleOptions) {
   const server = createServer(
     options.logSink === undefined ? { log: { access: true } } : { log: { access: true, sink: options.logSink } },
   );
-  // Plugins run in registration order: the databases open first, then the setup step, then the limiter's boot.
+  // Plugins run in registration order: the databases open first, then the boot check, then the limiter's boot.
   server.register(db.plugin);
   if (limits !== db) {
     server.register(limits.plugin);
   }
-  server.register(async (scope) => setUp(scope, db, limits));
+  server.register(async (scope) => checkDatabase(scope, db, limits));
 
   limitRoutes(server, {
     database: limits,
@@ -111,33 +93,15 @@ export async function startExample(options: ExampleOptions) {
   return { url: address.url, engine: db.engine, close: () => server.close() };
 }
 
-// The schema step. A deployed service runs it once, as a migration before it starts; this example runs it at
-// every start, and every statement in it leaves an existing database unchanged.
-async function setUp(scope: Scope, db: Database, limits: Database): Promise<void> {
+// The boot check. The service creates nothing in the application's database: migrate.ts does that, before the
+// service starts. Each statement fails on a missing table, so listen rejects with PLUGIN_FAILED on a database the
+// script has not run on, instead of every request failing later.
+async function checkDatabase(scope: Scope, db: Database, limits: Database): Promise<void> {
   const app = db.for(scope);
-  await app.query(sql`create table if not exists accounts (
-    id text primary key,
-    balance integer not null check (balance >= 0)
-  )`);
-  await app.query(sql`create table if not exists transfers (
-    id text primary key,
-    from_account text not null references accounts (id),
-    to_account text not null references accounts (id),
-    amount integer not null check (amount > 0),
-    created_at text not null
-  )`);
-  await app.query(sql`insert into accounts (id, balance) values (${'alice'}, ${100}), (${'bob'}, ${50})
-    on conflict (id) do nothing`);
-  await installLimitTable(limits, scope);
-
-  if (db.engine === 'postgres') {
-    // auth's store on the same pool: its tables sit in the same database and its statements use the pool's
-    // connections. Give it to createAuth({ store, origin }) to sign people in (see examples/auth).
-    const store = createPostgresStore({ pool: toPgPool(db) });
-    scope.onClose(() => store.close());
-    const installed = await store.install();
-    if (installed.kind === 'mismatch') {
-      throw new Error(`auth store holds schema version ${installed.found}`);
-    }
+  await app.query(sql`select id from accounts limit 0`);
+  await app.query(sql`select id from transfers limit 0`);
+  if (limits !== db) {
+    // On SQLite the limiter's database is in memory and starts empty, so its table is created at every start.
+    await installLimitTable(limits, scope);
   }
 }

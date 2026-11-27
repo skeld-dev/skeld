@@ -234,7 +234,7 @@ Neither factory opens or queries anything; each checks its options and throws `B
 
 `store.install()` creates the schema. It is a deploy step, run once before the service starts: it answers `installed` for a new schema, `current` when version 1 is already there, and `mismatch` with the `found` version otherwise, and it never alters or drops anything. On SQLite it creates the file at mode 0600; an existing file is used with the permissions it has. On PostgreSQL it creates the schema `skeld_auth`.
 
-The service itself never installs. At `listen` the gate attaches to the store and refuses to start when the schema is missing: `listen` rejects with `BootError` `GATE_FAILED` and the message `gate failed: store: not installed` (or `version mismatch`, `version unreadable`, `in use`, `unavailable`).
+The service itself never installs. At `listen`, or at a worker's `start`, the gate attaches to the store and refuses to start when the schema is missing: the call rejects with `BootError` `GATE_FAILED` and the message `gate failed: store: not installed` (or `version mismatch`, `version unreadable`, `in use`, `unavailable`).
 
 For PostgreSQL, the store takes your Pool and never ends it:
 
@@ -250,7 +250,7 @@ Pass a `pg` Pool (`new pg.Pool({ connectionString, max: 16, connectionTimeoutMil
 
 ## Create auth and give the server its gate
 
-`createAuth(options)` from `@skeld/auth/server` returns one server's auth. It reads and checks nothing when called; the server checks every option when it boots the gate at `listen`. The handle has:
+`createAuth(options)` from `@skeld/auth/server` returns one server's auth. It reads and checks nothing when called; the server checks every option when it boots the gate at `listen`, and a worker at `start`. The handle has:
 
 | Member                  | What it is                                                |
 | ----------------------- | --------------------------------------------------------- |
@@ -260,11 +260,11 @@ Pass a `pg` Pool (`new pg.Pool({ connectionString, max: 16, connectionTimeoutMil
 | `auth.subjects`         | `read`, `disable`, `enable`, `revokeSessions`             |
 | `auth.limits`           | `charge` on your declared limit scopes                    |
 
-Before `listen` resolves, every call on the handle rejects `AuthError` `NOT_READY`; after the server closes, `CLOSED`. One handle serves one server.
+Until the gate has booted, at `listen` or at a worker's `start`, every call on the handle rejects `AuthError` `NOT_READY`; after the server or worker closes, `CLOSED`. One handle serves one server or worker.
 
 Three options tie auth to the server:
 
-- `origin` is your service's origin as `new URL(x).origin` writes it: `https`, or `http` on `localhost`, `127.x.x.x` or `[::1]`. It must also be one of the server's `publicOrigin`, or `listen` rejects with `gate failed: origin: not one of the server's publicOrigin`.
+- `origin` is your service's origin as `new URL(x).origin` writes it: `https`, or `http` on `localhost`, `127.x.x.x` or `[::1]`. It must also be one of the server's `publicOrigin`, or `listen` (a worker's `start`, against the worker's `publicOrigin`) rejects with `gate failed: origin: not one of the server's publicOrigin`.
 - Auth needs `origin`, port included, before the server listens: the session cookie and each provider's redirect URI are bound to it. A service with auth therefore listens on a port chosen before start. Never use port 0.
 - Every route that can accept the session cookie must run under the strict cross-site check, `csrf: { mode: 'strict' }` on the server or on its route group. See [Connect a browser](browser-security.md) for what that check does.
 

@@ -29,7 +29,8 @@ The package has no root export; import each part from its own subpath. Import th
 | `@skeld/core/contract`     | `defineContract`, `errorBodySchema`, and the contract types (`RouteDefinition`, `ContractRoutes`, `ErrorBody`, …)                                                                                                                        |
 | `@skeld/core/http-error`   | `HttpError`, thrown by handlers, the engine and the client                                                                                                                                                                               |
 | `@skeld/core/server`       | `createServer` and the server, scope, handler, hook and plugin types                                                                                                                                                                     |
-| `@skeld/core/boot-error`   | `BootError`, thrown or rejected when a server refuses to start                                                                                                                                                                           |
+| `@skeld/core/worker`       | `createWorker` and the `Worker` and `WorkerOptions` types, for a process that runs plugins with no listener; also the `Plugin`, `Scope` and `RegisterOptions` types                                                                      |
+| `@skeld/core/boot-error`   | `BootError`, thrown or rejected when a server refuses to start or a worker refuses `start`                                                                                                                                               |
 | `@skeld/core/client`       | `createClient` and the client types                                                                                                                                                                                                      |
 | `@skeld/core/schema`       | the sixteen builders (`string`, `integer`, `number`, `boolean`, `null`, `literal`, `object`, `array`, `record`, `union`, `optional`, `exposed`, `pick`, `omit`, `partial`, `extend`) and the schema types (`Schema`, `Infer`, `Wire`, …) |
 | `@skeld/core/secret`       | `Secret`, the wrapper a handler receives for a `secret` field, and `expose`, which returns its value                                                                                                                                     |
@@ -245,7 +246,7 @@ The reference is in [`docs/logging/`](../logging/logging.md): the options and gu
 
 ## Plugin resource ownership
 
-Register `scope.onClose(() => resource.close())` immediately after acquiring a resource, before another await. `scope.signal` aborts when shutdown or failed-boot rollback begins. After HTTP draining, cleanup runs once in reverse registration order. Each callback has its own `pluginCloseTimeoutMs` deadline (default 10,000 ms, maximum 2,147,483,647). Every callback is attempted; `close()` rejects with an `AggregateError` if any fails or times out. Repeated calls share the completion. Failed startup preserves its original error with rollback failures attached.
+Register `scope.onClose(() => resource.close())` immediately after acquiring a resource, before another await. `scope.signal` aborts when shutdown or failed-boot rollback begins. After HTTP draining on a server, and directly on a worker, cleanup runs once in reverse registration order. Each callback has its own `pluginCloseTimeoutMs` deadline (default 10,000 ms, maximum 2,147,483,647). Every callback is attempted; `close()` rejects with an `AggregateError` if any fails or times out. Repeated calls share the completion. Failed startup preserves its original error with rollback failures attached.
 
 Closing during startup prevents subsequent plugins and binding, waits for the current plugin within its boot deadline, and unwinds resources. Plugins and cleanup callbacks must cooperate with cancellation: a timeout cannot terminate arbitrary JavaScript or reclaim resources acquired after a plugin has timed out. Total cleanup time can grow with callback count. Registration after scope sealing is refused.
 
@@ -253,7 +254,76 @@ Closing during startup prevents subsequent plugins and binding, waits for the cu
 
 `scope.event(name, severity)` registers a security event and returns its writer, `(log, fields?) => void`, which writes a record in category `security` at that severity through the given logger. A name is two or more lower-case words of letters, digits and `_`, joined by `.`, at most 64 characters, and not starting with `skeld.`; the severity is `debug`, `info`, `warn`, `error` or `fatal`. Registering a name again with the same severity returns the same writer; with another severity, an invalid name, or a 65th name, it throws `TypeError`. A server's scopes share one set of 64 names, apart from a gate's.
 
-`scope.onRoutes(callback)` registers a callback that `listen` calls once, after every plugin and the gate's boot have settled and before any route is bound, with a frozen list of the `RouteInfo` (`name`, `method`, `path`) of every route the scope's hooks reach: its own routes, then its plugins', in registration order. On the server that is every route. A throw or a returned value other than `undefined` makes `listen` reject with `BootError` `PLUGIN_FAILED` and the message `Server failed in onRoutes: <message>`, or `Plugin <name> failed in onRoutes: <message>` on a plugin's scope. Like every registration, `event` and `onRoutes` throw `REGISTRATION_CLOSED` once the scope is sealed.
+`scope.onRoutes(callback)` registers a callback that `listen` calls once, after every plugin and the gate's boot have settled and before any route is bound, with a frozen list of the `RouteInfo` (`name`, `method`, `path`) of every route the scope's hooks reach: its own routes, then its plugins', in registration order. On the server that is every route. A throw or a returned value other than `undefined` makes `listen` reject with `BootError` `PLUGIN_FAILED` and the message `Server failed in onRoutes: <message>`, or `Plugin <name> failed in onRoutes: <message>` on a plugin's scope. Like every registration, `event` and `onRoutes` throw `REGISTRATION_CLOSED` once the scope is sealed. On a [worker](#workers-plugins-without-a-listener), `start` calls each callback once with an empty frozen list.
+
+## Workers: plugins without a listener
+
+`createWorker` from `@skeld/core/worker` runs plugins and a gate in a process that serves no request, such as a migration script or a queue consumer. The framework opens no listening socket for a worker: it constructs no `node:http` server and loads no module that does.
+
+```ts
+import { createWorker } from '@skeld/core/worker';
+
+const worker = createWorker();
+worker.register(
+  (scope) => {
+    scope.log.info('plugin booted');
+  },
+  { name: 'hello' },
+);
+await worker.start();
+try {
+  worker.log.info('work runs here');
+} finally {
+  await worker.close();
+}
+```
+
+Its stdout holds four records in this order: the plugin's `plugin booted`, `skeld.worker.started`, `work runs here` and `skeld.worker.closed`. The process then exits by itself. A worker never writes a `skeld.server.*` record.
+
+### Options and members
+
+`createWorker` reads five options, each with the type, default and limits of the server option of the same name: `gate`, `log`, `publicOrigin`, `pluginTimeoutMs` and `pluginCloseTimeoutMs`. Another key fails to compile and is ignored at run time. A value `createServer` refuses throws `BootError` `INVALID_OPTION` with the same message, which calls it a server option: `Invalid server option pluginTimeoutMs: must be a positive integer up to 2147483647, got 0`.
+
+A worker has nine members: `signal`, `log`, `closeTimeoutMs`, `event`, `onClose` and `register` behave as on a server's root scope, and `start`, `close` and `logStats` are its own. It has no `routes`, `addHook`, `setErrorHandler`, `onRoutes` or `listen`: a call to one fails to compile, and in JavaScript it throws `TypeError` because the member does not exist. A plugin still receives a full `Scope`, so a plugin written for a server registers on a worker unchanged. Hooks and an error handler that a plugin sets are kept and never run; a route a plugin declares refuses `start`.
+
+### What `start` does
+
+In this order:
+
+1. Seals the worker: `register`, `onClose` and `event` on it now throw `BootError` `REGISTRATION_CLOSED` (`Cannot call register() after start() was called`).
+2. Runs the plugins in registration order, each plugin's own plugins after it, each under `pluginTimeoutMs`.
+3. Rejects if `close` was called meanwhile.
+4. Rejects if any plugin declared a route, naming the first one: a scope's own routes, then each of its plugins', depth-first. The gate has not booted.
+5. Boots the gate, when there is one, under `pluginTimeoutMs`. `@skeld/auth`'s gate boots as it does under `listen`.
+6. Rejects if `close` was called meanwhile.
+7. Calls every `onRoutes` callback once with an empty frozen list.
+
+Then it writes `skeld.worker.started` and resolves with `undefined`. It binds no route and compiles no schema. Once it resolves, the framework holds no timer or handle of its own: the process stays alive only for what your plugins and code hold open, such as a database pool.
+
+### Refusals
+
+| Call                           | When                                                          | Result                                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createWorker`                 | an option out of range, a malformed gate                      | throws `BootError` `INVALID_OPTION`, as `createServer` does                                                                                                  |
+| `register`, `onClose`, `event` | after `start` or `close` was called                           | throws `REGISTRATION_CLOSED`                                                                                                                                 |
+| `start`                        | a second call                                                 | rejects `ALREADY_STARTED` (`start() was already called`); no plugin runs again                                                                               |
+| `start`                        | after `close`                                                 | rejects `SERVER_CLOSED` (`start() was called after close()`)                                                                                                 |
+| `start`                        | a plugin throws or passes `pluginTimeoutMs`                   | rejects `PLUGIN_FAILED` or `PLUGIN_TIMEOUT`, with `plugin` set                                                                                               |
+| `start`                        | a plugin declared a route                                     | rejects `ROUTE_WITHOUT_LISTENER` (`Route <name> (<METHOD> <path>): registered on a worker, which serves no route`), with `route` and `plugin` set            |
+| `start`                        | the gate's boot throws, refuses or passes `pluginTimeoutMs`   | rejects `GATE_FAILED`                                                                                                                                        |
+| `start`                        | an `onRoutes` callback throws or returns a value              | rejects `PLUGIN_FAILED`; a `limitRoutes` rule from `@skeld/data/limit` lands here, since a worker serves no route                                            |
+| `start`                        | `close` is called while it runs                               | rejects `SERVER_CLOSED` (`Server closed during startup`, or `Server closed during plugin boot` between plugins) once the running plugin settles or times out |
+| `close`                        | an `onClose` callback throws or passes `pluginCloseTimeoutMs` | rejects `AggregateError` (`Server shutdown failed`) after every other callback ran                                                                           |
+
+A rejected `start` has already closed the worker, so every `onClose` registered so far has run; when that close fails too, the `BootError` carries both failures in its `cause`, as under `listen`. `ROUTE_WITHOUT_LISTENER` and `ALREADY_STARTED` are a worker's own codes. The other messages say "server" because a worker shares them with a server.
+
+### `close` and the limits
+
+`close` aborts `signal`, waits for a running `start` to settle, runs the `onClose` callbacks in reverse registration order, writes `skeld.worker.closed` with the same counts `skeld.server.closed` carries, and flushes the log for at most `log.flushTimeoutMs`. Every call returns the same promise. There is no transport to drain.
+
+Two limits bound a worker: `pluginTimeoutMs` for each plugin and for the gate's boot, and `pluginCloseTimeoutMs` for each `onClose` callback, each 10,000 ms by default and at most 2,147,483,647. Nothing bounds `start` or `close` as a whole, and nothing is retried: a worker that failed or closed is finished.
+
+The framework adds no listener for SIGTERM, SIGINT, `exit` or `uncaughtException`. A long-running worker wires those signals to `worker.close()` itself, or a SIGTERM ends the process without running any `onClose` callback. See [Run a service](../guides/running-a-service.md#run-a-process-with-no-listener).
 
 ## Additional boundary behavior
 

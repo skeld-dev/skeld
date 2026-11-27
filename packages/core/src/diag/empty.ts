@@ -100,7 +100,11 @@ export type EventName =
   | 'err.send_status'
   | 'err.gate'
   | 'close.forced'
-  | 'client.error';
+  | 'client.error'
+  | 'state.starting'
+  | 'state.ready'
+  | 'state.closing'
+  | 'state.closed';
 export type LimitName =
   | 'limit.refusal_bytes'
   | 'limit.refusal_connections'

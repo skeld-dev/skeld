@@ -104,6 +104,7 @@ export interface ServerLog {
   readonly clientAddress: boolean;
   ready(templates: readonly string[], cwd: string): void;
   listening(address: string, port: number): void;
+  started(): void;
   publicOriginHint(): void;
   refused(event: RefusalEvent, request: RequestLog, status: number, errorType: string, reason: string | null): void;
   failed(

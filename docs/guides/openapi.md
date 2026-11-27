@@ -6,7 +6,7 @@
 npm install @skeld/openapi
 ```
 
-It needs Node 26.12 or later and `@skeld/core` `^0.4.0` as a peer dependency, and depends on nothing else. Exact signatures are in the [OpenAPI API reference](../api/openapi/openapi.md); every rule and refusal is in the [OpenAPI behavior reference](../reference/openapi.md).
+It needs Node 26.12 or later and `@skeld/core` `^0.4.5` as a peer dependency, and depends on nothing else. Exact signatures are in the [OpenAPI API reference](../api/openapi/openapi.md); every rule and refusal is in the [OpenAPI behavior reference](../reference/openapi.md).
 
 ## Generate a document
 

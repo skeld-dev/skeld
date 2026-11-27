@@ -6,7 +6,7 @@ first published at `0.2.0`, `packages/openapi` as `@skeld/openapi`, whose first 
 `packages/data` as `@skeld/data`, whose first version is `0.4.0`. Other workspaces are private.
 
 The four packages share one version, and a release bumps all of them, changed or not. Below 1.0 a caret
-range covers one minor version only, so openapi's peer range on core (`^0.4.0`) would exclude the next core
+range covers one minor version only, so openapi's peer range on core (`^0.4.5`) would exclude the next core
 minor, and auth and data each depend on the exact core version they were packed with. **Publish npm release**
 refuses to run when the four versions differ or when openapi's peer range is not `^` and that version.
 Website deployment is independent of package releases.

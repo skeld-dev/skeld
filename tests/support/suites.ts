@@ -30,6 +30,7 @@ export const suites = {
     'lifecycle/audit-lifecycle.ts',
     'lifecycle/audit-retention.ts',
     'lifecycle/onsend-observe.ts',
+    'lifecycle/worker-no-listener.ts',
     'contracts/derived-class.ts',
     'contracts/response-contract.ts',
     'schema/audit-schema.ts',

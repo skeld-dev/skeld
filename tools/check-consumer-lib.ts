@@ -44,6 +44,7 @@ const defaultPages = [
   'docs/guides/auth-obligations.md',
   'docs/guides/openapi.md',
   'docs/guides/data.md',
+  'docs/guides/plugins-and-lifecycle.md',
 ];
 const usage = 'usage: node tools/check-consumer-lib.ts [--page <markdown file>] [--packed-dir <directory>] | --help\n';
 const diagnosticPattern = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;

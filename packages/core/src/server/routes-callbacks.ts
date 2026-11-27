@@ -1,4 +1,4 @@
-// Does:  Calls every scope's onRoutes callbacks once at listen with the routes that scope's hooks reach.
+// Does:  Calls every scope's onRoutes callbacks once, at listen or a worker's start, with the routes its hooks reach.
 // Holds: Each callback is called once, synchronously, with a frozen list; a throw or a returned value refuses the boot.
 
 import type { RouteInfo } from '../contract/types.ts';
