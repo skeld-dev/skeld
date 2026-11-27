@@ -17,7 +17,7 @@ interface GitHead {
 
 export interface RunFields {
   readonly marker: string;
-  readonly status: 'booting' | 'listening' | 'closed';
+  readonly status: 'booting' | 'listening' | 'started' | 'closed';
   readonly startedAt: number;
   readonly listeningAt: number | null;
   readonly closedAt: number | null;
@@ -26,6 +26,7 @@ export interface RunFields {
   readonly stepN: number;
   readonly cpuN: number;
   readonly blockMs: number;
+  readonly cpuStepUs: number | null;
   readonly canary: boolean;
   readonly options: ResolvedServerOptions;
 }
@@ -102,7 +103,7 @@ export function runHeader(fields: RunFields): string {
     closed_at: fields.closedAt,
     address: fields.address,
     ready_ms: fields.readyMs,
-    sampling: { step_n: fields.stepN, cpu_n: fields.cpuN, block_ms: fields.blockMs },
+    sampling: { step_n: fields.stepN, cpu_n: fields.cpuN, block_ms: fields.blockMs, cpu_step_us: fields.cpuStepUs },
     canary: fields.canary,
     options: fields.options,
     capacity: { slots: SLOT_COUNT, depth: DEPTH, tracks: TRACK_COUNT },

@@ -59,6 +59,7 @@ export interface ScopeState {
   readonly events: ScopeEvents;
   readonly closeTimeoutMs: number;
   readonly log: Logger;
+  readonly entry: 'listen' | 'start';
   readonly parent: ScopeState | null;
   readonly children: ChildScope[];
   readonly routes: RouteRecord[];
@@ -72,16 +73,17 @@ interface ErasedHandlers {
   readonly [name: string]: RuntimeHandler;
 }
 
-type ServerShared = Pick<ScopeState, 'disposal' | 'events' | 'closeTimeoutMs' | 'log'>;
+type ServerShared = Pick<ScopeState, 'disposal' | 'events' | 'closeTimeoutMs' | 'log' | 'entry'>;
 
 // Does:  Builds a scope's state; a plugin's scope shares the server's disposer stack, event registry and close limit.
 function scopeState(name: string, parent: ScopeState | null, server: ServerShared): ScopeState {
-  const { disposal, events, closeTimeoutMs, log } = server;
+  const { disposal, events, closeTimeoutMs, log, entry } = server;
   return {
     disposal,
     events,
     closeTimeoutMs,
     log,
+    entry,
     name,
     parent,
     children: [],
@@ -93,12 +95,18 @@ function scopeState(name: string, parent: ScopeState | null, server: ServerShare
   };
 }
 
-export function createRootState(log: Logger, events: ScopeEvents, closeTimeoutMs: number): ScopeState {
+export function createRootState(
+  log: Logger,
+  events: ScopeEvents,
+  closeTimeoutMs: number,
+  entry: 'listen' | 'start' = 'listen',
+): ScopeState {
   return scopeState('root', null, {
     disposal: { abort: new AbortController(), callbacks: [] },
     events,
     closeTimeoutMs,
     log,
+    entry,
   });
 }
 
@@ -112,7 +120,7 @@ function assertOpen(state: ScopeState, method: string): void {
   }
   const message =
     state.parent === null
-      ? `Cannot call ${method}() after listen() was called`
+      ? `Cannot call ${method}() after ${state.entry}() was called`
       : `Cannot call ${method}() on scope ${state.name} after it settled`;
   throw new BootError('REGISTRATION_CLOSED', message, null, pluginName(state));
 }

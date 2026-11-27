@@ -57,6 +57,53 @@ A plugin that acts on other plugins' routes, such as a rate limiter, can check t
 
 `scope.event(name, severity)` registers a security event, such as `data.limit.refused` at `warn`, and returns a writer that records it on the logger you pass, so a request's record carries its id. Register events while the plugin runs; a server's scopes share 64 names. The [core reference](../reference/core.md#plugin-resource-ownership) has the rules for both.
 
+## Run plugins without a listener
+
+A script or a background process can run the same plugins as the service without serving requests. `createWorker` from `@skeld/core/worker` registers and boots plugins and a gate as a server does, opens no listener, and refuses `start` when a plugin declares a route. The [worker reference](../reference/core.md#workers-plugins-without-a-listener) lists its members and refusals.
+
+A script that does one job starts the worker, does the job, and closes the worker in a `finally` block, so the plugins' `onClose` callbacks run whether the job succeeded or threw. The data example's [migration.ts](../../examples/data/migration.ts) runs its schema step this way. The script below counts the rows of the `tasks` table that the [data guide's](data.md#a-complete-service) `migrate.ts` creates.
+
+```ts
+import * as t from '@skeld/core/schema';
+import { createWorker } from '@skeld/core/worker';
+import { sql } from '@skeld/data/sql';
+import { createSqliteDatabase } from '@skeld/data/sqlite';
+
+const Count = t.object({ total: t.integer() });
+
+const db = createSqliteDatabase({ path: 'tasks.db' });
+const worker = createWorker();
+worker.register(db.plugin);
+await worker.start();
+try {
+  const [row] = await db.for(worker).query(sql`select count(*) as total from tasks`, Count);
+  process.stderr.write(`tasks: ${row?.total ?? 0}\n`);
+} finally {
+  await worker.close();
+}
+```
+
+A worker that runs until it is stopped needs the application to wire SIGTERM and SIGINT to `close`. The framework adds no signal handler: without these two listeners, a SIGTERM ends the process at once and skips every `onClose` callback.
+
+```ts
+import { once } from 'node:events';
+import { createWorker } from '@skeld/core/worker';
+
+const worker = createWorker();
+worker.register(
+  (scope) => {
+    const timer = setInterval(() => scope.log.info('queue polled'), 5_000);
+    scope.onClose(() => clearInterval(timer));
+  },
+  { name: 'poller' },
+);
+await worker.start();
+await Promise.race([once(process, 'SIGINT'), once(process, 'SIGTERM')]);
+await worker.close();
+```
+
+On SIGTERM it closes: the timer is cleared, `skeld.worker.closed` is written, and the process exits with status 0.
+
 ## Bound shared state as well as requests
 
 The example allows at most 100 tasks. Limiting each title to 120 units would not stop a process from retaining millions of valid tasks.

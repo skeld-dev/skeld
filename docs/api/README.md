@@ -11,6 +11,7 @@ skeld's packages publish their public API as entry points, such as `@skeld/core/
 | [contract](core/contract.md)       | Route declarations, request and reply types, shared error bodies     |
 | [schema](core/schema.md)           | Bounded schemas, composition, inferred types, sensitivity            |
 | [server](core/server.md)           | Servers, plugins, hooks, cookies, origin policies, lifecycle options |
+| [worker](core/worker.md)           | Running plugins and a gate in a process that serves no request       |
 | [client](core/client.md)           | Typed calls and validated replies                                    |
 | [http-error](core/http-error.md)   | HTTP failures and client-side call failures                          |
 | [boot-error](core/boot-error.md)   | Startup and configuration failures                                   |

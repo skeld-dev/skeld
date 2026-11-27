@@ -80,7 +80,13 @@ const stepNames: ReadonlySet<string> = new Set([
   'req.respond.serialize',
 ]);
 const rootSpan = 'req.total';
-const outsideSum: ReadonlySet<string> = new Set([rootSpan, 'req.sync', 'req.hook.on_response']);
+const outsideSum: ReadonlySet<string> = new Set([
+  rootSpan,
+  'req.sync',
+  'req.hook.on_response',
+  'req.settle',
+  'req.close',
+]);
 const groupOrder: readonly ProcessGroup[] = ['check', 'rounds', 'scenario clean', 'scenario planted'];
 const notMeasured = 'Not measured.';
 
@@ -208,7 +214,60 @@ const sumLine = (totals: ReadonlyMap<string, SpanTotals>, sampledIncl: number): 
   }
   const share = sum / sampledIncl;
   const verdict = Math.abs(share - 1) <= spanSumTolerance ? 'within' : 'over';
-  return `Span sum: the self wall of every request-path span is ${fixed(sum, 3)} µs against the sampled requests' ${fixed(sampledIncl, 3)} µs of req.total inclusive, ${percentText(share)} (line ±${percentText(spanSumTolerance)}, ${verdict}).`;
+  return `Span sum: the self wall of every request-path span inside req.total is ${fixed(sum, 3)} µs against the step-timed requests' ${fixed(sampledIncl, 3)} µs of req.total inclusive, ${percentText(share)} (line ±${percentText(spanSumTolerance)}, ${verdict}). It covers each request from the opening of req.total to the response write; rows marked - in the share column lie outside it.`;
+};
+
+const sampleNote = ({ stepN, cpuN }: Readout['sampling']): string =>
+  stepN === cpuN
+    ? `Wall and CPU columns come from the same requests, 1 in ${stepN}.`
+    : `The wall columns come from 1 in ${stepN} requests and the CPU column from 1 in ${cpuN}, so a row's wall and CPU means describe different sets of requests.`;
+
+const clockNote = (readout: Readout, route: RouteId, root: SpanTotals): string => {
+  const step = readout.measured.find((window) => window.route === route)?.folder.run.sampling.cpu_step_us ?? null;
+  const measured =
+    step === null
+      ? 'The thread CPU clock did not move while the recorder measured its step at open'
+      : `The thread CPU clock's measured step on this run is ${fixed(step, 3)} µs`;
+  return `${measured}; the CPU column samples 1 in ${readout.sampling.cpuN} requests and rests on ${plural(root.cn, 'CPU-sampled request', 'CPU-sampled requests')}, so a span shorter than the step needs many samples for its mean to hold.`;
+};
+
+const timedSpans = (totals: ReadonlyMap<string, SpanTotals>): number =>
+  [...totals]
+    .filter(([name]) => isRequestPath(name) && !outsideSum.has(baseName(name)))
+    .reduce((count, [, total]) => count + total.n, 0);
+
+const rootLines = (
+  root: SpanTotals,
+  lines: readonly SnapshotLine[],
+  totals: ReadonlyMap<string, SpanTotals>,
+): readonly string[] => {
+  const timedN = lines.reduce((total, line) => total + line.sampled.n, 0);
+  const timedIncl = lines.reduce((total, line) => total + line.sampled.incl, 0);
+  const untimedN = root.n - timedN;
+  const timed = timedN === 0 ? null : timedIncl / timedN;
+  const untimed = untimedN === 0 ? null : (root.incl - timedIncl) / untimedN;
+  const cpu =
+    root.cn === 0
+      ? ''
+      : ` Active CPU ${fixed(root.cpu / root.cn, 3)} µs per request on ${root.cn} CPU-sampled requests (thread CPU while the request was current, from req.total's opening to its close).`;
+  const spansPer = timedN === 0 ? 0 : timedSpans(totals) / timedN;
+  const cost =
+    timed === null || untimed === null
+      ? ''
+      : ` Cost of step timing: ${fixed(timed - untimed, 3)} µs per step-timed request (the step-timed mean less the other requests' mean).`;
+  const perSpan =
+    timed === null || untimed === null || spansPer === 0
+      ? []
+      : [
+          '',
+          `Timing cost per span (derived average): (${fixed(timed, 3)} − ${fixed(untimed, 3)}) µs / ${fixed(spansPer, 3)} timed spans per step-timed request (stage and step spans inside req.total) = ${fixed((timed - untimed) / spansPer, 3)} µs. A stage's own time includes about that much for itself and for each child span it opens; no figure here is corrected for it.`,
+        ];
+  return [
+    `req.total: ${plural(root.n, 'request', 'requests')}, mean ${fixed(root.incl / root.n, 3)} µs inclusive.${cpu}`,
+    '',
+    `Step-timed requests: ${timedN}, mean ${timed === null ? '-' : fixed(timed, 3)} µs. Other requests: ${untimedN}, mean ${untimed === null ? '-' : fixed(untimed, 3)} µs.${cost} Stage shares are taken against the step-timed requests' req.total.`,
+    ...perSpan,
+  ];
 };
 
 const stageSection = (readout: Readout, route: RouteId): readonly string[] => {
@@ -225,7 +284,9 @@ const stageSection = (readout: Readout, route: RouteId): readonly string[] => {
   return [
     `### ${route}`,
     '',
-    `req.total: ${plural(root.n, 'request', 'requests')}, mean ${fixed(root.incl / root.n, 3)} µs inclusive.`,
+    ...rootLines(root, lines, totals),
+    '',
+    `${sampleNote(readout.sampling)} ${clockNote(readout, route, root)}`,
     '',
     ...markdownTable([...spanHeaders(readout.sampling), 'Share of sampled req.total'], rows),
     '',
@@ -245,7 +306,7 @@ const stepSection = (readout: Readout, route: RouteId): readonly string[] => {
     ...(rows.length === 0
       ? [notMeasured]
       : [
-          `Steps are timed on 1 in ${readout.sampling.stepN} requests.`,
+          `Steps are timed on 1 in ${readout.sampling.stepN} requests. ${sampleNote(readout.sampling)}`,
           '',
           ...markdownTable(spanHeaders(readout.sampling), rows),
         ]),
@@ -296,6 +357,8 @@ const processSection = (readout: Readout): readonly string[] => {
   });
   return [
     '## Process',
+    '',
+    "Unattributed CPU is main-thread CPU less the estimated synchronous wall time inside spans. It can hold work outside the request clock (before req.total opens, settlement, the close callback, timers), active work inside spans that cross callbacks, the recorder's own cost and Node's. It is not a measure of Node or the kernel alone.",
     '',
     ...(rows.length === 0
       ? [notMeasured]
@@ -473,7 +536,7 @@ function renderReadout(readout: Readout): string {
       readout,
       'Stages per route',
       stageSection,
-      'Self wall is inclusive time minus children. p50 and p95 are medians of per-window values, not run-wide percentiles.',
+      'Self wall is inclusive time minus children. Self CPU is the thread CPU a request used while it was the current request, so a span that crosses callbacks counts its active work and not its waiting. p50 and p95 are medians of per-window values, not run-wide percentiles.',
     ),
     ...perRouteSections(readout, 'Steps per route', stepSection, null),
     ...processSection(readout),

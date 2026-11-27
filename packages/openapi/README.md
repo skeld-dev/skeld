@@ -8,7 +8,7 @@ Generates an OpenAPI 3.1.2 document from a Skeld contract. A declaration it cann
 npm install @skeld/openapi
 ```
 
-Requires Node.js 26.12+, an ES module project and `@skeld/core` `^0.4.0` as a peer dependency. No other dependency.
+Requires Node.js 26.12+, an ES module project and `@skeld/core` `^0.4.5` as a peer dependency. No other dependency.
 
 - [Publish an OpenAPI document](../../docs/guides/openapi.md): generate a document, describe security, and read its diagnostics.
 - [OpenAPI behavior reference](../../docs/reference/openapi.md): options, mappings, limits and refusals.

@@ -496,7 +496,7 @@ export type HookName = 'onRequest' | 'preHandler' | 'onSend' | 'onResponse' | 'o
 
 /**
  * A place to declare routes, hooks, an error handler and plugins; the server is the root scope.
- * Its methods throw BootError `REGISTRATION_CLOSED` once `listen` is called, or once the plugin that owns it has settled.
+ * Its methods throw BootError `REGISTRATION_CLOSED` once `listen` or a worker's `start` is called, or once its plugin settled.
  */
 export interface Scope<A extends AccessTypes = NoAccess> {
   /** Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work. */
@@ -512,8 +512,8 @@ export interface Scope<A extends AccessTypes = NoAccess> {
    */
   event(name: string, severity: Severity): SecurityEvent;
   /**
-   * Registers a callback `listen` calls once, before binding, with the routes this scope's hooks reach, frozen.
-   * A throw or a returned value makes `listen` reject with BootError `PLUGIN_FAILED`.
+   * Registers a callback `listen` (before binding) or a worker's `start` calls once with the routes its hooks reach, frozen.
+   * A throw or a returned value makes `listen` or `start` reject with BootError `PLUGIN_FAILED`.
    * @example const server = createServer(); server.onRoutes((routes) => console.log(routes.length));
    */
   onRoutes(callback: (routes: readonly RouteInfo[]) => void): void;
@@ -544,8 +544,8 @@ export interface Scope<A extends AccessTypes = NoAccess> {
    */
   setErrorHandler(handler: ErrorHandler): void;
   /**
-   * Adds a plugin, which `listen` runs in order with a child scope of this one.
-   * A plugin that throws or rejects makes `listen` reject with BootError `PLUGIN_FAILED`.
+   * Adds a plugin, which `listen` or a worker's `start` runs in order with a child scope of this one.
+   * A plugin that throws or rejects makes `listen` or `start` reject with BootError `PLUGIN_FAILED`.
    */
   register(plugin: Plugin<A>, options?: RegisterOptions): void;
 }

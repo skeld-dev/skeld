@@ -1,4 +1,4 @@
-// Does:  Builds one server's logger: the engine's records, the author's loggers, the summaries, the stats and close.
+// Does:  Builds a server's or worker's logger: the engine's records, the author's loggers, the summaries, stats, close.
 // Holds: A record is tested against its threshold, then suppression, before anything of a thrown value is read.
 
 import { end, logLine, start } from '#diag';
@@ -34,6 +34,7 @@ const DISABLED: ServerLog = Object.freeze({
   clientAddress: false,
   ready: none,
   listening: none,
+  started: none,
   publicOriginHint: none,
   refused: none,
   failed: none,
@@ -90,15 +91,17 @@ function engineRecord(
   };
 }
 
-export function createServerLog(resolved: ResolvedLog): ServerLog {
+export function createServerLog(resolved: ResolvedLog, role: 'server' | 'worker' = 'server'): ServerLog {
   if (!resolved.enabled) {
     return DISABLED;
   }
+  const closedEvent = role === 'server' ? 'skeld.server.closed' : 'skeld.worker.closed';
   let errorOptions: ErrorOptions = Object.freeze({
     identifiers: resolved.errorIdentifiers,
     text: resolved.errorText,
     frames: resolved.errorFrames,
-    cwd: '',
+    // Why: Frames lose the working directory from the first record, so records written while plugins boot do too.
+    cwd: process.cwd(),
   });
   let closing: Promise<void> | null = null;
   const securitySeverities = new Map<string, Severity>();
@@ -185,6 +188,12 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
         );
       }
     },
+    started() {
+      const spec = admitted('skeld.worker.started');
+      if (spec !== null) {
+        offer(engineRecord('skeld.worker.started', spec, null, null, null));
+      }
+    },
     publicOriginHint() {
       const spec = admitted('skeld.config.public_origin');
       if (spec !== null) {
@@ -254,10 +263,10 @@ export function createServerLog(resolved: ResolvedLog): ServerLog {
       if (closing !== null) {
         return closing;
       }
-      const spec = admitted('skeld.server.closed');
+      const spec = admitted(closedEvent);
       if (spec !== null) {
         // Why: The closed record carries the drop totals, which matter most after an overload filled the queue.
-        offer(engineRecord('skeld.server.closed', spec, null, null, totals(stats())), true);
+        offer(engineRecord(closedEvent, spec, null, null, totals(stats())), true);
       }
       suppression.flush();
       closing = destination.close(resolved.flushTimeoutMs);

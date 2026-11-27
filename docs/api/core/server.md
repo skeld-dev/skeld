@@ -746,7 +746,7 @@ Source: `packages/core/src/server/types.ts:296`
 
 A place to declare routes, hooks, an error handler and plugins; the server is the root scope.
 
-Its methods throw BootError `REGISTRATION_CLOSED` once `listen` is called, or once the plugin that owns it has settled.
+Its methods throw BootError `REGISTRATION_CLOSED` once `listen` or a worker's `start` is called, or once its plugin settled.
 
 ```ts
 export interface Scope<A extends AccessTypes = NoAccess> {
@@ -771,18 +771,18 @@ export interface Scope<A extends AccessTypes = NoAccess> {
 }
 ```
 
-| Field             | Summary                                                                                                         |
-| ----------------- | --------------------------------------------------------------------------------------------------------------- |
-| `signal`          | Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work.                |
-| `log`             | The server's logger, the same in every scope, plugins included; its records carry no request id.                |
-| `closeTimeoutMs`  | Time each `onClose` callback has to settle, in milliseconds: the server's `pluginCloseTimeoutMs`.               |
-| `event`           | Registers a security event and returns its writer; the scopes share 64 names per server, apart from the gate's. |
-| `onRoutes`        | Registers a callback `listen` calls once, before binding, with the routes this scope's hooks reach, frozen.     |
-| `onClose`         | Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.        |
-| `routes`          | Adds a contract's routes to this scope, with one handler per route.                                             |
-| `addHook`         | Adds a hook to this scope; it runs for this scope's routes and its plugins' routes, after its parents' hooks.   |
-| `setErrorHandler` | Sets this scope's error handler.                                                                                |
-| `register`        | Adds a plugin, which `listen` runs in order with a child scope of this one.                                     |
+| Field             | Summary                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `signal`          | Aborted when shutdown or startup rollback begins; plugins must stop their own asynchronous work.                         |
+| `log`             | The server's logger, the same in every scope, plugins included; its records carry no request id.                         |
+| `closeTimeoutMs`  | Time each `onClose` callback has to settle, in milliseconds: the server's `pluginCloseTimeoutMs`.                        |
+| `event`           | Registers a security event and returns its writer; the scopes share 64 names per server, apart from the gate's.          |
+| `onRoutes`        | Registers a callback `listen` (before binding) or a worker's `start` calls once with the routes its hooks reach, frozen. |
+| `onClose`         | Registers resource disposal in reverse registration order after transport shutdown, also on failed boot.                 |
+| `routes`          | Adds a contract's routes to this scope, with one handler per route.                                                      |
+| `addHook`         | Adds a hook to this scope; it runs for this scope's routes and its plugins' routes, after its parents' hooks.            |
+| `setErrorHandler` | Sets this scope's error handler.                                                                                         |
+| `register`        | Adds a plugin, which `listen` or a worker's `start` runs in order with a child scope of this one.                        |
 
 Source: `packages/core/src/server/types.ts:501`
 
@@ -895,4 +895,4 @@ await server.listen({ port: 0 });
 await server.close();
 ```
 
-Source: `packages/core/src/server/server.ts:71`
+Source: `packages/core/src/server/server.ts:70`

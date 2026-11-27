@@ -26,7 +26,9 @@ export type BootErrorCode =
   | 'ACCESS_WITHOUT_GATE'
   | 'ACCESS_UNDECLARED'
   | 'ACCESS_REFUSED'
-  | 'GATE_FAILED';
+  | 'GATE_FAILED'
+  | 'ROUTE_WITHOUT_LISTENER'
+  | 'ALREADY_STARTED';
 ```
 
 Source: `packages/core/src/server/boot-error.ts:10`
@@ -53,4 +55,4 @@ export class BootError extends Error {
 }
 ```
 
-Source: `packages/core/src/server/boot-error.ts:35`
+Source: `packages/core/src/server/boot-error.ts:37`

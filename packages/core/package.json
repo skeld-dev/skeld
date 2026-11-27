@@ -1,6 +1,6 @@
 {
   "name": "@skeld/core",
-  "version": "0.4.0",
+  "version": "0.4.5",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -89,6 +89,11 @@
       "skeld-source": "./src/gate/gate.ts",
       "types": "./dist/gate/gate.d.ts",
       "default": "./dist/gate/gate.js"
+    },
+    "./worker": {
+      "skeld-source": "./src/worker/worker.ts",
+      "types": "./dist/worker/worker.d.ts",
+      "default": "./dist/worker/worker.js"
     },
     "./generated-check": {
       "skeld-source": "./src/compile/generate.ts"

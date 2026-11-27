@@ -231,8 +231,11 @@ export function handleRequest(runtime: EngineRuntime, req: IncomingMessage, res:
   if (stopRefusedPipeline(req)) {
     return;
   }
-  const request = pointStart(runtime, req, res);
+  // Why: The request clock opens before pointStart so the id, log record and close listener are inside req.total.
   const diag = begin(req, res);
+  const setup = start('req.start');
+  const request = pointStart(runtime, req, res);
+  end(setup);
   const exchange = preRoute(runtime, req, res, diag, request);
   if (exchange === null) {
     leave(diag);

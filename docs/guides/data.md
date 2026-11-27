@@ -16,7 +16,28 @@ It needs Node 26.12 or later, and its one dependency is `@skeld/core`. The teste
 
 ## A complete service
 
-This file is a whole service on a SQLite file: it creates its table at boot, inserts a task in a transaction and reads one back through a row schema.
+A whole service on a SQLite file is two files. `migrate.ts` creates the table, once, before the service starts; `tasks.ts` is the service, which inserts a task in a transaction and reads one back through a row schema.
+
+`migrate.ts` runs the database's plugin on a worker, which boots plugins without listening, and closes it when the schema step is done:
+
+```ts
+import { createWorker } from '@skeld/core/worker';
+import { createSqliteDatabase } from '@skeld/data/sqlite';
+
+const db = createSqliteDatabase({ path: 'tasks.db' });
+const worker = createWorker();
+worker.register(db.plugin);
+await worker.start();
+try {
+  await db.for(worker).reserve(async (connection) => {
+    await connection.script('create table if not exists tasks (id integer primary key, title text not null)');
+  });
+} finally {
+  await worker.close();
+}
+```
+
+`tasks.ts` creates nothing. A plugin registered after the database's checks that the table exists:
 
 ```ts
 import { once } from 'node:events';
@@ -46,11 +67,12 @@ const contract = defineContract({
 const db = createSqliteDatabase({ path: 'tasks.db' });
 const server = createServer();
 server.register(db.plugin);
-server.register(async (scope) => {
-  await db.for(scope).reserve(async (connection) => {
-    await connection.script('create table if not exists tasks (id integer primary key, title text not null)');
-  });
-});
+server.register(
+  async (scope) => {
+    await db.for(scope).query(sql`select id from tasks limit 0`);
+  },
+  { name: 'checkTables' },
+);
 
 server.routes(contract, {
   createTask: async (request) => {
@@ -80,7 +102,14 @@ await Promise.race([once(process, 'SIGINT'), once(process, 'SIGTERM')]);
 await server.close();
 ```
 
-Run it with `node tasks.ts`, then:
+Run the migration, then the service:
+
+```sh
+node migrate.ts
+node tasks.ts
+```
+
+In a second terminal:
 
 ```sh
 curl -s -X POST -H 'content-type: application/json' -d '{"title":"Write the report"}' http://127.0.0.1:3000/tasks
@@ -92,7 +121,9 @@ curl -s http://127.0.0.1:3000/tasks/1
 {"id":1,"title":"Write the report"}
 ```
 
-The database's plugin opens the file while `listen` runs, before any route is served, and `server.close()` closes it. The second plugin is registered after it, so it runs once the database is open. A plugin registered before `db.plugin` that queries is refused with `POOL_CLOSED`.
+The database's plugin opens the file while `listen` runs, before any route is served, and `server.close()` closes it. The check plugin is registered after it, so it runs once the database is open. A plugin registered before `db.plugin` that queries is refused with `POOL_CLOSED`.
+
+On a database `migrate.ts` has not run on, the check's statement fails and the service does not start: `listen` rejects with `BootError` `PLUGIN_FAILED` (`Plugin checkTables failed: Database statement failed`), the process exits with status 1, and no table is created. Run `node migrate.ts`, then start the service again. Running `migrate.ts` a second time changes nothing.
 
 ## Connect to PostgreSQL
 
@@ -182,7 +213,7 @@ A SQLite database has one connection, used on the main thread. Every call waits 
 
 ## Bind work to its owner
 
-The database has no `query` of its own. Work starts from `db.for(owner)`, where the owner is anything with a `signal` and a `log`: a handler's request, a hook's context, a plugin's scope or the server.
+The database has no `query` of its own. Work starts from `db.for(owner)`, where the owner is anything with a `signal` and a `log`: a handler's request, a hook's context, a plugin's scope, the server or a worker.
 
 - In a handler, write `db.for(request)`. The work is cancelled when the request is (the client closed the connection, or `handlerTimeoutMs` passed), and its records carry the request's id. You never pass a signal yourself.
 - Work that must outlive a response, such as a cleanup loop, binds to the plugin's scope. Its signal aborts when shutdown begins.
@@ -323,7 +354,7 @@ export async function migrate(db: Database, owner: Owner) {
 - The reserved connection counts against `maxConnections`. On PostgreSQL it is closed at release, which also releases any session lock. SQLite keeps its one connection and restores its open-time settings.
 - `connection.transaction` runs a transaction on the reserved connection.
 
-Data has no migration engine, no record of which migrations ran and no lock helper; that bookkeeping is yours. Database work runs only while a server is booting or listening, so run migrations from a plugin registered after `db.plugin`, as the [complete service](#a-complete-service) does. The plugin runs at every boot, so write migrations that can run twice, or keep your own table of applied versions.
+Data has no migration engine, no record of which migrations ran and no lock helper; that bookkeeping is yours. Database work runs only while the database's plugin is open, under a server's `listen` or a worker's `start`. Run migrations from a script on a worker, as the [complete service](#a-complete-service)'s `migrate.ts` does: it runs before the service starts, closes in a `finally` block, and so the service's own database account needs no right to change the schema. Write migrations that can run twice, or keep your own table of applied versions. The [data example](../../examples/data/README.md) does the same on SQLite and PostgreSQL, and on a failure its script prints one line of codes only, such as `migrate failed: PLUGIN_FAILED CONNECT_FAILED socket` when nothing answers at the database's address.
 
 ## Limit requests per client address
 
@@ -395,7 +426,7 @@ const db = createPostgresDatabase({ url: new Secret(process.env.DATABASE_URL ?? 
 export const store = createPostgresStore({ pool: toPgPool(db) });
 ```
 
-`toPgPool` gives `@skeld/auth/postgres` the pool shape it takes, running on the database's own connections and bounds, so your queries and auth's share `maxConnections`. Auth's `maxClients` defaults to half of it. Register `db.plugin` on the server: plugins run before authentication starts, so the pool is open when auth connects to its store. `store.install()` needs the pool open too, so call it from a plugin registered after `db.plugin`. `toPgPool` throws `BootError` `INVALID_OPTION` for a SQLite database.
+`toPgPool` gives `@skeld/auth/postgres` the pool shape it takes, running on the database's own connections and bounds, so your queries and auth's share `maxConnections`. Auth's `maxClients` defaults to half of it. Register `db.plugin` on the server: plugins run before authentication starts, so the pool is open when auth connects to its store. `store.install()` needs the pool open too, so call it from a plugin registered after `db.plugin`, or from a migration script on a worker after `start`; there, close the store with its own `close()` before the worker closes, since a started worker takes no more `onClose` callbacks. `toPgPool` throws `BootError` `INVALID_OPTION` for a SQLite database.
 
 ## Handle failures
 
@@ -432,12 +463,12 @@ If your queries carry personal or secret values, keep those settings at their de
 
 ## Shut down
 
-There is no `close` on a database. `server.close()` first lets HTTP requests finish, then runs the database's cleanup with the scope's `closeTimeoutMs` (the server option `pluginCloseTimeoutMs`, default 10,000 ms). The pool refuses new and waiting calls with `POOL_CLOSED`, waits up to 0.4 of that time for connections still in use, cancels their statements for up to 0.1 more, then closes every connection. A second `server.close()` resolves with the first.
+There is no `close` on a database. `server.close()` first lets HTTP requests finish, then runs the database's cleanup; a worker's `close()` runs it directly. Either runs it with the scope's `closeTimeoutMs` (the `pluginCloseTimeoutMs` option, default 10,000 ms). The pool refuses new and waiting calls with `POOL_CLOSED`, waits up to 0.4 of that time for connections still in use, cancels their statements for up to 0.1 more, then closes every connection. A second `close()` resolves with the first.
 
 ## Not included
 
 - An ORM, a query builder, migration bookkeeping or a migration lock helper.
-- Databases other than PostgreSQL and SQLite, and use of a database without a skeld server.
+- Databases other than PostgreSQL and SQLite, and use of a database without a skeld server or worker.
 - On PostgreSQL: `COPY`, `LISTEN` and `NOTIFY`, cursors and streamed results, named prepared statements, binary results, Unix sockets, client certificates, several hosts, and sign-in methods other than SCRAM-SHA-256.
 - A savepoint or nested-transaction API, and automatic retries.
 - A SQLite worker thread or a way to interrupt a running SQLite statement.

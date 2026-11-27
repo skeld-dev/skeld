@@ -72,6 +72,7 @@ const groups = [
       ['api/core/contract', 'Contract'],
       ['api/core/schema', 'Schema'],
       ['api/core/server', 'Server'],
+      ['api/core/worker', 'Worker'],
       ['api/core/client', 'Client'],
       ['api/core/http-error', 'HTTP errors'],
       ['api/core/boot-error', 'Boot errors'],

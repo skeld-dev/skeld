@@ -1,6 +1,7 @@
 // Does:  Tracks the requests waiting on application code and expires those past their route's time limit.
 // Holds: A request is tracked only while it waits and its connection is open, and expires at most once.
 
+import { end, track } from '#diag';
 import type { Exchange } from './exchange.ts';
 import { releaseGrant } from './grant.ts';
 
@@ -57,9 +58,11 @@ function release(exchange: Exchange): void {
 
 // Does:  Ends a running request in its final state, stops tracking it and releases the grant it holds.
 export function settle(exchange: Exchange, state: 'sent-by-hook' | 'written'): void {
+  const span = track('req.settle');
   exchange.state = state;
   release(exchange);
   releaseGrant(exchange);
+  end(span);
 }
 
 // Does:  Returns the signal application code holds: aborted when the client leaves or the request times out.

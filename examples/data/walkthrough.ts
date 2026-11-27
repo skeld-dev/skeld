@@ -4,13 +4,15 @@ import { join } from 'node:path';
 import { createClient } from '@skeld/core/client';
 import { startExample } from './app.ts';
 import { bankContract } from './contract.ts';
+import { migrate } from './migration.ts';
 
-// Runs the example end to end: starts it on a free port, calls each route, exceeds the transfer limit once and
-// closes. On SQLite it uses a new temporary file; with DATABASE_URL set it uses that database and leaves the
-// balances as it found them. Exits with status 1 if any check fails.
+// Runs the example end to end: migrates the database, starts the service on a free port, calls each route,
+// exceeds the transfer limit once and closes. On SQLite it uses a new temporary file; with DATABASE_URL set it
+// uses that database and leaves the balances as it found them. Exits with status 1 if any check fails.
 
 const dir = mkdtempSync(join(tmpdir(), 'skeld-data-example-'));
-// The server's JSON log is held here so the walkthrough's lines stay readable; it is printed if a check fails.
+// The migration's and the server's JSON logs are held here so the walkthrough's lines stay readable; they are
+// printed if a check fails.
 const records: string[] = [];
 let failed = 0;
 const check = (label: string, ok: boolean): void => {
@@ -20,14 +22,14 @@ const check = (label: string, ok: boolean): void => {
   }
 };
 
+const sqlitePath = join(dir, 'bank.db');
+const logSink = (lines: readonly string[]): void => {
+  records.push(...lines);
+};
+
 try {
-  const example = await startExample({
-    port: 0,
-    sqlitePath: join(dir, 'bank.db'),
-    logSink: (lines) => {
-      records.push(...lines);
-    },
-  });
+  await migrate({ sqlitePath, logSink });
+  const example = await startExample({ port: 0, sqlitePath, logSink });
   process.stdout.write(`data example on ${example.engine}\n`);
   try {
     const client = createClient(bankContract, { baseUrl: example.url });

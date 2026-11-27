@@ -1,18 +1,17 @@
-// Does:  Defines createServer: the root scope, its log, listen and close.
-// Holds: listen runs at most once, and a server that was closed never starts listening.
+// Does:  Defines createServer: the root scope, its log, the boot of listen and the drain of its HTTP server.
+// Holds: listen boots plugins, gate, route callbacks, runtime, then binds; the HTTP server drains before disposers run.
 
-import { closed as closeDiagnostics, end, open, start } from '#diag';
 import { bindRoutes, bootGate, resolveGate } from '../gate/boot.ts';
 import { handleRequest } from '../lifecycle/handle-request.ts';
 import type { EngineRuntime } from '../lifecycle/types.ts';
 import { resolveLog } from '../log/options.ts';
 import { createServerLog } from '../log/server-log.ts';
 import { BootError } from './boot-error.ts';
-import { bootPlugins } from './boot.ts';
+import { bootRootPlugins } from './boot.ts';
 import { createScopeEvents } from './events.ts';
-import { dispose } from './disposal.ts';
 import { createHttpServer } from './listen.ts';
 import { resolveListenOptions, resolveServerOptions, resolveTrustProxy } from './options.ts';
+import { createRootRun } from './root-run.ts';
 import { callRoutesCallbacks } from './routes-callbacks.ts';
 import { buildRuntime } from './runtime.ts';
 import { createRootState, createScope } from './scope.ts';
@@ -76,103 +75,48 @@ export function createServer(options: ServerOptions = {}): Server {
   const gate = resolveGate(options.gate);
   const trustProxy = resolveTrustProxy(options.trustProxy);
   const log = createServerLog(resolveLog(options.log));
-  const root = createRootState(log.logger(null), createScopeEvents(log), resolved.pluginCloseTimeoutMs);
-  let listenCalled = false;
-  let closing = false;
-  let closed: Promise<void> | null = null;
+  const root = createRootState(log.logger(null), createScopeEvents(log), resolved.pluginCloseTimeoutMs, 'listen');
   let handle: HttpServerHandle | null = null;
   let runtime: EngineRuntime | null = null;
-  let startup: Promise<ListeningAddress> | null = null;
+  const run = createRootRun({ root, log, options: resolved, drain });
 
-  async function listen(listenOptions: ListenOptions): Promise<ListeningAddress> {
-    if (closing) {
-      throw new BootError('SERVER_CLOSED', 'listen() was called after close()', null, null);
-    }
-    if (listenCalled) {
-      throw new BootError('ALREADY_LISTENING', 'listen() was already called', null, null);
-    }
-    const target = resolveListenOptions(listenOptions);
-    listenCalled = true;
-    root.sealed = true;
-    startup = startListening(target.host, target.port);
-    try {
-      const address = await startup;
-      log.listening(address.host, address.port);
-      return address;
-    } catch (cause) {
-      try {
-        await close();
-      } catch (cleanup) {
-        if (cause instanceof BootError) {
-          throw new BootError(cause.code, cause.message, cause.route, cause.plugin, {
-            cause: new AggregateError([cause, cleanup], 'Startup and rollback failed'),
-          });
-        }
-        throw new AggregateError([cause, cleanup], 'Startup and rollback failed', { cause });
-      }
-      throw cause;
-    }
+  function listen(listenOptions: ListenOptions): Promise<ListeningAddress> {
+    return run.start(
+      () => {
+        const target = resolveListenOptions(listenOptions);
+        return () => startListening(target.host, target.port);
+      },
+      (address) => log.listening(address.host, address.port),
+    );
   }
 
   async function startListening(host: string, port: number): Promise<ListeningAddress> {
-    open(resolved);
-    const plugins = start('boot.plugins');
-    try {
-      await bootPlugins(root, resolved.pluginTimeoutMs);
-    } finally {
-      end(plugins);
-    }
+    await bootRootPlugins(root, resolved.pluginTimeoutMs);
     if (gate !== null) {
       await bootGate(gate, root, resolved, log);
     }
-    if (closing) {
+    if (run.closing()) {
       throw new BootError('SERVER_CLOSED', 'Server closed during startup', null, null);
     }
     callRoutesCallbacks(root);
     const gates = { gated: gate !== null, bound: bindRoutes(gate, root, resolved) };
-    const built = buildRuntime(root, resolved, trustProxy, () => closing, log, gates);
+    const built = buildRuntime(root, resolved, trustProxy, run.closing, log, gates);
     runtime = built;
     handle = createHttpServer(resolved, (req, res) => handleRequest(built, req, res));
     return handle.listen(host, port, root.disposal.abort.signal);
   }
 
-  async function shutdown(): Promise<void> {
-    // Why: Startup failures belong to listen; shutdown must still release everything acquired before the failure.
-    await startup?.then(
-      () => undefined,
-      () => undefined,
-    );
-    const failures: unknown[] = [];
+  async function drain(): Promise<void> {
     try {
       await handle?.close(resolved.closeTimeoutMs);
-    } catch (error) {
-      failures.push(error);
     } finally {
       runtime?.deadlines.stop();
     }
-    failures.push(...(await dispose(root.disposal, resolved.pluginCloseTimeoutMs)));
-    // Why: Last before diag, so the closed record counts every record the transport and disposers made.
-    await log.close();
-    closeDiagnostics();
-    if (failures.length !== 0) {
-      throw new AggregateError(failures, 'Server shutdown failed');
-    }
-  }
-
-  function close(): Promise<void> {
-    if (closed === null) {
-      closing = true;
-      root.sealed = true;
-      // Why: Assign the shared promise before abort dispatch can reenter close through an author's listener.
-      closed = Promise.resolve().then(shutdown);
-      root.disposal.abort.abort();
-    }
-    return closed;
   }
 
   function logStats(): LogStats {
     return log.stats();
   }
 
-  return { ...createScope(root), listen, close, logStats };
+  return { ...createScope(root), listen, close: run.close, logStats };
 }
